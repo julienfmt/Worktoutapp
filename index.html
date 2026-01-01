@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Muscu">
+    <meta name="theme-color" content="#ffffff">
+    <title>Muscu - Training App</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- SVG Gradient Definitions -->
+    <svg style="position: absolute; width: 0; height: 0;">
+        <defs>
+            <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#6366f1"/>
+                <stop offset="50%" style="stop-color:#8b5cf6"/>
+                <stop offset="100%" style="stop-color:#a855f7"/>
+            </linearGradient>
+        </defs>
+    </svg>
+    
+    <div id="app">
+        <!-- Écran Accueil -->
+        <div id="screen-home" class="screen active">
+            <header class="header-home">
+                <div class="xp-bar">
+                    <div class="xp-fill" id="xp-fill"></div>
+                </div>
+                <div class="header-top">
+                    <h1>Prêt pour ta séance ?</h1>
+                    <div class="streak-badge" id="streak-badge">
+                        <span class="streak-icon">🔥</span>
+                        <span class="streak-count" id="streak-count">0/3</span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="home-content">
+                <div class="suggested-session-card" id="suggested-session">
+                    <div class="session-label">Séance suivante</div>
+                    <h2 class="session-name" id="session-name">Chargement...</h2>
+                    <div class="session-meta">
+                        <div class="meta-item">
+                            <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span class="meta-text" id="session-duration">~45 min</span>
+                        </div>
+                        <div class="meta-item">
+                            <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                            <span class="meta-text" id="session-slots">0 exercices</span>
+                        </div>
+                    </div>
+                    <div class="last-session" id="last-session-info">
+                        Dernière séance : --
+                    </div>
+                    <div class="session-actions">
+                        <button class="btn btn-primary btn-large" id="btn-start-session">
+                            Commencer
+                        </button>
+                        <button class="btn btn-secondary" id="btn-change-session">
+                            Changer de séance
+                        </button>
+                    </div>
+                </div>
+
+                <div class="home-actions">
+                    <button class="btn btn-outline" id="btn-edit-sessions">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Éditer les séances
+                    </button>
+                    <button class="btn btn-outline" id="btn-settings" title="Paramètres">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        Paramètres
+                    </button>
+                    <div class="backup-actions">
+                        <button class="btn btn-ghost" id="btn-export">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Exporter
+                        </button>
+                        <button class="btn btn-ghost" id="btn-import">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            Importer
+                        </button>
+                        <input type="file" id="import-file" accept=".json" hidden>
+                    </div>
+                </div>
+
+                <!-- Stats Section -->
+                <div class="stats-section" id="stats-section">
+                    <div class="stats-header">
+                        <h3>Tes statistiques</h3>
+                    </div>
+                    <div class="stats-motivation" id="stats-motivation">
+                        <!-- Message motivant généré dynamiquement -->
+                    </div>
+                    <div class="stats-cards">
+                        <div class="stat-card">
+                            <div class="stat-card-value" id="stat-total-workouts">0</div>
+                            <div class="stat-card-label">Séances totales</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-value" id="stat-this-month">0</div>
+                            <div class="stat-card-label">Ce mois-ci</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-value" id="stat-total-volume">0</div>
+                            <div class="stat-card-label">Volume total (kg)</div>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Évolution du volume (4 dernières semaines)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="volume-chart" width="320" height="160"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Séances par semaine</div>
+                        <div class="chart-wrapper">
+                            <canvas id="frequency-chart" width="320" height="120"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Écran Séance -->
+        <div id="screen-session" class="screen">
+            <header class="header-session">
+                <button class="btn-back" id="btn-back-home">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 18l-6-6 6-6"/>
+                    </svg>
+                </button>
+                <div class="header-center">
+                    <h1 id="current-session-name">Séance</h1>
+                    <div class="session-timer" id="session-timer">00:00</div>
+                </div>
+                <button class="btn btn-finish" id="btn-finish-session">
+                    Terminer
+                </button>
+            </header>
+
+            <!-- Progress Bar -->
+            <div class="session-progress-container">
+                <div class="session-progress-text" id="session-progress-text">0/0 exercices</div>
+                <div class="session-progress-bar">
+                    <div class="session-progress-fill" id="session-progress-fill"></div>
+                </div>
+            </div>
+
+            <main class="session-content">
+                <div class="slots-list" id="slots-list">
+                    <!-- Slots générés dynamiquement -->
+                </div>
+            </main>
+
+            <!-- Modal fin de séance -->
+            <div class="modal" id="modal-finish">
+                <div class="modal-backdrop"></div>
+                <div class="modal-content">
+                    <h3>Terminer la séance ?</h3>
+                    <p id="finish-message">Tu as complété tous les exercices !</p>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="btn-cancel-finish">Continuer</button>
+                        <button class="btn btn-primary" id="btn-confirm-finish">Terminer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Écran Exercice -->
+        <div id="screen-exercise" class="screen">
+            <header class="header-exercise">
+                <button class="btn-back" id="btn-back-session">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 18l-6-6 6-6"/>
+                    </svg>
+                </button>
+                <div class="header-center">
+                    <div class="exercise-slot-label" id="exercise-slot-label">A1</div>
+                    <h1 id="current-exercise-name">Exercice</h1>
+                </div>
+                <div class="header-spacer"></div>
+            </header>
+
+            <main class="exercise-content">
+                <div class="exercise-info-card">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Séries</span>
+                            <span class="info-value" id="exercise-sets">3</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Reps</span>
+                            <span class="info-value" id="exercise-reps">8-12</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Repos</span>
+                            <span class="info-value" id="exercise-rest">90s</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">RIR</span>
+                            <span class="info-value" id="exercise-rir">2</span>
+                        </div>
+                    </div>
+                    <!-- Coaching Advice Card -->
+                    <div class="coaching-advice" id="coaching-advice" style="display: none;">
+                        <div class="coaching-advice-header">
+                            <span class="coaching-advice-icon" id="coaching-advice-icon">🎯</span>
+                            <span class="coaching-advice-title" id="coaching-advice-title">Conseil du coach</span>
+                        </div>
+                        <div class="coaching-advice-message" id="coaching-advice-message"></div>
+                        <div class="coaching-suggestion-row">
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Poids suggéré</span>
+                                <div class="coaching-suggestion-value">
+                                    <span id="coaching-suggested-weight">--</span>
+                                    <span class="coaching-weight-trend" id="coaching-weight-trend"></span>
+                                </div>
+                            </div>
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Reps cible</span>
+                                <span class="coaching-suggestion-value" id="coaching-suggested-reps">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="series-list" id="series-list">
+                    <!-- Séries générées dynamiquement -->
+                </div>
+
+                <!-- Logbook - Dernière séance -->
+                <div class="logbook-card" id="logbook-card">
+                    <div class="logbook-header">
+                        <div class="logbook-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Dernière séance
+                        </div>
+                        <span class="logbook-date" id="logbook-date">--</span>
+                    </div>
+                    <div class="logbook-content" id="logbook-content">
+                        <div class="logbook-empty">Première fois sur cet exercice</div>
+                    </div>
+                </div>
+                
+                <!-- Logbook for superset second exercise -->
+                <div class="logbook-card logbook-card-superset" id="logbook-card-superset" style="display: none;">
+                    <div class="logbook-header">
+                        <div class="logbook-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span id="logbook-superset-exercise-name">Exercice 2</span>
+                        </div>
+                        <span class="logbook-date" id="logbook-date-superset">--</span>
+                    </div>
+                    <div class="logbook-content" id="logbook-content-superset">
+                        <div class="logbook-empty">Première fois sur cet exercice</div>
+                    </div>
+                </div>
+
+                <div class="exercise-notes" id="exercise-notes">
+                    <h4>Consignes d'exécution</h4>
+                    <p id="exercise-instructions">--</p>
+                </div>
+            </main>
+
+            <!-- Timer Overlay -->
+            <div class="timer-overlay" id="timer-overlay">
+                <div class="timer-content">
+                    <div class="timer-ring">
+                        <svg class="timer-ring-svg" viewBox="0 0 200 200">
+                            <circle class="timer-ring-bg" cx="100" cy="100" r="90" />
+                            <circle class="timer-ring-progress" id="timer-ring-progress" cx="100" cy="100" r="90" />
+                        </svg>
+                        <div class="timer-ring-inner">
+                            <div class="timer-label">Repos</div>
+                            <div class="timer-countdown" id="timer-countdown">90</div>
+                        </div>
+                    </div>
+                    <div class="timer-controls">
+                        <button class="btn btn-timer" id="btn-timer-minus">-15s</button>
+                        <button class="btn btn-timer-skip" id="btn-timer-skip">Passer</button>
+                        <button class="btn btn-timer" id="btn-timer-plus">+15s</button>
+                    </div>
+                    <button class="btn btn-timer-stop" id="btn-timer-stop">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        </svg>
+                        Arrêter le timer
+                    </button>
+                </div>
+            </div>
+
+            <!-- Résumé fin d'exercice -->
+            <div class="exercise-summary" id="exercise-summary">
+                <div class="summary-content">
+                    <div class="summary-icon" id="summary-icon">✅</div>
+                    <h3 id="summary-title">Exercice terminé !</h3>
+                    <div class="summary-stats">
+                        <div class="stat">
+                            <span class="stat-label">Reps totales</span>
+                            <span class="stat-value" id="summary-total-reps">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Charge max</span>
+                            <span class="stat-value" id="summary-max-weight">0 kg</span>
+                        </div>
+                    </div>
+                    <div class="summary-comparison" id="summary-comparison">
+                        <!-- Comparaison avec la dernière séance -->
+                    </div>
+                    <button class="btn btn-primary btn-large" id="btn-back-to-session">
+                        Retour à la séance
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Changement de séance -->
+        <div class="bottom-sheet" id="sheet-change-session">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content">
+                <div class="sheet-handle"></div>
+                <h3>Choisir une séance</h3>
+                <div class="session-options" id="session-options">
+                    <!-- Options générées dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Édition séances -->
+        <div class="bottom-sheet" id="sheet-edit-sessions">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <h3>Éditer les séances</h3>
+                <div class="edit-session-list" id="edit-session-list">
+                    <!-- Séances à éditer -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Édition slot -->
+        <div class="bottom-sheet" id="sheet-edit-slot">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <h3>Éditer l'exercice</h3>
+                <div class="edit-slot-form" id="edit-slot-form">
+                    <!-- Formulaire généré dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Édition séance détaillée -->
+        <div class="bottom-sheet" id="sheet-edit-session-detail">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <div id="edit-session-detail-content">
+                    <!-- Contenu généré dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Pool de remplacement -->
+        <div class="bottom-sheet" id="sheet-pool">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content">
+                <div class="sheet-handle"></div>
+                <div class="pool-header" id="pool-header">
+                    <!-- Message de stagnation si applicable -->
+                </div>
+                <h3>Choisir une variante</h3>
+                <p class="pool-subtitle">Remplace l'exercice actuel par une variante de la pool</p>
+                <div class="pool-list" id="pool-list">
+                    <!-- Exercices de la pool générés dynamiquement -->
+                </div>
+                <button class="btn btn-ghost pool-ignore" id="btn-pool-ignore">
+                    Ignorer pour l'instant
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Paramètres -->
+        <div class="bottom-sheet" id="sheet-settings">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <h3>⚙️ Paramètres de progression</h3>
+                
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Objectif hebdomadaire
+                    </h4>
+                    <p class="settings-description">Nombre de séances par semaine pour maintenir ta flamme</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-weekly-goal" class="settings-slider" min="1" max="7" value="3">
+                        <div class="settings-slider-value">
+                            <span id="setting-weekly-goal-value">3</span> séances/semaine
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3v18h18"/>
+                            <path d="M18 9l-5 5-3-3-4 4"/>
+                        </svg>
+                        Règle de progression
+                    </h4>
+                    <p class="settings-description">Nombre d'échecs consécutifs avant de suggérer un changement d'exercice</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-failure-count" class="settings-slider" min="1" max="4" value="2">
+                        <div class="settings-slider-value">
+                            <span id="setting-failure-count-value">2</span> échecs avant switch
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12l7 7 7-7"/>
+                        </svg>
+                        Baisse de charge
+                    </h4>
+                    <p class="settings-description">Pourcentage de réduction suggéré en cas de problème technique ou fatigue</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-deload-percent" class="settings-slider" min="5" max="20" step="5" value="10">
+                        <div class="settings-slider-value">
+                            <span id="setting-deload-percent-value">10</span>% de réduction
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 19V5M19 12l-7-7-7 7"/>
+                        </svg>
+                        Augmentation de charge
+                    </h4>
+                    <p class="settings-description">Incrément de poids lors d'une progression (en kg)</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-weight-increment" class="settings-slider" min="0.5" max="5" step="0.5" value="2">
+                        <div class="settings-slider-value">
+                            +<span id="setting-weight-increment-value">2</span> kg
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0110 0v4"/>
+                        </svg>
+                        Période de focus
+                    </h4>
+                    <p class="settings-description">Durée minimum (semaines) après un changement d'exercice</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-lock-weeks" class="settings-slider" min="2" max="8" value="4">
+                        <div class="settings-slider-value">
+                            <span id="setting-lock-weeks-value">4</span> semaines minimum
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-large" id="btn-save-settings">Enregistrer les paramètres</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
