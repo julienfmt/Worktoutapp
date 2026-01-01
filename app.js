@@ -107,6 +107,23 @@ class App {
         return vol.toString();
     }
     
+    drawRoundRect(ctx, x, y, width, height, radius) {
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(x, y, width, height, radius);
+        } else {
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+    }
+    
     renderMotivationMessage(history, thisMonth, totalVolume) {
         const container = document.getElementById('stats-motivation');
         
@@ -230,7 +247,7 @@ class App {
             
             ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.roundRect(x, y, bWidth, barHeight, 6);
+            this.drawRoundRect(ctx, x, y, bWidth, barHeight, 6);
             ctx.fill();
             
             // Label
