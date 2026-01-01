@@ -427,6 +427,19 @@ class App {
             }
         }
 
+        // Assign colors to each superset pair
+        const supersetColors = {};
+        let colorIndex = 0;
+        for (const firstSlotId of Object.keys(supersetMap)) {
+            if (!supersetColors[firstSlotId]) {
+                const secondSlotId = supersetMap[firstSlotId];
+                const color = colorIndex % 6;
+                supersetColors[firstSlotId] = color;
+                supersetColors[secondSlotId] = color;
+                colorIndex++;
+            }
+        }
+
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
             const isCompleted = this.currentWorkout?.completedSlots?.includes(slot.id);
@@ -442,7 +455,10 @@ class App {
                 firstSlotId = Object.keys(supersetMap).find(key => supersetMap[key] === slot.id);
             }
             
-            const card = await this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId);
+            // Get superset color
+            const supersetColor = supersetColors[slot.id] !== undefined ? supersetColors[slot.id] : 0;
+            
+            const card = await this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor);
             container.appendChild(card);
         }
         
@@ -531,7 +547,7 @@ class App {
         }
     }
 
-    async createSlotCard(slot, isCompleted, isFirstInSuperset = false, isSecondInSuperset = false, firstSlotId = null) {
+    async createSlotCard(slot, isCompleted, isFirstInSuperset = false, isSecondInSuperset = false, firstSlotId = null, supersetColor = 0) {
         const card = document.createElement('div');
         let cardClass = `slot-card ${isCompleted ? 'completed' : ''}`;
         if (isFirstInSuperset) cardClass += ' superset-start';
@@ -544,7 +560,7 @@ class App {
         
         // Superset badge (only show when not completed)
         const supersetBadge = (!isCompleted && (isFirstInSuperset || isSecondInSuperset)) 
-            ? '<span class="superset-badge">⚡ SuperSet</span>' 
+            ? `<span class="superset-badge color-${supersetColor}">⚡ SuperSet</span>` 
             : '';
         
         const isInSuperset = isFirstInSuperset || isSecondInSuperset;
@@ -1614,7 +1630,11 @@ class App {
         if (!list) return;
 
         let draggedElement = null;
+        let touchStartY = 0;
+        let touchCurrentY = 0;
+        let isDragging = false;
 
+        // Mouse/Drag events
         list.addEventListener('dragstart', (e) => {
             if (e.target.classList.contains('session-reorder-item')) {
                 draggedElement = e.target;
@@ -1641,6 +1661,49 @@ class App {
         list.addEventListener('drop', async (e) => {
             e.preventDefault();
             await this.saveSessionsOrder();
+        });
+
+        // Touch events for iOS
+        list.addEventListener('touchstart', (e) => {
+            const item = e.target.closest('.session-reorder-item');
+            if (item) {
+                draggedElement = item;
+                touchStartY = e.touches[0].clientY;
+                isDragging = false;
+            }
+        }, { passive: true });
+
+        list.addEventListener('touchmove', (e) => {
+            if (!draggedElement) return;
+            
+            touchCurrentY = e.touches[0].clientY;
+            const moveDistance = Math.abs(touchCurrentY - touchStartY);
+            
+            if (moveDistance > 10 && !isDragging) {
+                isDragging = true;
+                draggedElement.style.opacity = '0.5';
+                draggedElement.style.transform = 'scale(1.02)';
+            }
+            
+            if (isDragging) {
+                e.preventDefault();
+                const afterElement = this.getDragAfterElement(list, touchCurrentY);
+                if (afterElement == null) {
+                    list.appendChild(draggedElement);
+                } else {
+                    list.insertBefore(draggedElement, afterElement);
+                }
+            }
+        });
+
+        list.addEventListener('touchend', async (e) => {
+            if (draggedElement && isDragging) {
+                draggedElement.style.opacity = '1';
+                draggedElement.style.transform = '';
+                await this.saveSessionsOrder();
+            }
+            draggedElement = null;
+            isDragging = false;
         });
     }
 
@@ -1985,7 +2048,11 @@ class App {
         if (!list) return;
 
         let draggedElement = null;
+        let touchStartY = 0;
+        let touchCurrentY = 0;
+        let isDragging = false;
 
+        // Mouse/Drag events
         list.addEventListener('dragstart', (e) => {
             if (e.target.classList.contains('edit-slot-detail-card')) {
                 draggedElement = e.target;
@@ -2012,6 +2079,49 @@ class App {
         list.addEventListener('drop', async (e) => {
             e.preventDefault();
             await this.saveSlotsOrder();
+        });
+
+        // Touch events for iOS
+        list.addEventListener('touchstart', (e) => {
+            const item = e.target.closest('.edit-slot-detail-card');
+            if (item) {
+                draggedElement = item;
+                touchStartY = e.touches[0].clientY;
+                isDragging = false;
+            }
+        }, { passive: true });
+
+        list.addEventListener('touchmove', (e) => {
+            if (!draggedElement) return;
+            
+            touchCurrentY = e.touches[0].clientY;
+            const moveDistance = Math.abs(touchCurrentY - touchStartY);
+            
+            if (moveDistance > 10 && !isDragging) {
+                isDragging = true;
+                draggedElement.style.opacity = '0.5';
+                draggedElement.style.transform = 'scale(1.02)';
+            }
+            
+            if (isDragging) {
+                e.preventDefault();
+                const afterElement = this.getDragAfterElementSlot(list, touchCurrentY);
+                if (afterElement == null) {
+                    list.appendChild(draggedElement);
+                } else {
+                    list.insertBefore(draggedElement, afterElement);
+                }
+            }
+        });
+
+        list.addEventListener('touchend', async (e) => {
+            if (draggedElement && isDragging) {
+                draggedElement.style.opacity = '1';
+                draggedElement.style.transform = '';
+                await this.saveSlotsOrder();
+            }
+            draggedElement = null;
+            isDragging = false;
         });
     }
 
