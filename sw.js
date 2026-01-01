@@ -1,15 +1,15 @@
 // Service Worker for offline support
-const CACHE_NAME = 'muscu-v1';
+const CACHE_NAME = 'muscu-v2';
 const ASSETS = [
-    '/',
-    '/index.html',
-    '/styles.css',
-    '/db.js',
-    '/data.js',
-    '/app.js',
-    '/manifest.json',
-    '/icons/icon-192.png.svg',
-    '/icons/icon-512.png.svg'
+    './',
+    './index.html',
+    './styles.css',
+    './db.js',
+    './data.js',
+    './app.js',
+    './manifest.json',
+    './icons/icon-192.png.svg',
+    './icons/icon-512.png.svg'
 ];
 
 // Install event - cache assets
@@ -55,7 +55,7 @@ self.addEventListener('fetch', (event) => {
             })
             .catch(() => {
                 // Offline fallback
-                return caches.match('/index.html');
+                return caches.match('./index.html');
             })
     );
 });
