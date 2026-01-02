@@ -39,6 +39,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'isolation',
         instructions: 'Coudes fixes le long du corps. Contraction maximale en haut, descente contrôlée.',
         activeExercise: 'Curl barre EZ',
         pool: ['Curl barre EZ', 'Curl haltères', 'Curl poulie basse']
@@ -54,6 +55,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 75,
         rir: 2,
+        type: 'isolation',
         instructions: 'Prise neutre, mouvement contrôlé. Travaille le brachial et le long supinateur.',
         activeExercise: 'Curl marteau',
         pool: ['Curl marteau', 'Curl marteau poulie', 'Curl inversé']
@@ -69,6 +71,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 75,
         rir: 2,
+        type: 'isolation',
         instructions: 'Coudes fixes, extension complète. Squeeze en bas du mouvement.',
         activeExercise: 'Extension triceps poulie haute',
         pool: ['Extension triceps poulie haute', 'Pushdown corde', 'Extension barre V']
@@ -84,6 +87,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'compound',
         instructions: 'Descendre jusqu\'à 90° aux coudes. Ajouter du poids si trop facile.',
         activeExercise: 'Dips entre bancs',
         pool: ['Dips entre bancs', 'Dips machine', 'Extension nuque haltère']
@@ -101,6 +105,7 @@ const INITIAL_SLOTS = [
         repsMax: 10,
         rest: 120,
         rir: 2,
+        type: 'compound',
         instructions: 'Descente contrôlée jusqu\'aux pecs. Poussée explosive. Omoplates serrées.',
         activeExercise: 'Développé couché haltères',
         pool: ['Développé couché haltères', 'Développé couché barre', 'Développé machine convergente']
@@ -116,6 +121,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'compound',
         instructions: 'Inclinaison 30-45°. Focus sur le haut des pectoraux.',
         activeExercise: 'Développé incliné haltères',
         pool: ['Développé incliné haltères', 'Développé incliné barre', 'Développé incliné machine']
@@ -131,6 +137,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 60,
         rir: 1,
+        type: 'isolation',
         instructions: 'Légère flexion des coudes. Stretch en ouverture, squeeze au centre.',
         activeExercise: 'Écarté poulie vis-à-vis',
         pool: ['Écarté poulie vis-à-vis', 'Écarté haltères', 'Pec deck']
@@ -146,6 +153,7 @@ const INITIAL_SLOTS = [
         repsMax: 20,
         rest: 60,
         rir: 1,
+        type: 'compound',
         instructions: 'Finisher. Corps gainé, amplitude complète.',
         activeExercise: 'Pompes',
         pool: ['Pompes', 'Pompes déclinées', 'Pompes diamant']
@@ -163,6 +171,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'isolation',
         instructions: 'Banc incliné 45°. Étirement maximal du biceps en bas.',
         activeExercise: 'Curl incliné haltères',
         pool: ['Curl incliné haltères', 'Curl Larry Scott', 'Curl concentré']
@@ -178,6 +187,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 60,
         rir: 1,
+        type: 'isolation',
         instructions: 'Position bras en croix. Contraction maximale.',
         activeExercise: 'Curl poulie haute',
         pool: ['Curl poulie haute', 'Curl araignée', 'Curl 21s']
@@ -193,6 +203,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'isolation',
         instructions: 'Descente contrôlée vers le front. Coudes fixes.',
         activeExercise: 'Barre au front',
         pool: ['Barre au front', 'Extension haltère deux mains', 'Skull crusher haltères']
@@ -208,6 +219,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 60,
         rir: 1,
+        type: 'isolation',
         instructions: 'Coude fixe, extension complète. Squeeze en haut.',
         activeExercise: 'Kickback poulie',
         pool: ['Kickback poulie', 'Kickback haltère', 'Extension poulie unilat']
@@ -225,6 +237,7 @@ const INITIAL_SLOTS = [
         repsMax: 8,
         rest: 150,
         rir: 2,
+        type: 'compound',
         instructions: 'Prise moyenne. Descente contrôlée sur le bas des pecs. Poussée explosive.',
         activeExercise: 'Développé couché barre',
         pool: ['Développé couché barre', 'Développé couché haltères', 'Floor press']
@@ -240,6 +253,7 @@ const INITIAL_SLOTS = [
         repsMax: 12,
         rest: 90,
         rir: 2,
+        type: 'compound',
         instructions: 'Focus sur le bas des pectoraux. Contraction en haut.',
         activeExercise: 'Développé décliné machine',
         pool: ['Développé décliné machine', 'Développé décliné haltères', 'Dips pecs']
@@ -255,6 +269,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 75,
         rir: 2,
+        type: 'isolation',
         instructions: 'Banc incliné 30°. Stretch profond, squeeze au centre.',
         activeExercise: 'Écarté incliné haltères',
         pool: ['Écarté incliné haltères', 'Écarté poulie basse', 'Écarté machine']
@@ -270,6 +285,7 @@ const INITIAL_SLOTS = [
         repsMax: 15,
         rest: 60,
         rir: 1,
+        type: 'isolation',
         instructions: 'Étirement complet en haut. Contraction des pecs en bas.',
         activeExercise: 'Pullover poulie',
         pool: ['Pullover poulie', 'Pullover haltère', 'Pullover machine']

@@ -542,18 +542,19 @@ class App {
         document.getElementById('session-progress-text').textContent = `${completed}/${total} exercices`;
     }
     
-    // ===== Performance Status =====
+    // ===== Performance Status (RPE-aware) =====
     async getExerciseStatus(slot) {
         const exerciseId = slot.activeExercise || slot.name;
+        const failureThreshold = await db.getSetting('failureCount') || 3;
         
         // Get all set history for this exercise
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
         
         if (allSetHistory.length === 0) {
-            return { class: '', title: 'Pas encore de données' };
+            return { class: '', title: 'Nouveau' };
         }
         
-        // Group by workout
+        // Group by workout with RPE
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
@@ -561,12 +562,21 @@ class App {
                     date: set.date,
                     sets: [],
                     totalReps: 0,
-                    maxWeight: 0
+                    maxWeight: 0,
+                    avgRpe: 0
                 };
             }
             workoutGroups[set.workoutId].sets.push(set);
             workoutGroups[set.workoutId].totalReps += set.reps || 0;
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
+        }
+        
+        // Calculate avgRpe and sort sets
+        for (const wId of Object.keys(workoutGroups)) {
+            const sets = workoutGroups[wId].sets;
+            const totalRpe = sets.reduce((sum, s) => sum + (s.rpe || 8), 0);
+            workoutGroups[wId].avgRpe = sets.length > 0 ? totalRpe / sets.length : 8;
+            workoutGroups[wId].sets.sort((a, b) => a.setNumber - b.setNumber);
         }
         
         // Sort workouts by date (most recent first)
@@ -575,42 +585,63 @@ class App {
         );
         
         if (workouts.length < 2) {
-            return { class: '', title: 'Pas assez de données' };
+            return { class: '', title: 'Continue !' };
         }
         
-        // Compare last 2 workouts
+        // Smart progression check (Double Progression Dynamique)
         const current = workouts[0];
         const previous = workouts[1];
         
+        // Check first set progression specifically
+        const currFirst = current.sets[0];
+        const prevFirst = previous.sets[0];
+        const firstSetImproved = (currFirst?.reps || 0) > (prevFirst?.reps || 0) || 
+                                  (currFirst?.weight || 0) > (prevFirst?.weight || 0);
+        
         const repsImproved = current.totalReps > previous.totalReps;
         const weightImproved = current.maxWeight > previous.maxWeight;
-        const repsSame = current.totalReps === previous.totalReps;
-        const weightSame = current.maxWeight === previous.maxWeight;
+        const hasProgression = firstSetImproved || repsImproved || weightImproved;
         
-        if (repsImproved || weightImproved) {
+        if (hasProgression) {
             return { class: 'success', title: 'Progression !' };
-        } else if (repsSame && weightSame) {
-            // Check if this is second failure in a row
-            if (workouts.length >= 3) {
-                const beforePrevious = workouts[2];
-                const prevRepsStable = previous.totalReps <= beforePrevious.totalReps;
-                const prevWeightStable = previous.maxWeight <= beforePrevious.maxWeight;
-                
-                if (prevRepsStable && prevWeightStable) {
-                    return { class: 'danger', title: 'Échec 2 - Switch recommandé' };
-                }
+        }
+        
+        // Count consecutive stagnation with RPE awareness
+        let consecutiveStagnation = 1;
+        let lowEffortCount = current.avgRpe < 8 ? 1 : 0;
+        
+        for (let i = 1; i < Math.min(workouts.length - 1, failureThreshold + 1); i++) {
+            const curr = workouts[i];
+            const prev = workouts[i + 1];
+            const currFirst = curr.sets[0];
+            const prevFirst = prev.sets[0];
+            
+            const noProgress = 
+                (currFirst?.reps || 0) <= (prevFirst?.reps || 0) && 
+                (currFirst?.weight || 0) <= (prevFirst?.weight || 0) &&
+                curr.totalReps <= prev.totalReps;
+            
+            if (noProgress) {
+                consecutiveStagnation++;
+                if (curr.avgRpe < 8) lowEffortCount++;
+            } else {
+                break;
             }
-            return { class: 'warning', title: 'Échec 1 - Performance stable' };
+        }
+        
+        // Intelligent status based on stagnation count and effort
+        if (consecutiveStagnation >= failureThreshold) {
+            return { class: 'danger', title: `Plateau (${consecutiveStagnation}x) - Switch ?` };
+        } else if (consecutiveStagnation >= 2) {
+            if (lowEffortCount >= 2) {
+                return { class: 'warning', title: 'Effort insuffisant' };
+            }
+            return { class: 'warning', title: 'Deload suggéré' };
         } else {
-            // Regression
-            if (workouts.length >= 3) {
-                const beforePrevious = workouts[2];
-                const prevRegressed = previous.totalReps < beforePrevious.totalReps;
-                if (prevRegressed) {
-                    return { class: 'danger', title: 'Échec 2 - Switch recommandé' };
-                }
+            if (current.avgRpe < 7.5) {
+                return { class: 'warning', title: 'Pousse plus !' };
             }
-            return { class: 'warning', title: 'Échec 1 - Régression' };
+            return { class: 'warning', title: 'Stable - Persévère' };
         }
     }
 
@@ -1305,14 +1336,20 @@ class App {
             return;
         }
 
-        // Save set data
+        // Save set data (RPE will be added during rest timer)
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         slotData.sets[setIndex] = {
             weight,
             reps,
             completed: true,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            rpe: 8 // Default RPE, will be updated during rest
         };
+        
+        // Track last completed set for RPE capture
+        this.lastCompletedSetIndex = setIndex;
+        this.lastCompletedSetWeight = weight;
+        this.lastCompletedSetReps = reps;
 
         await db.saveCurrentWorkout(this.currentWorkout);
 
@@ -1329,7 +1366,8 @@ class App {
             // Show summary after a brief delay
             setTimeout(() => this.showExerciseSummary(), 300);
         } else {
-            // Start rest timer
+            // Start rest timer (with RPE capture)
+            this.resetRpeSlider();
             this.startRestTimer(this.currentSlot.rest);
         }
     }
@@ -1414,11 +1452,154 @@ class App {
             clearInterval(this.restTimer);
             this.restTimer = null;
         }
+        
+        // Capture RPE from slider and save to last completed set
+        this.saveRpeToLastSet();
+        
         this.restTimerEndTime = null;
         this.lastVibrateAt = null;
         localStorage.removeItem('restTimerEndTime');
         document.getElementById('timer-overlay').classList.remove('active');
         document.getElementById('timer-countdown').classList.remove('ending');
+        
+        // Reset RPE slider for next set
+        this.resetRpeSlider();
+    }
+    
+    // ===== RPE Management =====
+    updateRpeDisplay(rpe) {
+        const rpeDescriptions = {
+            6: { text: 'Facile • ~4 reps en réserve', emoji: '😎' },
+            7: { text: 'Modéré • ~3 reps en réserve', emoji: '🙂' },
+            8: { text: 'Effort sérieux • ~2 reps en réserve', emoji: '😤' },
+            9: { text: 'Très dur • ~1 rep en réserve', emoji: '🥵' },
+            10: { text: 'Échec musculaire • 0 rep en réserve', emoji: '💀' }
+        };
+        
+        const desc = rpeDescriptions[rpe] || rpeDescriptions[8];
+        document.getElementById('rpe-feedback').innerHTML = `
+            <span class="rpe-value">RPE ${rpe} ${desc.emoji}</span>
+            <span class="rpe-description">${desc.text}</span>
+        `;
+        
+        // Update active emoji
+        document.querySelectorAll('.rpe-labels span').forEach(span => {
+            span.classList.toggle('active', parseInt(span.dataset.rpe) === rpe);
+        });
+        
+        // Update section border color
+        document.getElementById('rpe-section').dataset.rpe = rpe;
+    }
+    
+    resetRpeSlider() {
+        const slider = document.getElementById('rpe-slider');
+        slider.value = 8;
+        this.updateRpeDisplay(8);
+    }
+    
+    async saveRpeToLastSet() {
+        if (this.lastCompletedSetIndex === undefined || !this.currentSlot) return;
+        
+        const rpe = parseInt(document.getElementById('rpe-slider').value);
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        
+        if (slotData && slotData.sets[this.lastCompletedSetIndex]) {
+            slotData.sets[this.lastCompletedSetIndex].rpe = rpe;
+            await db.saveCurrentWorkout(this.currentWorkout);
+            
+            // === AUTO BACK-OFF: After set 1, if RPE >= 9, suggest weight reduction ===
+            if (this.lastCompletedSetIndex === 0 && rpe >= 9) {
+                await this.checkAutoBackoff(rpe);
+            }
+            
+            // === HOT/COLD DAY DETECTION after set 1 ===
+            if (this.lastCompletedSetIndex === 0 && this.avgPerformance) {
+                this.detectDayStatus(rpe);
+            }
+        }
+    }
+    
+    async checkAutoBackoff(rpe) {
+        const isCompound = this.currentExerciseType === 'compound';
+        const weight = this.lastCompletedSetWeight;
+        
+        // Only suggest back-off for compound exercises or very high RPE
+        if (!isCompound && rpe < 10) return;
+        
+        const backoffPercent = 10;
+        const suggestedWeight = Math.round(weight * (1 - backoffPercent / 100) * 2) / 2;
+        
+        // Show subtle inline suggestion (not a modal)
+        this.showBackoffSuggestion(suggestedWeight, rpe);
+    }
+    
+    showBackoffSuggestion(suggestedWeight, rpe) {
+        // Create a subtle toast notification
+        const existing = document.querySelector('.coach-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'coach-toast backoff';
+        toast.innerHTML = `
+            <span class="coach-toast-icon">💡</span>
+            <span class="coach-toast-text">RPE ${rpe} • Baisse à <strong>${suggestedWeight}kg</strong> pour maintenir tes reps</span>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => toast.classList.add('visible'), 50);
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+    
+    detectDayStatus(rpe) {
+        const weight = this.lastCompletedSetWeight;
+        const reps = this.lastCompletedSetReps;
+        const avg = this.avgPerformance;
+        
+        // Calculate performance score compared to average
+        const weightRatio = weight / avg.weight;
+        const repsRatio = reps / avg.reps;
+        const rpeRatio = avg.rpe / rpe; // Inverse: lower RPE with same perf = better
+        
+        const perfScore = (weightRatio * 0.4 + repsRatio * 0.4 + rpeRatio * 0.2);
+        
+        if (perfScore < 0.9) {
+            // Cold day: performance 10%+ below average
+            this.showDayStatusToast('cold');
+        } else if (perfScore > 1.1 || (rpe <= 7 && reps >= avg.reps)) {
+            // Hot day: performance 10%+ above average or easy with same reps
+            this.showDayStatusToast('hot');
+        }
+    }
+    
+    showDayStatusToast(status) {
+        const existing = document.querySelector('.coach-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = `coach-toast ${status}`;
+        
+        if (status === 'cold') {
+            toast.innerHTML = `
+                <span class="coach-toast-icon">❄️</span>
+                <span class="coach-toast-text">Forme basse • Mode maintenance, on ne force pas</span>
+            `;
+        } else {
+            toast.innerHTML = `
+                <span class="coach-toast-icon">🔥</span>
+                <span class="coach-toast-text">En feu ! Tente un record sur ta dernière série</span>
+            `;
+        }
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => toast.classList.add('visible'), 50);
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
     }
 
     adjustRestTimer(seconds) {
@@ -1552,6 +1733,9 @@ class App {
     async confirmFinishSession() {
         this.stopSessionTimer();
         this.hideFinishModal();
+        
+        // Calculate Stimulus Score before saving
+        const stimulusScore = await this.calculateStimulusScore();
 
         // Save workout to history
         const workoutRecord = {
@@ -1559,12 +1743,13 @@ class App {
             date: new Date().toISOString(),
             duration: Date.now() - this.sessionStartTime,
             slots: this.currentWorkout.slots,
-            completedSlots: this.currentWorkout.completedSlots
+            completedSlots: this.currentWorkout.completedSlots,
+            stimulusScore: stimulusScore.total
         };
 
         const workoutId = await db.add('workoutHistory', workoutRecord);
 
-        // Save individual sets to history
+        // Save individual sets to history (including RPE)
         for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
             const slot = await db.get('slots', slotId);
             for (let i = 0; i < slotData.sets.length; i++) {
@@ -1577,6 +1762,7 @@ class App {
                         setNumber: i + 1,
                         weight: setData.weight,
                         reps: setData.reps,
+                        rpe: setData.rpe || 8, // Include RPE data
                         date: new Date().toISOString()
                     });
                 }
@@ -1619,8 +1805,164 @@ class App {
         await db.clearCurrentWorkout();
         this.currentWorkout = null;
 
-        // Go back home
-        await this.renderHome();
+        // Show Stimulus Score animation before going home
+        await this.showStimulusScoreAnimation(stimulusScore);
+    }
+    
+    async calculateStimulusScore() {
+        let score = 0;
+        let hardSets = 0;
+        let junkSets = 0;
+        let dangerSets = 0;
+        let prBonus = 0;
+        
+        for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
+            const slot = await db.get('slots', slotId);
+            const isCompound = slot?.type === 'compound';
+            
+            // Get last session data to check for PR
+            const exerciseId = slot?.activeExercise || slot?.name;
+            const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+            const lastWeight = allSetHistory.length > 0 ? Math.max(...allSetHistory.map(s => s.weight || 0)) : 0;
+            const lastReps = allSetHistory.length > 0 ? Math.max(...allSetHistory.map(s => s.reps || 0)) : 0;
+            
+            for (let i = 0; i < slotData.sets.length; i++) {
+                const set = slotData.sets[i];
+                if (!set || !set.completed) continue;
+                
+                const rpe = set.rpe || 8;
+                
+                // Hard Set: RPE 7-9.5 = 1 point
+                if (rpe >= 7 && rpe <= 9.5) {
+                    hardSets++;
+                    score += 1;
+                }
+                
+                // Junk Volume: RPE < 6 = 0 points (already not counted)
+                if (rpe < 6) {
+                    junkSets++;
+                }
+                
+                // Ego/Danger penalty: RPE 10 on compound = -2 points
+                if (rpe === 10 && isCompound) {
+                    dangerSets++;
+                    score -= 2;
+                }
+                
+                // PR Bonus: First set beats previous best weight or reps = +5 points
+                if (i === 0) {
+                    if (set.weight > lastWeight || set.reps > lastReps) {
+                        prBonus += 5;
+                        score += 5;
+                    }
+                }
+            }
+        }
+        
+        // Normalize score (aim for 0-100 scale based on expected workout)
+        const expectedSets = Object.keys(this.currentWorkout.slots).length * 3; // ~3 sets per exercise
+        const normalizedScore = Math.min(100, Math.round((score / expectedSets) * 100));
+        
+        return {
+            total: Math.max(0, score),
+            normalized: normalizedScore,
+            hardSets,
+            junkSets,
+            dangerSets,
+            prBonus
+        };
+    }
+    
+    async showStimulusScoreAnimation(score) {
+        return new Promise((resolve) => {
+            // Create overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'stimulus-score-overlay';
+            
+            // Determine score quality
+            let quality, emoji, message;
+            if (score.normalized >= 80) {
+                quality = 'excellent';
+                emoji = '🔥';
+                message = 'Séance parfaite !';
+            } else if (score.normalized >= 60) {
+                quality = 'good';
+                emoji = '💪';
+                message = 'Bonne séance !';
+            } else if (score.normalized >= 40) {
+                quality = 'ok';
+                emoji = '👍';
+                message = 'Séance correcte';
+            } else {
+                quality = 'low';
+                emoji = '🎯';
+                message = 'Marge de progression';
+            }
+            
+            overlay.innerHTML = `
+                <div class="stimulus-score-content">
+                    <div class="stimulus-score-emoji">${emoji}</div>
+                    <div class="stimulus-score-label">Stimulus Score</div>
+                    <div class="stimulus-score-value ${quality}">
+                        <span class="score-number">0</span>
+                    </div>
+                    <div class="stimulus-score-message">${message}</div>
+                    <div class="stimulus-score-details">
+                        <div class="score-detail">
+                            <span class="detail-value">${score.hardSets}</span>
+                            <span class="detail-label">Hard Sets</span>
+                        </div>
+                        ${score.prBonus > 0 ? `
+                        <div class="score-detail pr">
+                            <span class="detail-value">+${score.prBonus}</span>
+                            <span class="detail-label">PR Bonus</span>
+                        </div>
+                        ` : ''}
+                        ${score.dangerSets > 0 ? `
+                        <div class="score-detail danger">
+                            <span class="detail-value">-${score.dangerSets * 2}</span>
+                            <span class="detail-label">RPE 10 Compound</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
+                </div>
+            `;
+            
+            document.body.appendChild(overlay);
+            
+            // Animate score counter
+            setTimeout(() => {
+                overlay.classList.add('visible');
+                const scoreEl = overlay.querySelector('.score-number');
+                this.animateCounter(scoreEl, 0, score.total, 1500);
+            }, 50);
+            
+            // Button click
+            overlay.querySelector('.stimulus-score-btn').onclick = () => {
+                overlay.classList.remove('visible');
+                setTimeout(() => {
+                    overlay.remove();
+                    this.renderHome();
+                    resolve();
+                }, 300);
+            };
+        });
+    }
+    
+    animateCounter(element, start, end, duration) {
+        const startTime = performance.now();
+        const update = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const current = Math.round(start + (end - start) * easeOut);
+            element.textContent = current;
+            if (progress < 1) {
+                requestAnimationFrame(update);
+            }
+        };
+        requestAnimationFrame(update);
     }
 
     // ===== Load Current Workout =====
@@ -1928,6 +2270,20 @@ class App {
                 </div>
             </div>
             <div class="form-group">
+                <label>Type d'exercice</label>
+                <div class="type-selector">
+                    <button type="button" class="type-btn ${slot.type === 'compound' ? 'active' : ''}" data-type="compound">
+                        <span class="type-icon">🏋️</span>
+                        <span class="type-label">Composé</span>
+                    </button>
+                    <button type="button" class="type-btn ${slot.type === 'isolation' ? 'active' : ''}" data-type="isolation">
+                        <span class="type-icon">💪</span>
+                        <span class="type-label">Isolation</span>
+                    </button>
+                </div>
+                <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
+            </div>
+            <div class="form-group">
                 <label>Consignes d'exécution</label>
                 <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${slot.instructions || ''}</textarea>
             </div>
@@ -1960,6 +2316,21 @@ class App {
 
         sheet.classList.add('active');
         this.bindPoolEditorEvents();
+        this.bindTypeSelector();
+    }
+    
+    bindTypeSelector() {
+        const typeSelector = document.querySelector('.type-selector');
+        if (!typeSelector) return;
+        
+        typeSelector.onclick = (e) => {
+            const btn = e.target.closest('.type-btn');
+            if (!btn) return;
+            
+            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('edit-slot-type').value = btn.dataset.type;
+        };
     }
 
     hideEditSlotSheet() {
@@ -1993,6 +2364,7 @@ class App {
         slot.repsMax = parseInt(document.getElementById('edit-slot-reps-max').value) || 12;
         slot.rest = parseInt(document.getElementById('edit-slot-rest').value) || 90;
         slot.rir = parseInt(document.getElementById('edit-slot-rir').value) || 2;
+        slot.type = document.getElementById('edit-slot-type').value || 'compound';
         slot.instructions = document.getElementById('edit-slot-instructions').value.trim();
         
         // Get pool from individual inputs
@@ -2485,6 +2857,19 @@ class App {
         document.getElementById('btn-timer-minus').onclick = () => this.adjustRestTimer(-15);
         document.getElementById('btn-timer-plus').onclick = () => this.adjustRestTimer(15);
         document.getElementById('btn-timer-stop').onclick = () => this.stopRestTimer();
+        
+        // RPE Slider
+        const rpeSlider = document.getElementById('rpe-slider');
+        rpeSlider.oninput = () => this.updateRpeDisplay(parseInt(rpeSlider.value));
+        
+        // RPE emoji clicks
+        document.querySelectorAll('.rpe-labels span').forEach(span => {
+            span.onclick = () => {
+                const rpe = parseInt(span.dataset.rpe);
+                rpeSlider.value = rpe;
+                this.updateRpeDisplay(rpe);
+            };
+        });
 
         // Summary
         document.getElementById('btn-back-to-session').onclick = () => {
@@ -2795,7 +3180,7 @@ class App {
     async showSettingsSheet() {
         // Load current settings
         const weeklyGoal = await db.getSetting('weeklyGoal') || 3;
-        const failureCount = await db.getSetting('failureCount') || 2;
+        const failureCount = await db.getSetting('failureCount') || 3;
         const deloadPercent = await db.getSetting('deloadPercent') || 10;
         const weightIncrement = await db.getSetting('weightIncrement') || 2;
         const lockWeeks = await db.getSetting('lockWeeks') || 4;
@@ -2967,16 +3352,24 @@ class App {
     async calculateCoachingAdvice() {
         const slot = this.currentSlot;
         const exerciseId = slot.activeExercise || slot.name;
+        const isIsolation = slot.type === 'isolation';
         
-        // Get settings
-        const failureThreshold = await db.getSetting('failureCount') || 2;
+        // Get settings - adapt based on exercise type
+        const failureThreshold = await db.getSetting('failureCount') || 3;
         const deloadPercent = await db.getSetting('deloadPercent') || 10;
-        const weightIncrement = await db.getSetting('weightIncrement') || 2;
+        const baseWeightIncrement = await db.getSetting('weightIncrement') || 2;
+        
+        // Isolation: micro-loading (+0.5-1kg), Compound: +2.5-5kg
+        const weightIncrement = isIsolation ? Math.min(baseWeightIncrement, 1) : baseWeightIncrement;
+        // Isolation: RPE 10 allowed, Compound: max RPE 9 for safety
+        const maxSafeRpe = isIsolation ? 10 : 9;
+        // Isolation: priority reps (15-20 before increasing), Compound: priority weight
+        const repsThresholdForIncrease = isIsolation ? Math.max(slot.repsMax, 15) : slot.repsMax;
         
         // Get all set history for this exercise
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
         
-        // Group by workout
+        // Group by workout with per-set analysis (Double Progression Dynamique)
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
@@ -2985,7 +3378,8 @@ class App {
                     sets: [],
                     totalReps: 0,
                     maxWeight: 0,
-                    avgWeight: 0
+                    avgWeight: 0,
+                    avgRpe: 0
                 };
             }
             workoutGroups[set.workoutId].sets.push(set);
@@ -2993,11 +3387,15 @@ class App {
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
         }
         
-        // Calculate average weight for each workout
+        // Calculate average weight and RPE for each workout
         for (const wId of Object.keys(workoutGroups)) {
             const sets = workoutGroups[wId].sets;
             const totalWeight = sets.reduce((sum, s) => sum + (s.weight || 0), 0);
+            const totalRpe = sets.reduce((sum, s) => sum + (s.rpe || 8), 0);
             workoutGroups[wId].avgWeight = sets.length > 0 ? totalWeight / sets.length : 0;
+            workoutGroups[wId].avgRpe = sets.length > 0 ? totalRpe / sets.length : 8;
+            // Sort sets by setNumber
+            workoutGroups[wId].sets.sort((a, b) => a.setNumber - b.setNumber);
         }
         
         // Sort workouts by date (most recent first)
@@ -3005,8 +3403,24 @@ class App {
             new Date(b.date) - new Date(a.date)
         );
         
-        // Default target reps (middle of range)
+        // Build target reps string (dégressive: max/max/mid)
         const targetReps = `${slot.repsMax} / ${slot.repsMax} / ${Math.round((slot.repsMin + slot.repsMax) / 2)}`;
+        
+        // Store exercise type info for later use (Auto Back-off, Hot/Cold detection)
+        this.currentExerciseType = isIsolation ? 'isolation' : 'compound';
+        this.currentMaxSafeRpe = maxSafeRpe;
+        
+        // === HOT/COLD DAY DETECTION (compare to last 3 sessions average) ===
+        let dayStatus = null; // 'hot', 'cold', or null
+        if (workouts.length >= 3) {
+            const last3Workouts = workouts.slice(0, 3);
+            const avgFirstSetWeight = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.weight || 0), 0) / 3;
+            const avgFirstSetReps = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.reps || 0), 0) / 3;
+            const avgFirstSetRpe = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.rpe || 8), 0) / 3;
+            
+            // Store for current session comparison after set 1
+            this.avgPerformance = { weight: avgFirstSetWeight, reps: avgFirstSetReps, rpe: avgFirstSetRpe };
+        }
         
         // === CASE 1: First time on this exercise ===
         if (workouts.length === 0) {
@@ -3014,7 +3428,7 @@ class App {
                 type: 'new',
                 icon: 'new',
                 title: 'Nouvel exercice',
-                message: `Première fois sur cet exercice ! Commence léger pour maîtriser la technique. Vise ${slot.repsMax} reps sur chaque série.`,
+                message: `Première fois ! Commence léger, maîtrise la technique. Vise ${slot.repsMax} reps.`,
                 suggestedWeight: '?',
                 weightTrend: 'same',
                 suggestedReps: targetReps
@@ -3023,50 +3437,73 @@ class App {
         
         const lastWorkout = workouts[0];
         const lastWeight = lastWorkout.avgWeight || lastWorkout.maxWeight;
-        const lastTotalReps = lastWorkout.totalReps;
         const lastSets = lastWorkout.sets;
+        const lastAvgRpe = lastWorkout.avgRpe;
         
-        // Check if all sets hit top of rep range
-        const targetTotalReps = slot.sets * slot.repsMax;
-        const hitTopRange = lastTotalReps >= targetTotalReps;
+        // === DOUBLE PROGRESSION DYNAMIQUE: Analyze per-set performance ===
+        // Check first set specifically (most important for tension mécanique)
+        const firstSet = lastSets[0];
+        const firstSetReps = firstSet?.reps || 0;
+        const firstSetRpe = firstSet?.rpe || 8;
+        const firstSetHitMax = firstSetReps >= repsThresholdForIncrease;
+        const firstSetBelowMin = firstSetReps < slot.repsMin;
         
-        // Check if first set was below minimum
-        const firstSetReps = lastSets.length > 0 ? lastSets[0].reps : 0;
-        const belowMinRange = firstSetReps < slot.repsMin;
+        // Check if ALL sets hit top of range (use higher threshold for isolation)
+        const allSetsHitMax = lastSets.every(s => (s.reps || 0) >= repsThresholdForIncrease);
         
-        // === CASE 2: Only one workout - not enough data for progression check ===
+        // Calculate effective reps (RPE-weighted: higher RPE = more effective)
+        const effectiveReps = lastSets.reduce((sum, s) => {
+            const rpeMultiplier = Math.max(0, (s.rpe || 8) - 5) / 5; // 0 at RPE 5, 1 at RPE 10
+            return sum + (s.reps || 0) * rpeMultiplier;
+        }, 0);
+        
+        // === CASE 2: Only one workout ===
         if (workouts.length === 1) {
-            if (hitTopRange) {
-                // They crushed it! Suggest increase
+            // Analyze based on RPE and performance
+            if (allSetsHitMax && lastAvgRpe <= 8.5) {
+                // Crushed it with room to spare - increase
                 const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+                const progressMsg = isIsolation 
+                    ? `${repsThresholdForIncrease} reps atteint ! Micro-augmentation de +${weightIncrement}kg.`
+                    : `${repsThresholdForIncrease} reps atteint partout. Augmente la charge !`;
                 return {
                     type: 'increase',
                     icon: 'increase',
                     title: 'Prêt à progresser !',
-                    message: `Tu as atteint ${slot.repsMax} reps sur toutes les séries. Augmente la charge !`,
+                    message: progressMsg,
                     suggestedWeight: newWeight,
                     weightTrend: 'up',
                     suggestedReps: targetReps
                 };
-            } else if (belowMinRange) {
-                // Too heavy
+            } else if (firstSetBelowMin && firstSetRpe >= 9) {
+                // Too heavy - RPE confirms it's not just lack of effort
                 const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
                 return {
                     type: 'decrease',
                     icon: 'warning',
                     title: 'Charge trop élevée',
-                    message: `Tu n'atteins pas ${slot.repsMin} reps sur la 1ère série. Baisse la charge pour rester dans la plage.`,
+                    message: `Tu n'atteins pas ${slot.repsMin} reps malgré un effort max. Baisse pour progresser.`,
                     suggestedWeight: newWeight,
                     weightTrend: 'down',
                     suggestedReps: targetReps
                 };
+            } else if (firstSetBelowMin && firstSetRpe < 8) {
+                // Below min but low effort - encourage intensity
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Pousse plus fort !',
+                    message: `Reps basses mais effort faible (RPE ${firstSetRpe}). Engage-toi plus sur la prochaine !`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
             } else {
-                // Keep working
                 return {
                     type: 'maintain',
                     icon: 'target',
                     title: 'Continue comme ça',
-                    message: `Objectif : atteindre ${slot.repsMax} reps sur toutes les séries avant d'augmenter.`,
+                    message: `Objectif : ${slot.repsMax} reps sur la 1ère série avant d'augmenter.`,
                     suggestedWeight: lastWeight,
                     weightTrend: 'same',
                     suggestedReps: targetReps
@@ -3074,95 +3511,164 @@ class App {
             }
         }
         
-        // === CASE 3: Multiple workouts - check progression ===
+        // === CASE 3: Multiple workouts - SMART PROGRESSION ANALYSIS ===
         const prevWorkout = workouts[1];
-        const prevTotalReps = prevWorkout.totalReps;
-        const prevMaxWeight = prevWorkout.maxWeight;
+        const prevSets = prevWorkout.sets;
+        const prevAvgRpe = prevWorkout.avgRpe;
         
-        // Determine if there was progression
-        const repsImproved = lastTotalReps > prevTotalReps;
-        const weightImproved = lastWorkout.maxWeight > prevMaxWeight;
-        const noProgress = !repsImproved && !weightImproved;
+        // Compare first sets specifically (Double Progression Dynamique)
+        const prevFirstSet = prevSets[0];
+        const prevFirstReps = prevFirstSet?.reps || 0;
+        const prevFirstWeight = prevFirstSet?.weight || 0;
+        const currentFirstWeight = firstSet?.weight || 0;
         
-        // Count consecutive failures
-        let consecutiveFailures = 0;
-        if (noProgress) {
-            consecutiveFailures = 1;
+        // Progression indicators
+        const firstSetRepsImproved = firstSetReps > prevFirstReps;
+        const firstSetWeightImproved = currentFirstWeight > prevFirstWeight;
+        const overallRepsImproved = lastWorkout.totalReps > prevWorkout.totalReps;
+        const overallWeightImproved = lastWorkout.maxWeight > prevWorkout.maxWeight;
+        
+        // Any form of progression = success
+        const hasProgression = firstSetRepsImproved || firstSetWeightImproved || overallRepsImproved || overallWeightImproved;
+        
+        // === INTELLIGENT STAGNATION DETECTION ===
+        let consecutiveStagnation = 0;
+        let lowEffortStagnation = 0;
+        let highEffortStagnation = 0;
+        
+        if (!hasProgression) {
+            consecutiveStagnation = 1;
+            if (lastAvgRpe < 8) lowEffortStagnation++;
+            else highEffortStagnation++;
+            
             // Check further back
-            for (let i = 1; i < workouts.length - 1; i++) {
+            for (let i = 1; i < Math.min(workouts.length - 1, 5); i++) {
                 const curr = workouts[i];
                 const prev = workouts[i + 1];
-                if (curr.totalReps <= prev.totalReps && curr.maxWeight <= prev.maxWeight) {
-                    consecutiveFailures++;
+                const currFirst = curr.sets[0];
+                const prevFirst = prev.sets[0];
+                
+                const noProgressHere = 
+                    (currFirst?.reps || 0) <= (prevFirst?.reps || 0) && 
+                    (currFirst?.weight || 0) <= (prevFirst?.weight || 0) &&
+                    curr.totalReps <= prev.totalReps;
+                
+                if (noProgressHere) {
+                    consecutiveStagnation++;
+                    if (curr.avgRpe < 8) lowEffortStagnation++;
+                    else highEffortStagnation++;
                 } else {
                     break;
                 }
             }
         }
         
-        // === Check for fatigue pattern (3+ exercises regressing) ===
-        // This would require session-level analysis, simplified here
+        // === HIERARCHICAL INTERVENTION (Reactive Deload Logic) ===
         
-        // === CASE 4: Consecutive failures - suggest switch ===
-        if (consecutiveFailures >= failureThreshold) {
-            return {
-                type: 'switch',
-                icon: 'switch',
-                title: `${consecutiveFailures} échecs - Switch recommandé`,
-                message: `Stagnation détectée depuis ${consecutiveFailures} séances. Change d'exercice pour relancer la progression.`,
-                suggestedWeight: lastWeight,
-                weightTrend: 'same',
-                suggestedReps: targetReps
-            };
-        }
-        
-        // === CASE 5: One failure ===
-        if (noProgress) {
+        // Step 1: Check if low effort caused stagnation
+        if (consecutiveStagnation >= 1 && lowEffortStagnation > 0 && lastAvgRpe < 8) {
             return {
                 type: 'maintain',
                 icon: 'warning',
-                title: 'Échec 1 - Persévère',
-                message: `Pas de progression cette fois. Concentre-toi sur la technique et gratte 1 rep !`,
+                title: 'Augmente l\'intensité !',
+                message: `Stagnation avec RPE ${lastAvgRpe.toFixed(1)} (trop facile). Pousse plus proche de l'échec !`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
                 suggestedReps: targetReps
             };
         }
         
-        // === CASE 6: Progression achieved ===
-        if (hitTopRange) {
+        // Step 2: After 2 failures with good effort → suggest reactive deload (volume cut)
+        if (consecutiveStagnation >= 2 && consecutiveStagnation < failureThreshold && highEffortStagnation >= 2) {
+            return {
+                type: 'maintain',
+                icon: 'warning',
+                title: 'Deload volume suggéré',
+                message: `${consecutiveStagnation} séances sans progrès malgré l'effort. Fais 2 séries au lieu de ${slot.sets} pour récupérer.`,
+                suggestedWeight: lastWeight, // Keep weight!
+                weightTrend: 'same',
+                suggestedReps: `${slot.repsMax} / ${slot.repsMax}` // Fewer sets
+            };
+        }
+        
+        // Step 3: After threshold failures → suggest switch
+        if (consecutiveStagnation >= failureThreshold) {
+            return {
+                type: 'switch',
+                icon: 'switch',
+                title: `Plateau détecté (${consecutiveStagnation} séances)`,
+                message: `Essaie une variante du mouvement pour relancer la progression.`,
+                suggestedWeight: lastWeight,
+                weightTrend: 'same',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // Step 4: Single failure - just encourage
+        if (consecutiveStagnation === 1) {
+            const encouragement = lastAvgRpe >= 9 
+                ? 'Bel effort ! Parfois ça stagne, persévère.' 
+                : 'Concentre-toi et gratte 1 rep de plus !';
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Échec 1 - Persévère',
+                message: encouragement,
+                suggestedWeight: lastWeight,
+                weightTrend: 'same',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // === PROGRESSION ACHIEVED ===
+        if (allSetsHitMax && lastAvgRpe <= 8.5) {
+            // Ready for weight increase
             const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
             return {
                 type: 'increase',
-                icon: 'increase',
-                title: 'Progression validée !',
-                message: `Excellent ! Tu as atteint ${slot.repsMax} reps partout. Augmente la charge !`,
+                icon: 'celebrate',
+                title: 'Progression validée ! 🎯',
+                message: `Tu maîtrises ${lastWeight}kg. Passe à ${newWeight}kg !`,
                 suggestedWeight: newWeight,
                 weightTrend: 'up',
                 suggestedReps: targetReps
             };
         }
         
-        // === CASE 7: Below minimum range ===
-        if (belowMinRange) {
+        if (firstSetHitMax && lastAvgRpe <= 9) {
+            // First set ready for increase (Double Progression Dynamique)
+            const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+            return {
+                type: 'increase',
+                icon: 'increase',
+                title: 'Série 1 prête !',
+                message: `${slot.repsMax} reps sur S1 ! Tu peux tenter ${newWeight}kg sur la première série.`,
+                suggestedWeight: newWeight,
+                weightTrend: 'up',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // Below minimum with high effort → decrease
+        if (firstSetBelowMin && firstSetRpe >= 9) {
             const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
             return {
                 type: 'decrease',
                 icon: 'decrease',
-                title: 'Baisse suggérée',
-                message: `Tu es sous la plage cible (${slot.repsMin}-${slot.repsMax}). Réduis la charge pour progresser proprement.`,
+                title: 'Ajustement nécessaire',
+                message: `Sous ${slot.repsMin} reps malgré l'effort. Baisse à ${newWeight}kg pour progresser.`,
                 suggestedWeight: newWeight,
                 weightTrend: 'down',
                 suggestedReps: targetReps
             };
         }
         
-        // === CASE 8: Normal progression - keep going ===
+        // === DEFAULT: Good progress, keep going ===
         return {
             type: 'maintain',
             icon: 'maintain',
             title: 'Bonne progression',
-            message: `Tu progresses ! Continue à viser ${slot.repsMax} reps sur chaque série avant d'augmenter.`,
+            message: `Continue ! Vise ${slot.repsMax} reps sur la 1ère série avant d'augmenter.`,
             suggestedWeight: lastWeight,
             weightTrend: 'same',
             suggestedReps: targetReps

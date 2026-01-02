@@ -311,6 +311,26 @@
                             <div class="timer-countdown" id="timer-countdown">90</div>
                         </div>
                     </div>
+                    
+                    <!-- RPE Slider ludique -->
+                    <div class="rpe-section" id="rpe-section">
+                        <div class="rpe-question">Comment était cette série ?</div>
+                        <div class="rpe-slider-container">
+                            <input type="range" id="rpe-slider" class="rpe-slider" min="6" max="10" step="1" value="8">
+                            <div class="rpe-labels">
+                                <span data-rpe="6">😎</span>
+                                <span data-rpe="7">🙂</span>
+                                <span data-rpe="8">😤</span>
+                                <span data-rpe="9">🥵</span>
+                                <span data-rpe="10">💀</span>
+                            </div>
+                        </div>
+                        <div class="rpe-feedback" id="rpe-feedback">
+                            <span class="rpe-value">RPE 8</span>
+                            <span class="rpe-description">Effort sérieux • ~2 reps en réserve</span>
+                        </div>
+                    </div>
+                    
                     <div class="timer-controls">
                         <button class="btn btn-timer" id="btn-timer-minus">-15s</button>
                         <button class="btn btn-timer-skip" id="btn-timer-skip">Passer</button>
@@ -446,13 +466,13 @@
                             <path d="M3 3v18h18"/>
                             <path d="M18 9l-5 5-3-3-4 4"/>
                         </svg>
-                        Règle de progression
+                        Seuil de plateau
                     </h4>
-                    <p class="settings-description">Nombre d'échecs consécutifs avant de suggérer un changement d'exercice</p>
+                    <p class="settings-description">Séances de stagnation avant de suggérer un switch (après deload automatique)</p>
                     <div class="settings-slider-container">
-                        <input type="range" id="setting-failure-count" class="settings-slider" min="1" max="4" value="2">
+                        <input type="range" id="setting-failure-count" class="settings-slider" min="2" max="5" value="3">
                         <div class="settings-slider-value">
-                            <span id="setting-failure-count-value">2</span> échecs avant switch
+                            <span id="setting-failure-count-value">3</span> séances avant switch
                         </div>
                     </div>
                 </div>

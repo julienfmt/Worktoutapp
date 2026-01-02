@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const CACHE_NAME = 'muscu-v4';
+const CACHE_NAME = 'muscu-v6';
 const ASSETS = [
     './',
     './index.html',
