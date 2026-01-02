@@ -286,6 +286,108 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Superset Coaching Advice (shown only in superset mode) -->
+                <div class="coaching-advice coaching-advice-superset" id="superset-coaching-container" style="display: none;">
+                    <div class="coaching-advice-header">
+                        <span class="coaching-advice-icon">⚡</span>
+                        <span class="coaching-advice-title">Conseils SuperSet</span>
+                    </div>
+                    
+                    <!-- Exercise A Advice -->
+                    <div class="coaching-dual-exercise">
+                        <div class="coaching-exercise-label">
+                            <span class="coaching-exercise-badge badge-a">A</span>
+                            <span class="coaching-exercise-name" id="superset-advice-name-a">Exercice A</span>
+                        </div>
+                        <div class="coaching-advice-message" id="superset-advice-message-a">--</div>
+                        <div class="coaching-suggestion-row">
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Poids</span>
+                                <span class="coaching-suggestion-value" id="superset-advice-weight-a">-- kg</span>
+                            </div>
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Reps</span>
+                                <span class="coaching-suggestion-value" id="superset-advice-reps-a">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="coaching-divider"></div>
+                    
+                    <!-- Exercise B Advice -->
+                    <div class="coaching-dual-exercise">
+                        <div class="coaching-exercise-label">
+                            <span class="coaching-exercise-badge badge-b">B</span>
+                            <span class="coaching-exercise-name" id="superset-advice-name-b">Exercice B</span>
+                        </div>
+                        <div class="coaching-advice-message" id="superset-advice-message-b">--</div>
+                        <div class="coaching-suggestion-row">
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Poids</span>
+                                <span class="coaching-suggestion-value" id="superset-advice-weight-b">-- kg</span>
+                            </div>
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Reps</span>
+                                <span class="coaching-suggestion-value" id="superset-advice-reps-b">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="superset-advice-content-a" style="display: none;"></div>
+                    <div id="superset-advice-content-b" style="display: none;"></div>
+                </div>
+                
+                <!-- Unilateral Coaching Advice (shown only for unilateral exercises) -->
+                <div class="coaching-advice coaching-advice-unilateral" id="unilateral-coaching-container" style="display: none;">
+                    <div class="coaching-advice-header">
+                        <span class="coaching-advice-icon">🔄</span>
+                        <span class="coaching-advice-title">Conseils Unilatéral</span>
+                    </div>
+                    
+                    <!-- Left Side Advice -->
+                    <div class="coaching-dual-exercise">
+                        <div class="coaching-exercise-label">
+                            <span class="coaching-exercise-badge badge-left">G</span>
+                            <span class="coaching-exercise-name" id="unilateral-advice-name-left">Côté Gauche</span>
+                        </div>
+                        <div class="coaching-advice-message" id="unilateral-advice-message-left">--</div>
+                        <div class="coaching-suggestion-row">
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Poids</span>
+                                <span class="coaching-suggestion-value" id="unilateral-advice-weight-left">-- kg</span>
+                            </div>
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Reps</span>
+                                <span class="coaching-suggestion-value" id="unilateral-advice-reps-left">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="coaching-divider"></div>
+                    
+                    <!-- Right Side Advice -->
+                    <div class="coaching-dual-exercise">
+                        <div class="coaching-exercise-label">
+                            <span class="coaching-exercise-badge badge-right">D</span>
+                            <span class="coaching-exercise-name" id="unilateral-advice-name-right">Côté Droit</span>
+                        </div>
+                        <div class="coaching-advice-message" id="unilateral-advice-message-right">--</div>
+                        <div class="coaching-suggestion-row">
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Poids</span>
+                                <span class="coaching-suggestion-value" id="unilateral-advice-weight-right">-- kg</span>
+                            </div>
+                            <div class="coaching-suggestion">
+                                <span class="coaching-suggestion-label">Reps</span>
+                                <span class="coaching-suggestion-value" id="unilateral-advice-reps-right">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="unilateral-advice-content-left" style="display: none;"></div>
+                    <div id="unilateral-advice-content-right" style="display: none;"></div>
+                </div>
 
                 <div class="series-list" id="series-list">
                     <!-- Séries générées dynamiquement -->
@@ -307,7 +409,79 @@
                     </div>
                 </div>
                 
-                <!-- Logbook for superset second exercise -->
+                <!-- Superset Logbook (unified view) -->
+                <div class="superset-logbook-container" id="superset-logbook-container" style="display: none;">
+                    <div class="superset-logbook-header">
+                        <div class="superset-logbook-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Historique SuperSet
+                        </div>
+                    </div>
+                    
+                    <!-- Exercise A History -->
+                    <div class="superset-logbook-exercise exercise-a">
+                        <div class="superset-logbook-exercise-header">
+                            <span class="superset-exercise-dot dot-a"></span>
+                            <span class="superset-logbook-exercise-name" id="superset-logbook-name-a">Exercice A</span>
+                            <span class="superset-logbook-date" id="superset-logbook-date-a">--</span>
+                        </div>
+                        <div class="superset-logbook-content" id="superset-logbook-content-a">
+                            <div class="logbook-empty">Première fois</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Exercise B History -->
+                    <div class="superset-logbook-exercise exercise-b">
+                        <div class="superset-logbook-exercise-header">
+                            <span class="superset-exercise-dot dot-b"></span>
+                            <span class="superset-logbook-exercise-name" id="superset-logbook-name-b">Exercice B</span>
+                            <span class="superset-logbook-date" id="superset-logbook-date-b">--</span>
+                        </div>
+                        <div class="superset-logbook-content" id="superset-logbook-content-b">
+                            <div class="logbook-empty">Première fois</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Unilateral Logbook (unified view) -->
+                <div class="unilateral-logbook-container" id="unilateral-logbook-container" style="display: none;">
+                    <div class="unilateral-logbook-header">
+                        <div class="unilateral-logbook-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Historique Unilatéral
+                        </div>
+                    </div>
+                    
+                    <!-- Left Side History -->
+                    <div class="unilateral-logbook-exercise side-left">
+                        <div class="unilateral-logbook-exercise-header">
+                            <span class="unilateral-exercise-dot dot-left"></span>
+                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-left">Côté Gauche</span>
+                            <span class="unilateral-logbook-date" id="unilateral-logbook-date-left">--</span>
+                        </div>
+                        <div class="unilateral-logbook-content" id="unilateral-logbook-content-left">
+                            <div class="logbook-empty">Première fois</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Side History -->
+                    <div class="unilateral-logbook-exercise side-right">
+                        <div class="unilateral-logbook-exercise-header">
+                            <span class="unilateral-exercise-dot dot-right"></span>
+                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-right">Côté Droit</span>
+                            <span class="unilateral-logbook-date" id="unilateral-logbook-date-right">--</span>
+                        </div>
+                        <div class="unilateral-logbook-content" id="unilateral-logbook-content-right">
+                            <div class="logbook-empty">Première fois</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Legacy logbook for superset (hidden, kept for compatibility) -->
                 <div class="logbook-card logbook-card-superset" id="logbook-card-superset" style="display: none;">
                     <div class="logbook-header">
                         <div class="logbook-title">
@@ -590,6 +764,43 @@
                             <span id="setting-lock-weeks-value">4</span> semaines minimum
                         </div>
                     </div>
+                </div>
+
+                <div class="settings-divider"></div>
+                <h4 class="settings-group-title">💾 Gestion du stockage</h4>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                        Stockage utilisé
+                    </h4>
+                    <p class="settings-description" id="storage-stats-info">Chargement...</p>
+                    <div class="storage-bar-container" style="margin-top: 10px;">
+                        <div class="storage-bar">
+                            <div class="storage-bar-fill" id="storage-bar-fill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                        Nettoyage automatique
+                    </h4>
+                    <p class="settings-description">Les séances de plus de 90 jours sont automatiquement nettoyées (les meilleures performances sont conservées pour les tendances)</p>
+                    <button class="btn btn-secondary" id="btn-manual-cleanup" style="margin-top: 10px;">
+                        🧹 Nettoyer maintenant
+                    </button>
+                    <p class="settings-description" id="cleanup-status" style="margin-top: 8px; color: #64748b; font-size: 13px;"></p>
                 </div>
 
                 <div class="settings-divider"></div>

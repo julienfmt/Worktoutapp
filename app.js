@@ -2,10 +2,14 @@
 class StreakEngine {
     constructor() {
         this.LEVELS = [
-            { name: 'Rookie', min: 0, max: 3, color: '#94a3b8' },
-            { name: 'Focus', min: 4, max: 7, color: '#f59e0b' },
-            { name: 'Machine', min: 8, max: 15, color: '#8b5cf6' },
-            { name: 'Légende', min: 16, max: Infinity, color: '#ef4444' }
+            { name: 'Rookie', min: 0, max: 2, color: '#94a3b8', emoji: '🌱', description: 'Début du voyage' },
+            { name: 'Initié', min: 3, max: 5, color: '#22c55e', emoji: '🔰', description: 'Tu prends le rythme' },
+            { name: 'Focus', min: 6, max: 9, color: '#f59e0b', emoji: '🔥', description: 'En pleine concentration' },
+            { name: 'Guerrier', min: 10, max: 15, color: '#f97316', emoji: '⚔️', description: 'Rien ne t\'arrête' },
+            { name: 'Machine', min: 16, max: 24, color: '#8b5cf6', emoji: '⚡', description: 'Régularité parfaite' },
+            { name: 'Elite', min: 25, max: 35, color: '#ec4899', emoji: '💎', description: 'Parmi les meilleurs' },
+            { name: 'Légende', min: 36, max: 51, color: '#ef4444', emoji: '👑', description: 'Statut légendaire' },
+            { name: 'Titan', min: 52, max: Infinity, color: '#eab308', emoji: '🏆', description: '1 an+ de streak !' }
         ];
         this.MAX_SHIELDS = 3;
     }
@@ -154,9 +158,7 @@ class StreakEngine {
             
             if (goalMet) {
                 streakCount++;
-                if (!weekProtected) {
-                    shieldCount = Math.min(shieldCount + 0.5, this.MAX_SHIELDS);
-                }
+                // Shields are now earned per session, not per week
                 weekProtected = false;
                 results.push({ week: i, success: true, streakCount, shieldCount });
             } else {
@@ -287,19 +289,29 @@ class GamificationEngine {
     
     celebrateStreak(streakCount) {
         const milestones = {
-            4: { icon: '🔥', title: 'Focus atteint !', message: 'Tu passes au niveau Focus !' },
-            8: { icon: '⚡', title: 'Machine !', message: 'Tu es une vraie machine !' },
-            16: { icon: '👑', title: 'Légende !', message: 'Tu es une légende vivante !' },
-            25: { icon: '🌟', title: 'Incroyable !', message: '25 semaines consécutives !' },
-            50: { icon: '💎', title: 'Diamant !', message: '50 semaines ! Tu es exceptionnel !' }
+            3: { icon: '🔰', title: 'Initié !', message: 'Tu prends le rythme !', xp: 50 },
+            6: { icon: '🔥', title: 'Focus !', message: 'En pleine concentration !', xp: 75 },
+            10: { icon: '⚔️', title: 'Guerrier !', message: 'Rien ne t\'arrête !', xp: 100 },
+            16: { icon: '⚡', title: 'Machine !', message: 'Régularité parfaite !', xp: 150 },
+            25: { icon: '💎', title: 'Elite !', message: 'Parmi les meilleurs !', xp: 200 },
+            36: { icon: '👑', title: 'Légende !', message: 'Statut légendaire atteint !', xp: 300 },
+            52: { icon: '🏆', title: 'TITAN !', message: '1 AN DE STREAK ! Incroyable !', xp: 500 }
         };
         
         const milestone = milestones[streakCount];
         if (milestone) {
             this.triggerConfetti('heavy');
             setTimeout(() => {
-                this.showAchievement(milestone.icon, milestone.title, milestone.message, 100);
+                this.showAchievement(milestone.icon, milestone.title, milestone.message, milestone.xp);
             }, 300);
+        }
+    }
+    
+    celebrateShieldEarned(shieldCount) {
+        const isFullShield = shieldCount % 1 === 0;
+        if (isFullShield && shieldCount > 0) {
+            this.triggerConfetti('light');
+            this.showAchievement('🛡️', 'Bouclier complet !', `Tu as maintenant ${Math.floor(shieldCount)} bouclier${shieldCount > 1 ? 's' : ''} !`, 25);
         }
     }
     
@@ -337,6 +349,18 @@ class App {
     async init() {
         await db.init();
         await initializeData();
+        
+        // Automatic storage cleanup on startup
+        try {
+            const shouldCleanup = await db.shouldCleanup();
+            if (shouldCleanup) {
+                console.log('🧹 Nettoyage automatique du stockage...');
+                await db.cleanupOldData();
+            }
+        } catch (error) {
+            console.error('Erreur lors du nettoyage automatique:', error);
+        }
+        
         await this.loadCurrentWorkout();
         this.bindEvents();
         this.setupVisibilityHandler();
@@ -480,67 +504,74 @@ class App {
         const levelProgress = Math.min((progressInLevel / levelRange) * 100, 100);
         const weeksToNext = nextLevel.min - data.streakCount;
         
-        // Generate session indicators
+        // Generate session indicators with animation delay
         let sessionsHtml = '';
         for (let i = 0; i < data.weeklyGoal; i++) {
             const filled = i < data.currentWeekSessions;
-            sessionsHtml += `<span class="session-indicator ${filled ? 'filled' : ''}">
+            const animDelay = filled ? `style="animation-delay: ${i * 0.1}s"` : '';
+            sessionsHtml += `<span class="session-indicator ${filled ? 'filled' : ''}" ${animDelay}>
                 ${filled ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                 </svg>` : ''}
             </span>`;
         }
         
-        // Generate shields
+        // Generate shields with progress animation
         let shieldsHtml = '';
         const fullShields = Math.floor(data.shieldCount);
         const hasHalf = data.shieldCount % 1 >= 0.5;
+        const shieldProgress = (data.shieldCount % 1) * 100;
+        
         for (let i = 0; i < 3; i++) {
+            const animDelay = `style="animation-delay: ${i * 0.15}s"`;
             if (i < fullShields) {
-                shieldsHtml += `<span class="shield-icon filled">${this.getShieldSVG('full')}</span>`;
+                shieldsHtml += `<span class="shield-icon filled" ${animDelay}>${this.getShieldSVG('full')}</span>`;
             } else if (i === fullShields && hasHalf) {
-                shieldsHtml += `<span class="shield-icon half">${this.getShieldSVG('half')}</span>`;
+                shieldsHtml += `<span class="shield-icon half" ${animDelay}>${this.getShieldSVG('half')}</span>`;
             } else {
-                shieldsHtml += `<span class="shield-icon empty">${this.getShieldSVG('empty')}</span>`;
+                shieldsHtml += `<span class="shield-icon empty" ${animDelay}>${this.getShieldSVG('empty')}</span>`;
             }
         }
         
         const protectedBadge = data.weekProtected ? 
-            `<div class="protected-badge">
+            `<div class="protected-badge protected-active">
                 ${this.getShieldSVG('full')}
-                <span>Semaine protégée</span>
+                <span>Protégé !</span>
             </div>` : '';
         
         // Better week status messaging
         const sessionsRemaining = data.weeklyGoal - data.currentWeekSessions;
         const weekStatusText = isComplete 
-            ? `<span class="week-status-count success">${data.currentWeekSessions}/${data.weeklyGoal} séances</span>`
+            ? `<span class="week-status-count success">✓ Objectif validé !</span>`
             : sessionsRemaining === 1
-                ? `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} séances <span class="week-hint">· Plus qu'une séance</span></span>`
-                : `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} séances <span class="week-hint">· ${sessionsRemaining} restantes</span></span>`;
+                ? `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} <span class="week-hint">· Plus qu'une !</span></span>`
+                : `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} <span class="week-hint">· ${sessionsRemaining} restantes</span></span>`;
         
-        // Streak label that makes sense
-        const streakLabel = data.streakCount === 0 ? 'Série validée' : `Semaine${data.streakCount > 1 ? 's' : ''} consécutive${data.streakCount > 1 ? 's' : ''}`;
-        const streakSubtext = data.streakCount === 0 ? 'Semaines où l\'objectif est validé' : 'Semaines consécutives validées';
+        // Shield explanation tooltip
+        const shieldExplanation = data.shieldCount < 3 
+            ? `<div class="shield-hint">+0.5 par semaine validée</div>`
+            : `<div class="shield-hint shield-full">Maximum atteint !</div>`;
         
         container.innerHTML = `
             <div class="streak-main">
-                <div class="streak-score">
+                <div class="streak-score ${isComplete ? 'week-complete' : ''}">
+                    <div class="streak-emoji">${level.emoji}</div>
                     <div class="streak-number">${data.streakCount}</div>
-                    <div class="streak-label">${streakLabel}</div>
-                    <div class="streak-subtext">${streakSubtext}</div>
+                    <div class="streak-label">streak</div>
                 </div>
                 <div class="streak-info">
                     <div class="streak-level-badge" style="--level-color: ${level.color}">
-                        ${this.getLevelIconSVG(level.name)}
-                        <span>${level.name}</span>
+                        <span class="level-name">${level.name}</span>
                     </div>
+                    <div class="streak-level-desc">${level.description}</div>
                     <div class="streak-progress-section">
                         <div class="streak-progress-bar">
-                            <div class="streak-progress-fill" style="width: ${levelProgress}%; background: ${level.color}"></div>
+                            <div class="streak-progress-fill" style="width: ${levelProgress}%; background: linear-gradient(90deg, ${level.color}, ${nextLevel.color})"></div>
                         </div>
                         <div class="streak-next-level">
-                            ${weeksToNext > 0 ? `Prochain niveau: <strong>${nextLevel.name}</strong> · ${weeksToNext}/${levelRange} semaine${weeksToNext > 1 ? 's' : ''}` : 'Niveau max atteint !'}
+                            ${weeksToNext > 0 
+                                ? `${nextLevel.emoji} <strong>${nextLevel.name}</strong> dans ${weeksToNext} sem.` 
+                                : `<span class="max-level">🎖️ Niveau max !</span>`}
                         </div>
                     </div>
                 </div>
@@ -559,12 +590,23 @@ class App {
                         <div class="sessions-row">${sessionsHtml}</div>
                     </div>
                     <div class="week-shields">
-                        <div class="shields-count">Boucliers: ${Math.floor(data.shieldCount * 10) / 10}/3</div>
+                        <div class="shields-header">
+                            <span class="shields-label">🛡️ Boucliers</span>
+                            <span class="shields-count">${data.shieldCount}/3</span>
+                        </div>
                         <div class="shields-row">${shieldsHtml}</div>
+                        ${shieldExplanation}
                     </div>
                 </div>
             </div>
         `;
+        
+        // Add celebration class if week complete
+        if (isComplete) {
+            container.classList.add('week-validated');
+        } else {
+            container.classList.remove('week-validated');
+        }
     }
     
     getLevelIconSVG(levelName) {
@@ -1543,48 +1585,274 @@ class App {
         }
     }
 
+    // ===== Unilateral Exercise Detection =====
+    isUnilateralExercise(exerciseName) {
+        if (!exerciseName) return false;
+        const name = exerciseName.toLowerCase();
+        
+        // Keywords indicating unilateral exercises
+        const unilateralKeywords = [
+            'unilatéral', 'unilateral', 'unilatérale',
+            'un bras', 'une jambe', '1 bras', '1 jambe',
+            'single arm', 'single leg',
+            'à une main', 'à un bras',
+            'bulgare', 'bulgarian',
+            'pistol', 'one leg', 'one arm'
+        ];
+        
+        // Check if any keyword is in the name
+        return unilateralKeywords.some(keyword => name.includes(keyword));
+    }
+    
     // ===== Exercise Screen =====
     async openExercise(slotId) {
         this.currentSlot = await db.get('slots', slotId);
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
+        this.isUnilateralMode = false; // Reset unilateral mode
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.userOverrideSets = false; // Reset deload override when changing exercise
         
         if (!this.currentSlot) return;
+        
+        // Check if this is a unilateral exercise
+        const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+        this.isUnilateralMode = this.isUnilateralExercise(exerciseName);
 
         // Initialize slot data in current workout if needed
         if (!this.currentWorkout.slots[slotId]) {
             this.currentWorkout.slots[slotId] = {
                 sets: [],
+                setsLeft: [],  // For unilateral: left side
+                setsRight: [], // For unilateral: right side
                 startTime: Date.now()
             };
             await db.saveCurrentWorkout(this.currentWorkout);
         }
+        
+        // Ensure unilateral arrays exist for existing workout data
+        if (this.isUnilateralMode) {
+            const slotData = this.currentWorkout.slots[slotId];
+            if (!slotData.setsLeft) slotData.setsLeft = [];
+            if (!slotData.setsRight) slotData.setsRight = [];
+            await db.saveCurrentWorkout(this.currentWorkout);
+        }
 
         document.getElementById('exercise-slot-label').textContent = this.currentSlot.slotId;
-        document.getElementById('current-exercise-name').textContent = this.currentSlot.activeExercise || this.currentSlot.name;
+        document.getElementById('current-exercise-name').textContent = exerciseName;
         document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
         document.getElementById('exercise-reps').textContent = `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}`;
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
         document.getElementById('exercise-rir').textContent = this.currentSlot.rir;
-        document.getElementById('exercise-instructions').textContent = this.currentSlot.instructions || '--';
+        
+        // Update instructions for unilateral exercises
+        if (this.isUnilateralMode) {
+            document.getElementById('exercise-instructions').textContent = 'Exercice unilatéral : fais chaque côté séparément. Les poids et conseils sont indépendants.';
+        } else {
+            document.getElementById('exercise-instructions').textContent = this.currentSlot.instructions || '--';
+        }
 
-        // Hide superset logbook
+        // Hide all superset-specific containers and show standard ones
         document.getElementById('logbook-card-superset').style.display = 'none';
-
-        // Load logbook (last session data)
-        await this.loadLogbook();
+        document.getElementById('superset-coaching-container').style.display = 'none';
+        document.getElementById('superset-logbook-container').style.display = 'none';
         
-        // Calculate and show coaching advice (store for use in renderSeries)
-        this.currentCoachingAdvice = await this.calculateCoachingAdvice();
-        await this.showCoachingAdvice();
+        // Handle unilateral mode display
+        const unilateralCoachingContainer = document.getElementById('unilateral-coaching-container');
+        const unilateralLogbookContainer = document.getElementById('unilateral-logbook-container');
         
-        this.renderSeries();
+        if (this.isUnilateralMode) {
+            document.getElementById('coaching-advice').style.display = 'none';
+            document.getElementById('logbook-card').style.display = 'none';
+            if (unilateralCoachingContainer) unilateralCoachingContainer.style.display = 'block';
+            if (unilateralLogbookContainer) unilateralLogbookContainer.style.display = 'block';
+            
+            // Load logbook for both sides
+            await this.loadUnilateralLogbook();
+            
+            // Calculate coaching for both sides
+            await this.calculateUnilateralCoachingAdvice();
+            this.showUnilateralCoachingAdvice();
+            
+            // Render unified unilateral logbook
+            this.renderUnilateralLogbook();
+            
+            this.renderUnilateralSeries();
+        } else {
+            document.getElementById('logbook-card').style.display = 'block';
+            if (unilateralCoachingContainer) unilateralCoachingContainer.style.display = 'none';
+            if (unilateralLogbookContainer) unilateralLogbookContainer.style.display = 'none';
+            
+            // Load logbook (last session data)
+            await this.loadLogbook();
+            
+            // Calculate and show coaching advice (store for use in renderSeries)
+            this.currentCoachingAdvice = await this.calculateCoachingAdvice();
+            await this.showCoachingAdvice();
+            
+            this.renderSeries();
+        }
+        
         this.showScreen('exercise');
         
         // Check if there's an active timer from before
         this.onAppResume();
+    }
+    
+    // ===== Unilateral Logbook Loading =====
+    async loadUnilateralLogbook() {
+        const baseExerciseId = this.currentSlot.activeExercise || this.currentSlot.name;
+        
+        // Load for left side
+        const leftExerciseId = `${baseExerciseId} (Gauche)`;
+        this.lastUnilateralHistoryLeft = await this.loadSideHistory(leftExerciseId);
+        
+        // Load for right side
+        const rightExerciseId = `${baseExerciseId} (Droite)`;
+        this.lastUnilateralHistoryRight = await this.loadSideHistory(rightExerciseId);
+    }
+    
+    async loadSideHistory(exerciseId) {
+        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        
+        const workoutGroups = {};
+        for (const set of allSetHistory) {
+            if (!workoutGroups[set.workoutId]) {
+                workoutGroups[set.workoutId] = { date: set.date, sets: [], totalReps: 0, maxWeight: 0 };
+            }
+            workoutGroups[set.workoutId].sets.push(set);
+            workoutGroups[set.workoutId].totalReps += set.reps || 0;
+            workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
+        }
+        
+        const workoutIds = Object.keys(workoutGroups);
+        if (workoutIds.length === 0) return null;
+        
+        workoutIds.sort((a, b) => new Date(workoutGroups[b].date) - new Date(workoutGroups[a].date));
+        const lastWorkout = workoutGroups[workoutIds[0]];
+        lastWorkout.sets.sort((a, b) => a.setNumber - b.setNumber);
+        
+        return {
+            date: lastWorkout.date,
+            sets: lastWorkout.sets,
+            totalReps: lastWorkout.totalReps,
+            maxWeight: lastWorkout.maxWeight
+        };
+    }
+    
+    // ===== Unilateral Coaching Advice =====
+    // Scientific approach: Analyze each side independently for imbalance detection
+    async calculateUnilateralCoachingAdvice() {
+        const baseExerciseId = this.currentSlot.activeExercise || this.currentSlot.name;
+        
+        // Create a mock slot for left side with unilateral flag
+        const leftSlot = { ...this.currentSlot, activeExercise: `${baseExerciseId} (Gauche)` };
+        this.unilateralCoachingAdviceLeft = await this.calculateCoachingAdviceForSlot(leftSlot, {
+            isUnilateral: true,
+            side: 'left'
+        });
+        
+        // Create a mock slot for right side with unilateral flag
+        const rightSlot = { ...this.currentSlot, activeExercise: `${baseExerciseId} (Droite)` };
+        this.unilateralCoachingAdviceRight = await this.calculateCoachingAdviceForSlot(rightSlot, {
+            isUnilateral: true,
+            side: 'right'
+        });
+        
+        // Compare sides and add balance advice
+        this.addUnilateralBalanceAdvice();
+    }
+    
+    // Add specific advice about balance between sides
+    addUnilateralBalanceAdvice() {
+        const leftWeight = this.unilateralCoachingAdviceLeft?.suggestedWeight;
+        const rightWeight = this.unilateralCoachingAdviceRight?.suggestedWeight;
+        
+        // If both sides have data and weights differ significantly
+        if (leftWeight !== '?' && rightWeight !== '?' && leftWeight !== rightWeight) {
+            const diff = Math.abs(leftWeight - rightWeight);
+            const maxWeight = Math.max(leftWeight, rightWeight);
+            const percentDiff = (diff / maxWeight) * 100;
+            
+            if (percentDiff > 10) {
+                const weakerSide = leftWeight < rightWeight ? 'gauche' : 'droit';
+                const strongerSide = leftWeight < rightWeight ? 'droit' : 'gauche';
+                
+                // Add balance warning to the weaker side
+                const targetAdvice = leftWeight < rightWeight 
+                    ? this.unilateralCoachingAdviceLeft 
+                    : this.unilateralCoachingAdviceRight;
+                
+                targetAdvice.message = `⚠️ Déséquilibre détecté (${diff}kg de diff). Côté ${weakerSide} plus faible. ` + 
+                    `Commence toujours par ce côté et utilise la même charge des deux côtés pour corriger.`;
+                targetAdvice.type = 'balance_warning';
+            }
+        }
+    }
+    
+    showUnilateralCoachingAdvice() {
+        const container = document.getElementById('unilateral-coaching-container');
+        if (!container) return;
+        
+        const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+        
+        // Left side
+        document.getElementById('unilateral-advice-name-left').textContent = exerciseName;
+        if (this.unilateralCoachingAdviceLeft) {
+            document.getElementById('unilateral-advice-message-left').textContent = this.unilateralCoachingAdviceLeft.message;
+            document.getElementById('unilateral-advice-weight-left').textContent = 
+                this.unilateralCoachingAdviceLeft.suggestedWeight === '?' ? '?' : `${this.unilateralCoachingAdviceLeft.suggestedWeight} kg`;
+            document.getElementById('unilateral-advice-reps-left').textContent = this.unilateralCoachingAdviceLeft.suggestedReps;
+        }
+        
+        // Right side
+        document.getElementById('unilateral-advice-name-right').textContent = exerciseName;
+        if (this.unilateralCoachingAdviceRight) {
+            document.getElementById('unilateral-advice-message-right').textContent = this.unilateralCoachingAdviceRight.message;
+            document.getElementById('unilateral-advice-weight-right').textContent = 
+                this.unilateralCoachingAdviceRight.suggestedWeight === '?' ? '?' : `${this.unilateralCoachingAdviceRight.suggestedWeight} kg`;
+            document.getElementById('unilateral-advice-reps-right').textContent = this.unilateralCoachingAdviceRight.suggestedReps;
+        }
+    }
+    
+    renderUnilateralLogbook() {
+        const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+        
+        // Left side
+        document.getElementById('unilateral-logbook-name-left').textContent = 'Côté Gauche';
+        this.renderUnilateralLogbookContent('left', this.lastUnilateralHistoryLeft);
+        
+        // Right side
+        document.getElementById('unilateral-logbook-name-right').textContent = 'Côté Droit';
+        this.renderUnilateralLogbookContent('right', this.lastUnilateralHistoryRight);
+    }
+    
+    renderUnilateralLogbookContent(side, history) {
+        const dateEl = document.getElementById(`unilateral-logbook-date-${side}`);
+        const contentEl = document.getElementById(`unilateral-logbook-content-${side}`);
+        
+        if (!history || !history.sets || history.sets.length === 0) {
+            dateEl.textContent = '--';
+            contentEl.innerHTML = '<div class="logbook-empty">Première fois</div>';
+            return;
+        }
+        
+        const date = new Date(history.date);
+        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
+        let dateText = daysAgo === 0 ? "Aujourd'hui" : 
+                       daysAgo === 1 ? 'Hier' : 
+                       daysAgo < 7 ? `Il y a ${daysAgo}j` : 
+                       date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        
+        dateEl.textContent = dateText;
+        
+        let html = '<div class="unilateral-logbook-sets">';
+        for (const set of history.sets) {
+            html += `<span class="unilateral-logbook-set">${set.weight}kg×${set.reps}</span>`;
+        }
+        html += '</div>';
+        
+        contentEl.innerHTML = html;
     }
     
     // ===== SuperSet Exercise Screen =====
@@ -1599,6 +1867,8 @@ class App {
         }
         
         this.isSupersetMode = true;
+        this.supersetCoachingAdviceA = null;
+        this.supersetCoachingAdviceB = null;
 
         // Initialize slot data for both exercises
         if (!this.currentWorkout.slots[slotId]) {
@@ -1609,8 +1879,8 @@ class App {
         }
         await db.saveCurrentWorkout(this.currentWorkout);
 
-        // Update header
-        document.getElementById('exercise-slot-label').textContent = `${this.currentSlot.slotId} + ${this.supersetSlot.slotId}`;
+        // Update header with superset badge
+        document.getElementById('exercise-slot-label').textContent = `⚡ ${this.currentSlot.slotId} + ${this.supersetSlot.slotId}`;
         document.getElementById('current-exercise-name').textContent = 'SuperSet';
         
         // Use min sets between both exercises
@@ -1619,21 +1889,392 @@ class App {
         document.getElementById('exercise-reps').textContent = 'Voir ci-dessous';
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
         document.getElementById('exercise-rir').textContent = `${this.currentSlot.rir}-${this.supersetSlot.rir}`;
-        document.getElementById('exercise-instructions').textContent = 'Alterne entre les deux exercices sans pause.';
+        document.getElementById('exercise-instructions').textContent = 'Enchaîne les deux exercices sans pause entre eux. Repos uniquement après avoir fait les deux.';
 
-        // Show superset logbook and set exercise name
-        document.getElementById('logbook-card-superset').style.display = 'block';
-        document.getElementById('logbook-superset-exercise-name').textContent = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        // Hide standard coaching and logbook, show superset versions
+        document.getElementById('coaching-advice').style.display = 'none';
+        document.getElementById('logbook-card').style.display = 'none';
+        document.getElementById('logbook-card-superset').style.display = 'none';
+        document.getElementById('superset-coaching-container').style.display = 'block';
+        document.getElementById('superset-logbook-container').style.display = 'block';
 
-        // Load logbook for both
+        // Load logbook for both exercises
         await this.loadLogbook();
         await this.loadSupersetLogbook();
+        
+        // Calculate coaching advice for BOTH exercises
+        await this.calculateSupersetCoachingAdvice();
+        this.showSupersetCoachingAdvice();
+        
+        // Render the unified superset logbook
+        this.renderUnifiedSupersetLogbook();
         
         this.renderSupersetSeries();
         this.showScreen('exercise');
         
         // Check if there's an active timer from before
         this.onAppResume();
+    }
+    
+    // Calculate coaching advice for both exercises in a superset
+    // Scientific principle: SuperSets induce metabolic stress and pre-fatigue
+    async calculateSupersetCoachingAdvice() {
+        const originalSlot = this.currentSlot;
+        
+        // Calculate for exercise A (first exercise - full strength)
+        this.supersetCoachingAdviceA = await this.calculateCoachingAdviceForSlot(this.currentSlot, { 
+            isSuperset: true, 
+            supersetPosition: 'A',
+            pairedExercise: this.supersetSlot
+        });
+        
+        // Calculate for exercise B (second exercise - may be pre-fatigued)
+        this.supersetCoachingAdviceB = await this.calculateCoachingAdviceForSlot(this.supersetSlot, { 
+            isSuperset: true, 
+            supersetPosition: 'B',
+            pairedExercise: this.currentSlot
+        });
+        
+        this.currentSlot = originalSlot;
+    }
+    
+    // Calculate coaching advice for a specific slot (reusable)
+    // Enhanced with scientific hypertrophy principles for supersets and unilateral exercises
+    async calculateCoachingAdviceForSlot(slot, options = {}) {
+        const exerciseId = slot.activeExercise || slot.name;
+        const isIsolation = slot.type === 'isolation';
+        const { isSuperset, supersetPosition, pairedExercise, isUnilateral, side } = options;
+        
+        const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
+        let weightIncrement = isIsolation ? Math.min(baseWeightIncrement, 1) : baseWeightIncrement;
+        
+        // Get all set history for this exercise
+        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        
+        // Group by workout
+        const workoutGroups = {};
+        for (const set of allSetHistory) {
+            if (!workoutGroups[set.workoutId]) {
+                workoutGroups[set.workoutId] = { date: set.date, sets: [], totalReps: 0, maxWeight: 0, avgRpe: 0 };
+            }
+            workoutGroups[set.workoutId].sets.push(set);
+            workoutGroups[set.workoutId].totalReps += set.reps || 0;
+            workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
+        }
+        
+        // Calculate average RPE per workout
+        for (const workout of Object.values(workoutGroups)) {
+            const rpeSum = workout.sets.reduce((sum, s) => sum + (s.rpe || 8), 0);
+            workout.avgRpe = rpeSum / workout.sets.length;
+        }
+        
+        // Sort workouts by date
+        const workouts = Object.values(workoutGroups).sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Build target reps
+        const targetRepsArray = this.genTargetReps(slot.repsMin, slot.repsMax, slot.sets);
+        const targetReps = this.formatTargetReps(targetRepsArray);
+        
+        // ===== FIRST TIME =====
+        if (workouts.length === 0) {
+            let message = `Commence léger pour trouver ton poids de travail.`;
+            
+            if (isSuperset && supersetPosition === 'B') {
+                message = `⚡ 2ème exo du SuperSet : commence ~10% plus léger car pré-fatigue musculaire.`;
+            } else if (isUnilateral) {
+                message = `🔄 Commence par ton côté faible. Même charge des deux côtés.`;
+            }
+            
+            return {
+                type: 'new',
+                title: 'Premier essai',
+                message,
+                suggestedWeight: '?',
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        }
+        
+        const lastWorkout = workouts[0];
+        lastWorkout.sets.sort((a, b) => a.setNumber - b.setNumber);
+        const lastWeight = lastWorkout.sets[0]?.weight || 0;
+        const lastReps = lastWorkout.sets[0]?.reps || 0;
+        const avgReps = lastWorkout.totalReps / lastWorkout.sets.length;
+        const avgRpe = lastWorkout.avgRpe || 8;
+        
+        // ===== SUPERSET SPECIFIC LOGIC =====
+        if (isSuperset) {
+            return this.getSupersetCoachingAdvice(slot, {
+                lastWeight,
+                avgReps,
+                avgRpe,
+                targetReps,
+                weightIncrement,
+                supersetPosition,
+                pairedExercise,
+                workouts
+            });
+        }
+        
+        // ===== UNILATERAL SPECIFIC LOGIC =====
+        if (isUnilateral) {
+            return this.getUnilateralCoachingAdvice(slot, {
+                lastWeight,
+                avgReps,
+                avgRpe,
+                targetReps,
+                weightIncrement,
+                side,
+                workouts
+            });
+        }
+        
+        // ===== STANDARD PROGRESSION LOGIC =====
+        if (avgReps >= slot.repsMax) {
+            return {
+                type: 'increase',
+                title: 'Progression 📈',
+                message: `Tu as atteint ${slot.repsMax} reps. Monte le poids !`,
+                suggestedWeight: lastWeight + weightIncrement,
+                suggestedReps: targetReps,
+                weightTrend: 'up'
+            };
+        } else if (avgReps < slot.repsMin) {
+            return {
+                type: 'decrease',
+                title: 'Ajustement',
+                message: `Reps sous l'objectif. Garde le même poids et vise plus de reps.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        } else {
+            return {
+                type: 'maintain',
+                title: 'Continue',
+                message: `Bon travail ! Vise le haut de la fourchette de reps.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        }
+    }
+    
+    // ===== SUPERSET COACHING - Scientific Hypertrophy Logic =====
+    // Based on: Metabolic stress principle, mechanical tension, pre-fatigue method
+    getSupersetCoachingAdvice(slot, data) {
+        const { lastWeight, avgReps, avgRpe, targetReps, weightIncrement, supersetPosition, workouts } = data;
+        
+        // Determine if this is an agonist-antagonist superset (e.g., biceps/triceps) or same-muscle pre-exhaust
+        const isSecondExercise = supersetPosition === 'B';
+        
+        // SCIENTIFIC PRINCIPLE: Second exercise in superset experiences ~8-15% strength reduction
+        // due to accumulated fatigue and metabolic byproducts (lactate, H+ ions)
+        const fatigueReduction = isSecondExercise ? 0.92 : 1.0; // 8% reduction for exercise B
+        
+        // Analyze progression over last 3 sessions
+        const recentWorkouts = workouts.slice(0, 3);
+        const isProgressing = recentWorkouts.length >= 2 && 
+            recentWorkouts[0].maxWeight >= recentWorkouts[recentWorkouts.length - 1].maxWeight;
+        
+        // Check RPE trend - if consistently high (>9), may need recovery
+        const highRpeTrend = recentWorkouts.filter(w => w.avgRpe >= 9).length >= 2;
+        
+        // ===== SUPERSET PROGRESSION DECISIONS =====
+        
+        // Case 1: High reps achieved → Progress weight
+        if (avgReps >= slot.repsMax && avgRpe <= 9) {
+            const newWeight = Math.round((lastWeight + weightIncrement) * fatigueReduction * 2) / 2;
+            return {
+                type: 'increase',
+                title: isSecondExercise ? '📈 Progression (B)' : '📈 Progression (A)',
+                message: isSecondExercise 
+                    ? `SuperSet B : ${avgReps.toFixed(0)} reps atteintes ! Monte à ${newWeight}kg. La pré-fatigue maximise le stress métabolique 💪`
+                    : `SuperSet A : Top du range atteint ! Monte le poids pour maintenir la tension mécanique.`,
+                suggestedWeight: newWeight,
+                suggestedReps: targetReps,
+                weightTrend: 'up'
+            };
+        }
+        
+        // Case 2: High RPE trend → Maintain or slight reduction for recovery
+        if (highRpeTrend) {
+            return {
+                type: 'maintain',
+                title: '⚡ Consolidation',
+                message: isSecondExercise
+                    ? `RPE élevé détecté. Garde ${lastWeight}kg et focus sur le squeeze musculaire. La fatigue du SuperSet = stimulus maximal.`
+                    : `Effort intense récent. Maintiens le poids et contrôle le tempo (3-1-2).`,
+                suggestedWeight: lastWeight,
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        }
+        
+        // Case 3: Reps below minimum → Focus on technique
+        if (avgReps < slot.repsMin) {
+            const adjustedWeight = isSecondExercise 
+                ? Math.round(lastWeight * 0.95 * 2) / 2 // 5% drop for second exercise
+                : lastWeight;
+            return {
+                type: 'decrease',
+                title: '🎯 Ajustement technique',
+                message: isSecondExercise
+                    ? `En SuperSet, le 2ème exo subit la pré-fatigue. Baisse légèrement (${adjustedWeight}kg) pour garder le contrôle et les reps.`
+                    : `Vise la qualité : tempo contrôlé, full ROM. Garde ${lastWeight}kg et monte les reps.`,
+                suggestedWeight: adjustedWeight,
+                suggestedReps: targetReps,
+                weightTrend: isSecondExercise ? 'down' : 'neutral'
+            };
+        }
+        
+        // Default: Good zone, maintain and push for more reps
+        return {
+            type: 'maintain',
+            title: '💪 Zone optimale',
+            message: isSecondExercise
+                ? `SuperSet efficace ! Garde ${lastWeight}kg. La fatigue accumulée crée un stress métabolique optimal pour l'hypertrophie.`
+                : `Bon range de reps. Pousse vers ${slot.repsMax} reps avant d'augmenter. Focus sur la connexion muscle-cerveau.`,
+            suggestedWeight: lastWeight,
+            suggestedReps: targetReps,
+            weightTrend: 'neutral'
+        };
+    }
+    
+    // ===== UNILATERAL COACHING - Balance & Correction Logic =====
+    // Based on: Bilateral deficit principle, imbalance correction, stabilization demand
+    getUnilateralCoachingAdvice(slot, data) {
+        const { lastWeight, avgReps, avgRpe, targetReps, weightIncrement, side, workouts } = data;
+        
+        // SCIENTIFIC PRINCIPLE: Unilateral exercises require more stabilization
+        // This can reduce max load by ~5-10% but increases motor unit recruitment
+        
+        // Get the other side's history for comparison
+        const exerciseName = slot.activeExercise || slot.name;
+        const baseName = exerciseName.replace(/ \((Gauche|Droite)\)$/, '');
+        const otherSide = side === 'left' ? 'Droite' : 'Gauche';
+        
+        // Analyze progression
+        const recentWorkouts = workouts.slice(0, 3);
+        const avgWeight = recentWorkouts.length > 0 
+            ? recentWorkouts.reduce((sum, w) => sum + w.maxWeight, 0) / recentWorkouts.length 
+            : lastWeight;
+        
+        // ===== UNILATERAL PROGRESSION DECISIONS =====
+        
+        // Case 1: Good reps achieved → Progress
+        if (avgReps >= slot.repsMax && avgRpe <= 9) {
+            return {
+                type: 'increase',
+                title: '📈 Progression',
+                message: `${slot.repsMax} reps atteintes ! Monte à ${lastWeight + weightIncrement}kg. L'unilatéral recrute plus de fibres stabilisatrices = meilleure activation.`,
+                suggestedWeight: lastWeight + weightIncrement,
+                suggestedReps: targetReps,
+                weightTrend: 'up'
+            };
+        }
+        
+        // Case 2: Reps below target
+        if (avgReps < slot.repsMin) {
+            return {
+                type: 'maintain',
+                title: '🎯 Focus équilibre',
+                message: `Garde ${lastWeight}kg et vise ${slot.repsMin}-${slot.repsMax} reps. L'unilatéral corrige les déséquilibres : même charge, même tempo des deux côtés.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        }
+        
+        // Default: Good zone
+        return {
+            type: 'maintain',
+            title: '💪 Équilibre',
+            message: `Bon travail ! ${lastWeight}kg × ${targetReps}. Assure-toi que les deux côtés font exactement le même travail pour corriger les asymétries.`,
+            suggestedWeight: lastWeight,
+            suggestedReps: targetReps,
+            weightTrend: 'neutral'
+        };
+    }
+    
+    // Display coaching advice for superset
+    showSupersetCoachingAdvice() {
+        const container = document.getElementById('superset-coaching-container');
+        if (!container) return;
+        
+        // Exercise A
+        const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
+        document.getElementById('superset-advice-name-a').textContent = nameA;
+        
+        if (this.supersetCoachingAdviceA) {
+            document.getElementById('superset-advice-message-a').textContent = this.supersetCoachingAdviceA.message;
+            document.getElementById('superset-advice-weight-a').textContent = 
+                this.supersetCoachingAdviceA.suggestedWeight === '?' ? '?' : `${this.supersetCoachingAdviceA.suggestedWeight} kg`;
+            document.getElementById('superset-advice-reps-a').textContent = this.supersetCoachingAdviceA.suggestedReps;
+            
+            // Add type class
+            const contentA = document.getElementById('superset-advice-content-a');
+            contentA.className = `superset-advice-content advice-${this.supersetCoachingAdviceA.type}`;
+        }
+        
+        // Exercise B
+        const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        document.getElementById('superset-advice-name-b').textContent = nameB;
+        
+        if (this.supersetCoachingAdviceB) {
+            document.getElementById('superset-advice-message-b').textContent = this.supersetCoachingAdviceB.message;
+            document.getElementById('superset-advice-weight-b').textContent = 
+                this.supersetCoachingAdviceB.suggestedWeight === '?' ? '?' : `${this.supersetCoachingAdviceB.suggestedWeight} kg`;
+            document.getElementById('superset-advice-reps-b').textContent = this.supersetCoachingAdviceB.suggestedReps;
+            
+            // Add type class
+            const contentB = document.getElementById('superset-advice-content-b');
+            contentB.className = `superset-advice-content advice-${this.supersetCoachingAdviceB.type}`;
+        }
+    }
+    
+    // Render unified superset logbook
+    renderUnifiedSupersetLogbook() {
+        // Exercise A
+        const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
+        document.getElementById('superset-logbook-name-a').textContent = nameA;
+        this.renderSupersetLogbookContent('a', this.lastExerciseHistory);
+        
+        // Exercise B
+        const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        document.getElementById('superset-logbook-name-b').textContent = nameB;
+        this.renderSupersetLogbookContent('b', this.lastSupersetHistory);
+    }
+    
+    // Render logbook content for a specific exercise in superset
+    renderSupersetLogbookContent(exerciseKey, history) {
+        const dateEl = document.getElementById(`superset-logbook-date-${exerciseKey}`);
+        const contentEl = document.getElementById(`superset-logbook-content-${exerciseKey}`);
+        
+        if (!history || !history.sets || history.sets.length === 0) {
+            dateEl.textContent = '--';
+            contentEl.innerHTML = '<div class="logbook-empty">Première fois</div>';
+            return;
+        }
+        
+        // Format date
+        const date = new Date(history.date);
+        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
+        let dateText = daysAgo === 0 ? "Aujourd'hui" : 
+                       daysAgo === 1 ? 'Hier' : 
+                       daysAgo < 7 ? `Il y a ${daysAgo}j` : 
+                       date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        
+        dateEl.textContent = dateText;
+        
+        // Render compact sets
+        let html = '<div class="superset-logbook-sets">';
+        for (const set of history.sets) {
+            html += `<span class="superset-logbook-set">${set.weight}kg×${set.reps}</span>`;
+        }
+        html += '</div>';
+        
+        contentEl.innerHTML = html;
     }
     
     async loadSupersetLogbook() {
@@ -1737,76 +2378,136 @@ class App {
         
         const lastSetsA = this.lastExerciseHistory?.sets || [];
         const lastSetsB = this.lastSupersetHistory?.sets || [];
+        
+        // Get exercise names (full names)
+        const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
+        const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        
+        // Get coaching suggested weights
+        const coachWeightA = this.supersetCoachingAdviceA?.suggestedWeight;
+        const coachWeightB = this.supersetCoachingAdviceB?.suggestedWeight;
 
         for (let i = 0; i < sets; i++) {
             const setAData = slotAData.sets[i] || {};
             const setBData = slotBData.sets[i] || {};
             const isCompleted = setAData.completed && setBData.completed;
             
-            // Suggested weights
-            let suggestedWeightA = lastSetsA[i]?.weight || (i > 0 ? slotAData.sets[i-1]?.weight : '') || '';
-            let suggestedWeightB = lastSetsB[i]?.weight || (i > 0 ? slotBData.sets[i-1]?.weight : '') || '';
+            // Smart weight suggestions with coaching priority
+            let suggestedWeightA = '';
+            let suggestedWeightB = '';
+            
+            // For exercise A
+            if (i === 0 && coachWeightA && coachWeightA !== '?') {
+                suggestedWeightA = coachWeightA;
+            } else if (i > 0 && slotAData.sets[i-1]?.weight) {
+                suggestedWeightA = slotAData.sets[i-1].weight;
+            } else if (lastSetsA[i]?.weight) {
+                suggestedWeightA = lastSetsA[i].weight;
+            } else if (coachWeightA && coachWeightA !== '?') {
+                suggestedWeightA = coachWeightA;
+            }
+            
+            // For exercise B
+            if (i === 0 && coachWeightB && coachWeightB !== '?') {
+                suggestedWeightB = coachWeightB;
+            } else if (i > 0 && slotBData.sets[i-1]?.weight) {
+                suggestedWeightB = slotBData.sets[i-1].weight;
+            } else if (lastSetsB[i]?.weight) {
+                suggestedWeightB = lastSetsB[i].weight;
+            } else if (coachWeightB && coachWeightB !== '?') {
+                suggestedWeightB = coachWeightB;
+            }
             
             const displayWeightA = setAData.weight || suggestedWeightA || '';
             const displayWeightB = setBData.weight || suggestedWeightB || '';
             
             const card = document.createElement('div');
-            card.className = `superset-series-card ${isCompleted ? 'completed' : ''}`;
+            card.className = `superset-series-card-new ${isCompleted ? 'completed' : ''}`;
             card.dataset.setIndex = i;
 
             if (isCompleted) {
                 card.innerHTML = `
-                    <div class="series-header">
-                        <span class="series-number">Série ${i + 1}</span>
-                        <div class="series-check-container">
-                            <span class="series-check">✓</span>
+                    <div class="superset-series-header">
+                        <span class="superset-series-number">Série ${i + 1}</span>
+                        <div class="superset-series-check">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
                         </div>
                     </div>
-                    <div class="superset-exercise-inputs">
-                        <div class="superset-exercise-row row-a">
-                            <span class="exercise-label">${this.currentSlot.activeExercise.substring(0, 12)}...</span>
-                            <span class="series-result">${setAData.weight}kg × ${setAData.reps}</span>
+                    
+                    <div class="superset-completed-results">
+                        <div class="superset-completed-exercise exercise-a">
+                            <span class="superset-completed-badge badge-a">A</span>
+                            <span class="superset-completed-name">${nameA}</span>
+                            <span class="superset-completed-value">${setAData.weight}kg × ${setAData.reps}</span>
                         </div>
-                        <div class="superset-exercise-row row-b">
-                            <span class="exercise-label">${this.supersetSlot.activeExercise.substring(0, 12)}...</span>
-                            <span class="series-result">${setBData.weight}kg × ${setBData.reps}</span>
+                        <div class="superset-completed-exercise exercise-b">
+                            <span class="superset-completed-badge badge-b">B</span>
+                            <span class="superset-completed-name">${nameB}</span>
+                            <span class="superset-completed-value">${setBData.weight}kg × ${setBData.reps}</span>
                         </div>
                     </div>
                 `;
             } else {
                 card.innerHTML = `
-                    <div class="series-header">
-                        <span class="series-number">Série ${i + 1}</span>
+                    <div class="superset-series-header">
+                        <span class="superset-series-number">Série ${i + 1}</span>
+                        <span class="superset-series-target">${this.currentSlot.repsMin}-${this.currentSlot.repsMax} / ${this.supersetSlot.repsMin}-${this.supersetSlot.repsMax} reps</span>
                     </div>
-                    <div class="superset-exercise-inputs">
-                        <div class="superset-exercise-row row-a">
-                            <span class="exercise-label">${this.currentSlot.activeExercise.substring(0, 15)}</span>
-                            <div class="input-group">
-                                <input type="number" inputmode="decimal" class="input-weight-a" 
+                    
+                    <!-- Exercise A Block -->
+                    <div class="superset-input-block block-a">
+                        <div class="superset-input-header">
+                            <span class="superset-input-badge badge-a">A</span>
+                            <span class="superset-input-name">${nameA}</span>
+                        </div>
+                        <div class="superset-input-row">
+                            <div class="superset-input-group">
+                                <label>Poids</label>
+                                <input type="number" inputmode="decimal" class="input-weight-a superset-input" 
                                        value="${displayWeightA}" placeholder="kg" data-set-index="${i}">
                             </div>
-                            <div class="input-group">
-                                <input type="number" inputmode="numeric" class="input-reps-a" 
+                            <div class="superset-input-group">
+                                <label>Reps</label>
+                                <input type="number" inputmode="numeric" class="input-reps-a superset-input" 
                                        value="${setAData.reps || ''}" placeholder="${this.currentSlot.repsMin}-${this.currentSlot.repsMax}" data-set-index="${i}">
                             </div>
                         </div>
-                        <div class="superset-exercise-row row-b">
-                            <span class="exercise-label">${this.supersetSlot.activeExercise.substring(0, 15)}</span>
-                            <div class="input-group">
-                                <input type="number" inputmode="decimal" class="input-weight-b" 
+                    </div>
+                    
+                    <!-- Superset Link Indicator -->
+                    <div class="superset-link-visual">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </div>
+                    
+                    <!-- Exercise B Block -->
+                    <div class="superset-input-block block-b">
+                        <div class="superset-input-header">
+                            <span class="superset-input-badge badge-b">B</span>
+                            <span class="superset-input-name">${nameB}</span>
+                        </div>
+                        <div class="superset-input-row">
+                            <div class="superset-input-group">
+                                <label>Poids</label>
+                                <input type="number" inputmode="decimal" class="input-weight-b superset-input" 
                                        value="${displayWeightB}" placeholder="kg" data-set-index="${i}">
                             </div>
-                            <div class="input-group">
-                                <input type="number" inputmode="numeric" class="input-reps-b" 
+                            <div class="superset-input-group">
+                                <label>Reps</label>
+                                <input type="number" inputmode="numeric" class="input-reps-b superset-input" 
                                        value="${setBData.reps || ''}" placeholder="${this.supersetSlot.repsMin}-${this.supersetSlot.repsMax}" data-set-index="${i}">
                             </div>
                         </div>
                     </div>
-                    <button class="btn btn-series-done btn-superset-done" data-set-index="${i}">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    
+                    <button class="btn btn-superset-validate" data-set-index="${i}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
-                        SuperSet terminé
+                        Valider le SuperSet
                     </button>
                 `;
             }
@@ -2165,7 +2866,275 @@ class App {
     
     continueSetsOverride() {
         this.userOverrideSets = true;
-        this.renderSeries();
+        if (this.isUnilateralMode) {
+            this.renderUnilateralSeries();
+        } else {
+            this.renderSeries();
+        }
+    }
+    
+    // ===== Unilateral Series Rendering =====
+    renderUnilateralSeries() {
+        const container = document.getElementById('series-list');
+        container.innerHTML = '';
+        
+        const slotData = this.currentWorkout.slots[this.currentSlot.id] || { sets: [], setsLeft: [], setsRight: [] };
+        const setsLeft = slotData.setsLeft || [];
+        const setsRight = slotData.setsRight || [];
+        
+        const lastSetsLeft = this.lastUnilateralHistoryLeft?.sets || [];
+        const lastSetsRight = this.lastUnilateralHistoryRight?.sets || [];
+        
+        const coachWeightLeft = this.unilateralCoachingAdviceLeft?.suggestedWeight;
+        const coachWeightRight = this.unilateralCoachingAdviceRight?.suggestedWeight;
+        
+        const programmedSets = this.currentSlot.sets;
+        const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+
+        for (let i = 0; i < programmedSets; i++) {
+            const setLeftData = setsLeft[i] || {};
+            const setRightData = setsRight[i] || {};
+            const isCompleted = setLeftData.completed && setRightData.completed;
+            
+            // Smart weight suggestions
+            let suggestedWeightLeft = '';
+            let suggestedWeightRight = '';
+            
+            // Left side suggestions
+            if (i === 0 && coachWeightLeft && coachWeightLeft !== '?') {
+                suggestedWeightLeft = coachWeightLeft;
+            } else if (i > 0 && setsLeft[i-1]?.weight) {
+                suggestedWeightLeft = setsLeft[i-1].weight;
+            } else if (lastSetsLeft[i]?.weight) {
+                suggestedWeightLeft = lastSetsLeft[i].weight;
+            } else if (coachWeightLeft && coachWeightLeft !== '?') {
+                suggestedWeightLeft = coachWeightLeft;
+            }
+            
+            // Right side suggestions
+            if (i === 0 && coachWeightRight && coachWeightRight !== '?') {
+                suggestedWeightRight = coachWeightRight;
+            } else if (i > 0 && setsRight[i-1]?.weight) {
+                suggestedWeightRight = setsRight[i-1].weight;
+            } else if (lastSetsRight[i]?.weight) {
+                suggestedWeightRight = lastSetsRight[i].weight;
+            } else if (coachWeightRight && coachWeightRight !== '?') {
+                suggestedWeightRight = coachWeightRight;
+            }
+            
+            const displayWeightLeft = setLeftData.weight || suggestedWeightLeft || '';
+            const displayWeightRight = setRightData.weight || suggestedWeightRight || '';
+            
+            const card = document.createElement('div');
+            card.className = `unilateral-series-card ${isCompleted ? 'completed' : ''}`;
+            card.dataset.setIndex = i;
+
+            if (isCompleted) {
+                card.innerHTML = `
+                    <div class="unilateral-series-header">
+                        <span class="unilateral-series-number">Série ${i + 1}</span>
+                        <div class="unilateral-series-check">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <div class="unilateral-completed-results">
+                        <div class="unilateral-completed-side side-left">
+                            <span class="unilateral-input-badge badge-left">G</span>
+                            <span class="unilateral-completed-label">Gauche</span>
+                            <span class="unilateral-completed-value">${setLeftData.weight}kg × ${setLeftData.reps}</span>
+                        </div>
+                        <div class="unilateral-completed-side side-right">
+                            <span class="unilateral-input-badge badge-right">D</span>
+                            <span class="unilateral-completed-label">Droite</span>
+                            <span class="unilateral-completed-value">${setRightData.weight}kg × ${setRightData.reps}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div class="unilateral-series-header">
+                        <span class="unilateral-series-number">Série ${i + 1}</span>
+                        <span class="unilateral-series-target">${this.currentSlot.repsMin}-${this.currentSlot.repsMax} reps / côté</span>
+                    </div>
+                    
+                    <!-- Left Side Block -->
+                    <div class="unilateral-input-block block-left">
+                        <div class="unilateral-input-header">
+                            <span class="unilateral-input-badge badge-left">G</span>
+                            <span class="unilateral-input-name">Côté Gauche</span>
+                            ${setLeftData.completed ? '<span class="unilateral-side-done">✓</span>' : ''}
+                        </div>
+                        ${!setLeftData.completed ? `
+                        <div class="unilateral-input-row">
+                            <div class="unilateral-input-group">
+                                <label>Poids</label>
+                                <input type="number" inputmode="decimal" class="input-weight-left unilateral-input" 
+                                       value="${displayWeightLeft}" placeholder="kg" data-set-index="${i}">
+                            </div>
+                            <div class="unilateral-input-group">
+                                <label>Reps</label>
+                                <input type="number" inputmode="numeric" class="input-reps-left unilateral-input" 
+                                       value="${setLeftData.reps || ''}" placeholder="${this.currentSlot.repsMin}-${this.currentSlot.repsMax}" data-set-index="${i}">
+                            </div>
+                        </div>
+                        ` : `
+                        <div class="unilateral-side-result">
+                            <span>${setLeftData.weight}kg × ${setLeftData.reps} reps</span>
+                        </div>
+                        `}
+                    </div>
+                    
+                    <!-- Switch Sides Indicator -->
+                    <div class="unilateral-switch-visual">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                            <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                        </svg>
+                        <span>Change de côté</span>
+                    </div>
+                    
+                    <!-- Right Side Block -->
+                    <div class="unilateral-input-block block-right">
+                        <div class="unilateral-input-header">
+                            <span class="unilateral-input-badge badge-right">D</span>
+                            <span class="unilateral-input-name">Côté Droit</span>
+                            ${setRightData.completed ? '<span class="unilateral-side-done">✓</span>' : ''}
+                        </div>
+                        ${!setRightData.completed ? `
+                        <div class="unilateral-input-row">
+                            <div class="unilateral-input-group">
+                                <label>Poids</label>
+                                <input type="number" inputmode="decimal" class="input-weight-right unilateral-input" 
+                                       value="${displayWeightRight}" placeholder="kg" data-set-index="${i}">
+                            </div>
+                            <div class="unilateral-input-group">
+                                <label>Reps</label>
+                                <input type="number" inputmode="numeric" class="input-reps-right unilateral-input" 
+                                       value="${setRightData.reps || ''}" placeholder="${this.currentSlot.repsMin}-${this.currentSlot.repsMax}" data-set-index="${i}">
+                            </div>
+                        </div>
+                        ` : `
+                        <div class="unilateral-side-result">
+                            <span>${setRightData.weight}kg × ${setRightData.reps} reps</span>
+                        </div>
+                        `}
+                    </div>
+                    
+                    <button class="btn btn-unilateral-validate" data-set-index="${i}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Valider les 2 côtés
+                    </button>
+                `;
+            }
+
+            container.appendChild(card);
+        }
+
+        // Check if all sets complete
+        const completedSets = Math.min(
+            setsLeft.filter(s => s?.completed).length,
+            setsRight.filter(s => s?.completed).length
+        );
+        if (completedSets >= programmedSets) {
+            this.showUnilateralSummary();
+        }
+    }
+    
+    async completeUnilateralSet(setIndex) {
+        const weightLeft = parseFloat(document.querySelector(`.input-weight-left[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsLeft = parseInt(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value) || 0;
+        const weightRight = parseFloat(document.querySelector(`.input-weight-right[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsRight = parseInt(document.querySelector(`.input-reps-right[data-set-index="${setIndex}"]`)?.value) || 0;
+
+        if (repsLeft === 0 || repsRight === 0) {
+            alert('Entre les reps pour les deux côtés');
+            return;
+        }
+
+        // Save both sides
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        if (!slotData.setsLeft) slotData.setsLeft = [];
+        if (!slotData.setsRight) slotData.setsRight = [];
+        
+        slotData.setsLeft[setIndex] = { weight: weightLeft, reps: repsLeft, completed: true, timestamp: Date.now() };
+        slotData.setsRight[setIndex] = { weight: weightRight, reps: repsRight, completed: true, timestamp: Date.now() };
+
+        await db.saveCurrentWorkout(this.currentWorkout);
+
+        // Add XP for both sides
+        let xp = (await db.getSetting('xp')) ?? 0;
+        xp += 20; // Double XP for unilateral (both sides)
+        await db.setSetting('xp', xp);
+
+        this.renderUnilateralSeries();
+
+        // Check if all sets complete
+        const programmedSets = this.currentSlot.sets;
+        const completedLeft = slotData.setsLeft.filter(s => s?.completed).length;
+        const completedRight = slotData.setsRight.filter(s => s?.completed).length;
+        
+        if (completedLeft >= programmedSets && completedRight >= programmedSets) {
+            setTimeout(() => this.showUnilateralSummary(), 300);
+        } else {
+            this.startRestTimer(this.currentSlot.rest);
+        }
+    }
+    
+    async showUnilateralSummary() {
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        const setsLeft = slotData.setsLeft || [];
+        const setsRight = slotData.setsRight || [];
+        
+        const totalRepsLeft = setsLeft.reduce((sum, s) => sum + (s?.reps || 0), 0);
+        const totalRepsRight = setsRight.reduce((sum, s) => sum + (s?.reps || 0), 0);
+        const maxWeightLeft = Math.max(...setsLeft.map(s => s?.weight || 0));
+        const maxWeightRight = Math.max(...setsRight.map(s => s?.weight || 0));
+
+        document.getElementById('summary-total-reps').textContent = totalRepsLeft + totalRepsRight;
+        document.getElementById('summary-max-weight').textContent = `${Math.max(maxWeightLeft, maxWeightRight)} kg`;
+        
+        document.getElementById('summary-icon').textContent = '🔄';
+        document.getElementById('summary-title').textContent = 'Exercice unilatéral terminé !';
+        
+        // Compare left vs right
+        const leftStronger = maxWeightLeft > maxWeightRight;
+        const rightStronger = maxWeightRight > maxWeightLeft;
+        const balanced = maxWeightLeft === maxWeightRight;
+        
+        let comparisonHTML = '';
+        if (balanced) {
+            comparisonHTML = `
+                <div class="comparison-card positive">
+                    <span class="comparison-icon">⚖️</span>
+                    <span class="comparison-text">Équilibre parfait entre les deux côtés !</span>
+                </div>
+            `;
+        } else {
+            const diff = Math.abs(maxWeightLeft - maxWeightRight);
+            const strongerSide = leftStronger ? 'Gauche' : 'Droite';
+            comparisonHTML = `
+                <div class="comparison-card neutral">
+                    <span class="comparison-icon">📊</span>
+                    <span class="comparison-text">Côté ${strongerSide} plus fort (+${diff}kg)</span>
+                </div>
+            `;
+        }
+        
+        document.getElementById('summary-comparison').innerHTML = comparisonHTML;
+        document.getElementById('exercise-summary').classList.add('active');
+
+        // Mark slot as completed
+        if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
+            this.currentWorkout.completedSlots.push(this.currentSlot.id);
+        }
+        await db.saveCurrentWorkout(this.currentWorkout);
+        
+        this.triggerConfetti();
     }
 
     async completeSet(setIndex) {
@@ -2714,19 +3683,62 @@ class App {
         // Save individual sets to history (including RPE)
         for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
             const slot = await db.get('slots', slotId);
-            for (let i = 0; i < slotData.sets.length; i++) {
-                const setData = slotData.sets[i];
-                if (setData && setData.completed) {
-                    await db.add('setHistory', {
-                        slotId,
-                        exerciseId: slot.activeExercise || slot.name,
-                        workoutId,
-                        setNumber: i + 1,
-                        weight: setData.weight,
-                        reps: setData.reps,
-                        rpe: setData.rpe || 8, // Include RPE data
-                        date: new Date().toISOString()
-                    });
+            const baseExerciseId = slot.activeExercise || slot.name;
+            
+            // Check if this is a unilateral exercise (has setsLeft/setsRight data)
+            const hasUnilateralData = slotData.setsLeft && slotData.setsRight && 
+                (slotData.setsLeft.some(s => s?.completed) || slotData.setsRight.some(s => s?.completed));
+            
+            if (hasUnilateralData) {
+                // Save left side sets with "(Gauche)" suffix
+                for (let i = 0; i < slotData.setsLeft.length; i++) {
+                    const setData = slotData.setsLeft[i];
+                    if (setData && setData.completed) {
+                        await db.add('setHistory', {
+                            slotId,
+                            exerciseId: `${baseExerciseId} (Gauche)`,
+                            workoutId,
+                            setNumber: i + 1,
+                            weight: setData.weight,
+                            reps: setData.reps,
+                            rpe: setData.rpe || 8,
+                            date: new Date().toISOString()
+                        });
+                    }
+                }
+                
+                // Save right side sets with "(Droite)" suffix
+                for (let i = 0; i < slotData.setsRight.length; i++) {
+                    const setData = slotData.setsRight[i];
+                    if (setData && setData.completed) {
+                        await db.add('setHistory', {
+                            slotId,
+                            exerciseId: `${baseExerciseId} (Droite)`,
+                            workoutId,
+                            setNumber: i + 1,
+                            weight: setData.weight,
+                            reps: setData.reps,
+                            rpe: setData.rpe || 8,
+                            date: new Date().toISOString()
+                        });
+                    }
+                }
+            } else {
+                // Standard bilateral exercise - save as before
+                for (let i = 0; i < slotData.sets.length; i++) {
+                    const setData = slotData.sets[i];
+                    if (setData && setData.completed) {
+                        await db.add('setHistory', {
+                            slotId,
+                            exerciseId: baseExerciseId,
+                            workoutId,
+                            setNumber: i + 1,
+                            weight: setData.weight,
+                            reps: setData.reps,
+                            rpe: setData.rpe || 8, // Include RPE data
+                            date: new Date().toISOString()
+                        });
+                    }
                 }
             }
         }
@@ -2751,6 +3763,19 @@ class App {
         await streakEngine.recordWorkoutForStreak();
         await db.setSetting('lastWorkoutDate', new Date().toISOString());
         
+        // Award half shield for completing a session (max 3 shields)
+        const currentShields = (await db.getSetting('shieldCount')) ?? 0;
+        const newShieldCount = Math.min(currentShields + 0.5, streakEngine.MAX_SHIELDS);
+        if (newShieldCount > currentShields) {
+            await db.setSetting('shieldCount', newShieldCount);
+            // Celebrate if we just completed a full shield
+            if (Math.floor(newShieldCount) > Math.floor(currentShields)) {
+                setTimeout(() => {
+                    gamification.celebrateShieldEarned(newShieldCount);
+                }, 1500);
+            }
+        }
+        
         // Check if we just met the weekly goal
         const streakDataAfter = await streakEngine.getStreakData();
         const isGoalMetNow = streakDataAfter.currentWeekSessions >= streakDataAfter.weeklyGoal;
@@ -2766,7 +3791,11 @@ class App {
         const duration = Math.round((Date.now() - this.sessionStartTime) / 60000);
         let totalSets = 0;
         for (const slotData of Object.values(this.currentWorkout.slots)) {
+            // Count standard sets
             totalSets += slotData.sets.filter(s => s && s.completed).length;
+            // Count unilateral sets (each side counts)
+            if (slotData.setsLeft) totalSets += slotData.setsLeft.filter(s => s && s.completed).length;
+            if (slotData.setsRight) totalSets += slotData.setsRight.filter(s => s && s.completed).length;
         }
         const sessionName = this.currentSession.name;
         
@@ -3738,9 +4767,18 @@ class App {
         try {
             const text = await file.text();
             const data = JSON.parse(text);
-            await db.importData(data);
+            const counts = await db.importData(data);
             await this.renderHome();
-            alert('Données importées avec succès !');
+            
+            const msg = `✅ Import terminé avec succès!\n\n` +
+                `• ${counts.sessions} séances\n` +
+                `• ${counts.slots} exercices\n` +
+                `• ${counts.workouts} entraînements\n` +
+                `• ${counts.sets} séries\n` +
+                `• ${counts.settings} paramètres\n` +
+                `• ${counts.currentWorkout} séance en cours`;
+            
+            alert(msg);
         } catch (e) {
             alert('Erreur lors de l\'import: ' + e.message);
         }
@@ -3815,6 +4853,21 @@ class App {
         };
 
         document.getElementById('series-list').onclick = (e) => {
+            // Unilateral validate button
+            const unilateralValidateBtn = e.target.closest('.btn-unilateral-validate');
+            if (unilateralValidateBtn) {
+                this.completeUnilateralSet(parseInt(unilateralValidateBtn.dataset.setIndex));
+                return;
+            }
+            
+            // New superset validate button
+            const supersetValidateBtn = e.target.closest('.btn-superset-validate');
+            if (supersetValidateBtn) {
+                this.completeSupersetSet(parseInt(supersetValidateBtn.dataset.setIndex));
+                return;
+            }
+            
+            // Legacy superset done button
             const supersetDoneBtn = e.target.closest('.btn-superset-done');
             if (supersetDoneBtn) {
                 this.completeSupersetSet(parseInt(supersetDoneBtn.dataset.setIndex));
@@ -3833,8 +4886,9 @@ class App {
             }
         };
 
-        // Auto-save on input change
+        // Auto-save on input change (including superset inputs)
         document.getElementById('series-list').oninput = async (e) => {
+            // Standard exercise inputs
             if (e.target.matches('.input-weight, .input-reps')) {
                 const setIndex = parseInt(e.target.dataset.setIndex);
                 const slotData = this.currentWorkout.slots[this.currentSlot.id];
@@ -3847,6 +4901,76 @@ class App {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
                     slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                }
+                
+                await db.saveCurrentWorkout(this.currentWorkout);
+            }
+            
+            // Superset inputs (exercise A)
+            if (e.target.matches('.input-weight-a, .input-reps-a') && this.isSupersetMode) {
+                const setIndex = parseInt(e.target.dataset.setIndex);
+                const slotData = this.currentWorkout.slots[this.currentSlot.id];
+                
+                if (!slotData.sets[setIndex]) {
+                    slotData.sets[setIndex] = {};
+                }
+                
+                if (e.target.matches('.input-weight-a')) {
+                    slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
+                } else {
+                    slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                }
+                
+                await db.saveCurrentWorkout(this.currentWorkout);
+            }
+            
+            // Superset inputs (exercise B)
+            if (e.target.matches('.input-weight-b, .input-reps-b') && this.isSupersetMode && this.supersetSlot) {
+                const setIndex = parseInt(e.target.dataset.setIndex);
+                const slotData = this.currentWorkout.slots[this.supersetSlot.id];
+                
+                if (!slotData.sets[setIndex]) {
+                    slotData.sets[setIndex] = {};
+                }
+                
+                if (e.target.matches('.input-weight-b')) {
+                    slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
+                } else {
+                    slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                }
+                
+                await db.saveCurrentWorkout(this.currentWorkout);
+            }
+            
+            // Unilateral inputs (left side)
+            if (e.target.matches('.input-weight-left, .input-reps-left') && this.isUnilateralMode) {
+                const setIndex = parseInt(e.target.dataset.setIndex);
+                const slotData = this.currentWorkout.slots[this.currentSlot.id];
+                
+                if (!slotData.setsLeft) slotData.setsLeft = [];
+                if (!slotData.setsLeft[setIndex]) slotData.setsLeft[setIndex] = {};
+                
+                if (e.target.matches('.input-weight-left')) {
+                    slotData.setsLeft[setIndex].weight = parseFloat(e.target.value) || 0;
+                } else {
+                    slotData.setsLeft[setIndex].reps = parseInt(e.target.value) || 0;
+                }
+                
+                await db.saveCurrentWorkout(this.currentWorkout);
+            }
+            
+            // Unilateral inputs (right side)
+            if (e.target.matches('.input-weight-right, .input-reps-right') && this.isUnilateralMode) {
+                const setIndex = parseInt(e.target.dataset.setIndex);
+                const slotData = this.currentWorkout.slots[this.currentSlot.id];
+                
+                if (!slotData.setsRight) slotData.setsRight = [];
+                if (!slotData.setsRight[setIndex]) slotData.setsRight[setIndex] = {};
+                
+                if (e.target.matches('.input-weight-right')) {
+                    slotData.setsRight[setIndex].weight = parseFloat(e.target.value) || 0;
+                } else {
+                    slotData.setsRight[setIndex].reps = parseInt(e.target.value) || 0;
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -3959,6 +5083,7 @@ class App {
         // Settings sheet
         document.querySelector('#sheet-settings .sheet-backdrop').onclick = () => this.hideSettingsSheet();
         document.getElementById('btn-save-settings').onclick = () => this.saveSettings();
+        document.getElementById('btn-manual-cleanup').onclick = () => this.manualCleanup();
         this.bindSettingsSliders();
         
         document.getElementById('pool-list').onclick = (e) => {
@@ -4216,7 +5341,86 @@ class App {
         document.getElementById('setting-deload-volume').value = deloadVolumeReduction;
         document.getElementById('setting-deload-volume-value').textContent = deloadVolumeReduction;
         
+        // Display storage information
+        await this.updateStorageStats();
+        
         document.getElementById('sheet-settings').classList.add('active');
+    }
+    
+    async updateStorageStats() {
+        try {
+            const storageInfo = await db.getStorageInfo();
+            const oldWorkoutCount = await db.getOldWorkoutCount();
+            
+            if (storageInfo.quota && storageInfo.usage) {
+                const usedMB = (storageInfo.usage / 1024 / 1024).toFixed(2);
+                const quotaMB = (storageInfo.quota / 1024 / 1024).toFixed(2);
+                const percentUsed = Math.round((storageInfo.usage / storageInfo.quota) * 100);
+                
+                const infoElement = document.getElementById('storage-stats-info');
+                const barFill = document.getElementById('storage-bar-fill');
+                
+                infoElement.textContent = `${usedMB} MB utilisés sur ${quotaMB} MB disponibles (${percentUsed}%)`;
+                barFill.style.width = `${percentUsed}%`;
+                
+                // Color coding based on usage
+                barFill.classList.remove('warning', 'danger');
+                if (percentUsed >= 90) {
+                    barFill.classList.add('danger');
+                } else if (percentUsed >= 70) {
+                    barFill.classList.add('warning');
+                }
+            } else {
+                document.getElementById('storage-stats-info').textContent = 'Informations de stockage non disponibles';
+            }
+            
+            // Update cleanup status
+            const statusElement = document.getElementById('cleanup-status');
+            if (oldWorkoutCount > 0) {
+                statusElement.textContent = `${oldWorkoutCount} séance(s) de plus de 90 jours peuvent être nettoyées`;
+                statusElement.style.color = '#f59e0b';
+            } else {
+                statusElement.textContent = 'Aucune donnée ancienne à nettoyer';
+                statusElement.style.color = '#22c55e';
+            }
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour des stats de stockage:', error);
+        }
+    }
+    
+    async manualCleanup() {
+        const oldWorkoutCount = await db.getOldWorkoutCount();
+        
+        if (oldWorkoutCount === 0) {
+            alert('Aucune donnée ancienne à nettoyer.');
+            return;
+        }
+        
+        const confirmMsg = `Vous allez nettoyer ${oldWorkoutCount} séance(s) de plus de 90 jours.\n\nLes meilleures performances seront conservées pour les tendances.\n\nContinuer ?`;
+        
+        if (!confirm(confirmMsg)) return;
+        
+        try {
+            document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyage en cours...';
+            document.getElementById('btn-manual-cleanup').disabled = true;
+            
+            const result = await db.cleanupOldData();
+            
+            await this.updateStorageStats();
+            
+            const msg = `✅ Nettoyage terminé!\n\n` +
+                `• ${result.deletedWorkouts} séances supprimées\n` +
+                `• ${result.deletedSets} séries supprimées\n` +
+                `• ${result.preservedWorkouts} séances conservées (données essentielles)`;
+            
+            alert(msg);
+        } catch (error) {
+            console.error('Erreur lors du nettoyage:', error);
+            alert('Erreur lors du nettoyage: ' + error.message);
+        } finally {
+            document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyer maintenant';
+            document.getElementById('btn-manual-cleanup').disabled = false;
+        }
     }
     
     hideSettingsSheet() {

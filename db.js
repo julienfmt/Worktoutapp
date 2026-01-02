@@ -2,6 +2,13 @@
 const DB_NAME = 'MuscuDB';
 const DB_VERSION = 1;
 
+// Storage management configuration
+const STORAGE_CONFIG = {
+    OLD_DATA_THRESHOLD_DAYS: 90,  // Delete detailed data older than 90 days
+    CLEANUP_ON_INIT: true,         // Run cleanup on app initialization
+    PRESERVE_ESSENTIAL_DATA: true  // Keep e1RM history and volume trends
+};
+
 class Database {
     constructor() {
         this.db = null;
@@ -234,7 +241,157 @@ class Database {
         return info;
     }
 
-    // Export all data
+    // Storage cleanup - Remove old detailed workout data while preserving essential trends
+    async cleanupOldData() {
+        const thresholdDate = new Date();
+        thresholdDate.setDate(thresholdDate.getDate() - STORAGE_CONFIG.OLD_DATA_THRESHOLD_DAYS);
+        
+        console.log(`🧹 Nettoyage des données antérieures au ${thresholdDate.toLocaleDateString()}`);
+        
+        let deletedWorkouts = 0;
+        let deletedSets = 0;
+        let preservedWorkouts = 0;
+        
+        if (!STORAGE_CONFIG.PRESERVE_ESSENTIAL_DATA) {
+            // Simple deletion without preservation
+            const workouts = await this.getAll('workoutHistory');
+            for (const workout of workouts) {
+                const workoutDate = new Date(workout.date);
+                if (workoutDate < thresholdDate) {
+                    await this.delete('workoutHistory', workout.id);
+                    deletedWorkouts++;
+                    
+                    // Delete associated sets
+                    const sets = await this.getByIndex('setHistory', 'workoutId', workout.id);
+                    for (const set of sets) {
+                        await this.delete('setHistory', set.id);
+                        deletedSets++;
+                    }
+                }
+            }
+        } else {
+            // Intelligent cleanup: preserve essential data for e1RM trends
+            const workouts = await this.getAll('workoutHistory');
+            const exerciseE1RMMap = new Map(); // Track best e1RM per exercise
+            
+            // First pass: identify best performances per exercise
+            for (const workout of workouts) {
+                const workoutDate = new Date(workout.date);
+                if (workoutDate < thresholdDate) {
+                    const sets = await this.getByIndex('setHistory', 'workoutId', workout.id);
+                    
+                    for (const set of sets) {
+                        if (set.weight && set.reps && set.rpe) {
+                            const key = set.exerciseId;
+                            const e1rm = this.calculateE1RM(set.weight, set.reps, set.rpe);
+                            
+                            if (!exerciseE1RMMap.has(key) || e1rm > exerciseE1RMMap.get(key).e1rm) {
+                                exerciseE1RMMap.set(key, {
+                                    e1rm,
+                                    setId: set.id,
+                                    date: set.date,
+                                    weight: set.weight,
+                                    reps: set.reps,
+                                    rpe: set.rpe
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Second pass: delete old data except preserved sets
+            const preservedSetIds = new Set(
+                Array.from(exerciseE1RMMap.values()).map(v => v.setId)
+            );
+            
+            for (const workout of workouts) {
+                const workoutDate = new Date(workout.date);
+                if (workoutDate < thresholdDate) {
+                    const sets = await this.getByIndex('setHistory', 'workoutId', workout.id);
+                    let hasPreservedSets = false;
+                    
+                    // Delete non-essential sets
+                    for (const set of sets) {
+                        if (!preservedSetIds.has(set.id)) {
+                            await this.delete('setHistory', set.id);
+                            deletedSets++;
+                        } else {
+                            hasPreservedSets = true;
+                        }
+                    }
+                    
+                    // Delete workout if no preserved sets remain
+                    if (!hasPreservedSets) {
+                        await this.delete('workoutHistory', workout.id);
+                        deletedWorkouts++;
+                    } else {
+                        preservedWorkouts++;
+                    }
+                }
+            }
+        }
+        
+        // Check storage after cleanup
+        const storageInfo = await this.getStorageInfo();
+        
+        console.log(`✅ Nettoyage terminé:`);
+        console.log(`   - ${deletedWorkouts} séances supprimées`);
+        console.log(`   - ${deletedSets} séries supprimées`);
+        console.log(`   - ${preservedWorkouts} séances conservées (données essentielles)`);
+        
+        if (storageInfo.usage) {
+            const usageMB = (storageInfo.usage / 1024 / 1024).toFixed(2);
+            console.log(`   - Stockage utilisé: ${usageMB}MB`);
+        }
+        
+        return {
+            deletedWorkouts,
+            deletedSets,
+            preservedWorkouts,
+            thresholdDate: thresholdDate.toISOString()
+        };
+    }
+    
+    // Simple e1RM calculation for cleanup (RPE-aware Brzycki)
+    calculateE1RM(weight, reps, rpe = 10) {
+        if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
+        const rir = 10 - rpe;
+        const totalPotentialReps = reps + rir;
+        if (totalPotentialReps >= 37) {
+            return weight * (1 + totalPotentialReps * 0.025);
+        }
+        return weight / (1.0278 - 0.0278 * totalPotentialReps);
+    }
+    
+    // Check if cleanup is needed based on storage usage
+    async shouldCleanup() {
+        const storageInfo = await this.getStorageInfo();
+        
+        // Trigger cleanup if usage > 80% of quota
+        if (storageInfo.quota && storageInfo.usage) {
+            const usagePercent = (storageInfo.usage / storageInfo.quota) * 100;
+            if (usagePercent > 80) {
+                console.warn(`⚠️ Stockage à ${usagePercent.toFixed(1)}% - nettoyage recommandé`);
+                return true;
+            }
+        }
+        
+        // Also check if old data exists
+        const oldWorkouts = await this.getOldWorkoutCount();
+        return oldWorkouts > 0;
+    }
+    
+    // Count workouts older than threshold
+    async getOldWorkoutCount() {
+        const thresholdDate = new Date();
+        thresholdDate.setDate(thresholdDate.getDate() - STORAGE_CONFIG.OLD_DATA_THRESHOLD_DAYS);
+        
+        const workouts = await this.getAll('workoutHistory');
+        return workouts.filter(w => new Date(w.date) < thresholdDate).length;
+    }
+
+    // Export all data (including currentWorkout for complete backup)
     async exportData() {
         const data = {
             sessions: await this.getAll('sessions'),
@@ -242,36 +399,66 @@ class Database {
             workoutHistory: await this.getAll('workoutHistory'),
             setHistory: await this.getAll('setHistory'),
             settings: await this.getAll('settings'),
-            exportDate: new Date().toISOString()
+            currentWorkout: await this.getAll('currentWorkout'),
+            exportDate: new Date().toISOString(),
+            version: DB_VERSION
         };
         return data;
     }
 
-    // Import data
+    // Import data (with validation)
     async importData(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Données invalides');
+        }
+        
+        console.log('📥 Import des données...');
+        
         // Clear existing data
         await this.clear('sessions');
         await this.clear('slots');
         await this.clear('workoutHistory');
         await this.clear('setHistory');
         await this.clear('settings');
+        await this.clear('currentWorkout');
 
-        // Import new data
+        // Import new data with counts
+        let counts = {
+            sessions: 0,
+            slots: 0,
+            workouts: 0,
+            sets: 0,
+            settings: 0,
+            currentWorkout: 0
+        };
+        
         for (const session of (data.sessions || [])) {
             await this.put('sessions', session);
+            counts.sessions++;
         }
         for (const slot of (data.slots || [])) {
             await this.put('slots', slot);
+            counts.slots++;
         }
         for (const workout of (data.workoutHistory || [])) {
             await this.put('workoutHistory', workout);
+            counts.workouts++;
         }
         for (const set of (data.setHistory || [])) {
             await this.put('setHistory', set);
+            counts.sets++;
         }
         for (const setting of (data.settings || [])) {
             await this.put('settings', setting);
+            counts.settings++;
         }
+        for (const current of (data.currentWorkout || [])) {
+            await this.put('currentWorkout', current);
+            counts.currentWorkout++;
+        }
+        
+        console.log('✅ Import terminé:', counts);
+        return counts;
     }
 }
 

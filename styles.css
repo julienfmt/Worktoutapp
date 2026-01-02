@@ -111,17 +111,54 @@ body {
 /* ===== Streak Card ===== */
 .streak-card {
     background: linear-gradient(135deg, 
-        rgba(255, 255, 255, 0.9) 0%, 
-        rgba(248, 250, 252, 0.85) 100%);
+        rgba(255, 255, 255, 0.95) 0%, 
+        rgba(248, 250, 252, 0.9) 100%);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: var(--radius-xl);
     padding: 20px;
     margin-bottom: 16px;
     box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08),
                 0 1px 2px rgba(15, 23, 42, 0.06),
                 inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.streak-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.03) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+}
+
+.streak-card.week-validated {
+    border-color: rgba(34, 197, 94, 0.3);
+    box-shadow: 0 8px 32px rgba(34, 197, 94, 0.12),
+                0 1px 2px rgba(34, 197, 94, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.streak-card.week-validated::before {
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.05) 0%, transparent 70%);
+    opacity: 1;
+}
+
+.streak-card.celebrating {
+    animation: celebratePulse 0.6s ease;
+}
+
+@keyframes celebratePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
 }
 
 .streak-main {
@@ -132,32 +169,42 @@ body {
 
 .streak-score {
     text-align: center;
-    min-width: 70px;
+    min-width: 80px;
+    position: relative;
+}
+
+.streak-score.week-complete .streak-number {
+    color: var(--success);
+}
+
+.streak-emoji {
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: 4px;
+    animation: emojiFloat 3s ease-in-out infinite;
+}
+
+@keyframes emojiFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
 }
 
 .streak-number {
-    font-size: 42px;
-    font-weight: 800;
+    font-size: 48px;
+    font-weight: 900;
     color: var(--text-primary);
     line-height: 1;
+    letter-spacing: -2px;
+    transition: color 0.3s ease;
 }
 
 .streak-label {
     font-size: 11px;
-    color: var(--text-secondary);
-    font-weight: 600;
-    margin-top: 4px;
-    text-transform: capitalize;
-}
-
-.streak-subtext {
-    font-size: 9px;
     color: var(--text-muted);
-    font-weight: 500;
+    font-weight: 700;
     margin-top: 2px;
-    line-height: 1.2;
-    max-width: 90px;
-    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
 }
 
 .streak-info {
@@ -170,15 +217,31 @@ body {
     gap: 6px;
     background: var(--level-color, #94a3b8);
     color: #fff;
-    padding: 5px 12px;
-    border-radius: 16px;
+    padding: 6px 14px;
+    border-radius: 20px;
     font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 10px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    animation: badgeShine 3s ease infinite;
 }
 
-.streak-level-badge svg {
-    opacity: 0.9;
+@keyframes badgeShine {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.1); }
+}
+
+.level-name {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.streak-level-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 10px;
+    font-style: italic;
 }
 
 .streak-progress-section {
@@ -188,29 +251,50 @@ body {
 }
 
 .streak-progress-bar {
-    height: 8px;
+    height: 10px;
     background: rgba(226, 232, 240, 0.6);
-    border-radius: 4px;
+    border-radius: 5px;
     overflow: hidden;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+    position: relative;
 }
 
 .streak-progress-fill {
     height: 100%;
-    border-radius: 4px;
-    transition: width 0.4s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    position: relative;
+}
+
+.streak-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%);
+    border-radius: 5px 5px 0 0;
 }
 
 .streak-next-level {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 500;
     line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .streak-next-level strong {
     color: var(--text-primary);
+    font-weight: 700;
+}
+
+.max-level {
+    color: var(--warning);
     font-weight: 700;
 }
 
@@ -249,16 +333,31 @@ body {
     align-items: center;
     gap: 5px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--primary);
-    background: rgba(99, 102, 241, 0.1);
-    padding: 4px 10px;
-    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.12);
+    padding: 5px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.protected-badge.protected-active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+    animation: protectedGlow 2s ease-in-out infinite;
+}
+
+@keyframes protectedGlow {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); 
+    }
+    50% { 
+        box-shadow: 0 0 12px 2px rgba(99, 102, 241, 0.25); 
+    }
 }
 
 .protected-badge svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
 }
 
 .week-content {
@@ -281,27 +380,53 @@ body {
 }
 
 .session-indicator {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
     background: rgba(226, 232, 240, 0.5);
-    border: 2px solid rgba(148, 163, 184, 0.2);
+    border: 2px dashed rgba(148, 163, 184, 0.3);
     transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .session-indicator.filled {
-    background: var(--success);
-    border-color: var(--success);
-    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
+    background: linear-gradient(135deg, var(--success), #16a34a);
+    border: 2px solid var(--success);
+    border-style: solid;
+    box-shadow: 0 3px 10px rgba(34, 197, 94, 0.35);
+    animation: sessionFill 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@keyframes sessionFill {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .session-indicator svg {
     color: #fff;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
+    animation: checkAppear 0.3s ease 0.2s backwards;
+}
+
+@keyframes checkAppear {
+    from {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) rotate(0);
+        opacity: 1;
+    }
 }
 
 .week-status-count {
@@ -315,6 +440,22 @@ body {
 
 .week-status-count.success {
     color: var(--success);
+    font-size: 15px;
+    background: rgba(34, 197, 94, 0.12);
+    padding: 6px 12px;
+    border-radius: 10px;
+    animation: successPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes successPop {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .week-status-count.partial {
@@ -332,18 +473,31 @@ body {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 8px;
+    gap: 6px;
+    min-width: 90px;
+}
+
+.shields-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.shields-label {
+    font-weight: 600;
+    color: var(--text-secondary);
 }
 
 .shields-count {
-    font-size: 12px;
-    color: var(--text-secondary);
-    font-weight: 600;
+    font-size: 13px;
+    color: var(--primary);
+    font-weight: 800;
 }
 
 .shields-row {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     justify-content: flex-end;
 }
 
@@ -351,21 +505,52 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.3s ease;
+    animation: shieldAppear 0.4s ease backwards;
+}
+
+@keyframes shieldAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .shield-icon.filled {
     color: var(--primary);
-    filter: drop-shadow(0 1px 3px rgba(99, 102, 241, 0.3));
+    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.4));
+    animation: shieldAppear 0.4s ease backwards, shieldPulse 2s ease-in-out infinite;
+}
+
+@keyframes shieldPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
 }
 
 .shield-icon.half {
     color: var(--primary);
-    filter: drop-shadow(0 1px 3px rgba(99, 102, 241, 0.2));
+    filter: drop-shadow(0 1px 3px rgba(99, 102, 241, 0.25));
 }
 
 .shield-icon.empty {
-    color: rgba(148, 163, 184, 0.3);
-    opacity: 0.5;
+    color: rgba(148, 163, 184, 0.25);
+    opacity: 0.6;
+}
+
+.shield-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.shield-hint.shield-full {
+    color: var(--success);
+    font-weight: 600;
 }
 
 /* ===== Week Prediction ===== */
@@ -2900,6 +3085,34 @@ body {
     color: var(--primary);
 }
 
+.storage-bar-container {
+    width: 100%;
+}
+
+.storage-bar {
+    width: 100%;
+    height: 12px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.storage-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success), var(--primary));
+    border-radius: 6px;
+    transition: width 0.3s ease, background 0.3s ease;
+}
+
+.storage-bar-fill.warning {
+    background: linear-gradient(90deg, var(--warning), var(--warning-light));
+}
+
+.storage-bar-fill.danger {
+    background: linear-gradient(90deg, var(--error), var(--error-light));
+}
+
 /* ===== Coaching Advice Card ===== */
 .coaching-advice {
     margin-top: 16px;
@@ -4011,6 +4224,770 @@ body {
     0% { transform: scale(1); }
     50% { transform: scale(1.3); }
     100% { transform: scale(1); }
+}
+
+/* ===== DUAL EXERCISE COACHING (Superset & Unilateral) ===== */
+
+.coaching-dual-exercise {
+    margin-bottom: 16px;
+}
+
+.coaching-dual-exercise:last-of-type {
+    margin-bottom: 0;
+}
+
+.coaching-exercise-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.coaching-exercise-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    flex-shrink: 0;
+    color: white;
+}
+
+.coaching-exercise-badge.badge-a {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.coaching-exercise-badge.badge-b {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.coaching-exercise-badge.badge-left {
+    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+}
+
+.coaching-exercise-badge.badge-right {
+    background: linear-gradient(135deg, #ef4444, #f87171);
+}
+
+.coaching-exercise-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.coaching-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 16px 0;
+}
+
+/* Superset Logbook Container */
+.superset-logbook-container {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.03));
+    border: 2px solid rgba(99, 102, 241, 0.15);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.superset-logbook-header {
+    margin-bottom: 14px;
+}
+
+.superset-logbook-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.superset-logbook-exercise {
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.superset-logbook-exercise:last-child {
+    margin-bottom: 0;
+}
+
+.superset-logbook-exercise.exercise-a {
+    border-left: 4px solid #6366f1;
+}
+
+.superset-logbook-exercise.exercise-b {
+    border-left: 4px solid #f59e0b;
+}
+
+.superset-logbook-exercise-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.superset-logbook-exercise-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.superset-logbook-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.superset-logbook-sets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.superset-logbook-set {
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* NEW Superset Series Card */
+.superset-series-card-new {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 16px;
+    border: 2px solid transparent;
+}
+
+.superset-series-card-new.completed {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.03));
+    border-color: rgba(34, 197, 94, 0.2);
+}
+
+.superset-series-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.superset-series-number {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+.superset-series-target {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.superset-series-check {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--success), #16a34a);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 3px 12px rgba(34, 197, 94, 0.4);
+}
+
+/* Superset Input Block - Clean design without border-left */
+.superset-input-block {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.superset-input-block.block-a {
+    background: var(--bg);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.superset-input-block.block-b {
+    background: var(--bg);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.superset-input-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* Replace dots with badges */
+.superset-input-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+}
+
+.superset-input-badge.badge-a {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.superset-input-badge.badge-b {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+/* Legacy dots - kept for compatibility */
+.superset-input-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.superset-input-dot.dot-a {
+    background: #6366f1;
+}
+
+.superset-input-dot.dot-b {
+    background: #f59e0b;
+}
+
+.superset-input-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.superset-input-row {
+    display: flex;
+    gap: 12px;
+}
+
+.superset-input-group {
+    flex: 1;
+}
+
+.superset-input-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.superset-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 18px;
+    font-weight: 700;
+    font-family: inherit;
+    text-align: center;
+    background: var(--bg);
+    transition: all 0.2s ease;
+}
+
+.superset-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.block-a .superset-input:focus {
+    border-color: #6366f1;
+}
+
+.block-b .superset-input:focus {
+    border-color: #f59e0b;
+}
+
+/* Superset Link Visual */
+.superset-link-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 0;
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.superset-link-visual svg {
+    transform: rotate(90deg);
+}
+
+/* Superset Validate Button */
+.btn-superset-validate {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+}
+
+.btn-superset-validate:active {
+    transform: scale(0.97);
+}
+
+/* Superset Completed Results - Clean design */
+.superset-completed-results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.superset-completed-exercise {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+.superset-completed-exercise.exercise-a {
+    border-color: rgba(99, 102, 241, 0.25);
+}
+
+.superset-completed-exercise.exercise-b {
+    border-color: rgba(245, 158, 11, 0.25);
+}
+
+/* Completed badges instead of dots */
+.superset-completed-badge {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+}
+
+.superset-completed-badge.badge-a {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.superset-completed-badge.badge-b {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+/* Legacy dots - kept for compatibility */
+.superset-completed-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.superset-completed-dot.dot-a {
+    background: #6366f1;
+}
+
+.superset-completed-dot.dot-b {
+    background: #f59e0b;
+}
+
+.superset-completed-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.superset-completed-value {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 4px 12px;
+    border-radius: 8px;
+}
+
+/* ===== UNILATERAL EXERCISE UI ===== */
+
+/* Unilateral Logbook Container */
+.unilateral-logbook-container {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.03));
+    border: 2px solid rgba(16, 185, 129, 0.15);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.unilateral-logbook-header {
+    margin-bottom: 14px;
+}
+
+.unilateral-logbook-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #10b981;
+}
+
+.unilateral-logbook-exercise {
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+}
+
+.unilateral-logbook-exercise:last-child {
+    margin-bottom: 0;
+}
+
+.unilateral-logbook-exercise.side-left {
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+.unilateral-logbook-exercise.side-right {
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.unilateral-logbook-exercise-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.unilateral-logbook-exercise-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.unilateral-logbook-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.unilateral-logbook-sets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.unilateral-logbook-set {
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Unilateral Series Card */
+.unilateral-series-card {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 16px;
+    border: 2px solid transparent;
+}
+
+.unilateral-series-card.completed {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.03));
+    border-color: rgba(34, 197, 94, 0.2);
+}
+
+.unilateral-series-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.unilateral-series-number {
+    font-size: 15px;
+    font-weight: 800;
+    color: #10b981;
+}
+
+.unilateral-series-target {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.unilateral-series-check {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--success), #16a34a);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 3px 12px rgba(34, 197, 94, 0.4);
+}
+
+/* Unilateral Input Block - Clean design without border-left */
+.unilateral-input-block {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+}
+
+.unilateral-input-block.block-left {
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+.unilateral-input-block.block-right {
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.unilateral-input-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* Unilateral badges instead of dots */
+.unilateral-input-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+}
+
+.unilateral-input-badge.badge-left {
+    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+}
+
+.unilateral-input-badge.badge-right {
+    background: linear-gradient(135deg, #ef4444, #f87171);
+}
+
+/* Legacy dots - kept for compatibility */
+.unilateral-input-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.unilateral-input-dot.dot-left {
+    background: #3b82f6;
+}
+
+.unilateral-input-dot.dot-right {
+    background: #ef4444;
+}
+
+.unilateral-input-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.unilateral-side-done {
+    color: var(--success);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.unilateral-side-result {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.unilateral-input-row {
+    display: flex;
+    gap: 12px;
+}
+
+.unilateral-input-group {
+    flex: 1;
+}
+
+.unilateral-input-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.unilateral-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 18px;
+    font-weight: 700;
+    font-family: inherit;
+    text-align: center;
+    background: var(--bg);
+    transition: all 0.2s ease;
+}
+
+.unilateral-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.block-left .unilateral-input:focus {
+    border-color: #3b82f6;
+}
+
+.block-right .unilateral-input:focus {
+    border-color: #ef4444;
+}
+
+/* Switch Sides Visual */
+.unilateral-switch-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.unilateral-switch-visual svg {
+    opacity: 0.6;
+}
+
+/* Unilateral Validate Button */
+.btn-unilateral-validate {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+}
+
+.btn-unilateral-validate:active {
+    transform: scale(0.97);
+}
+
+/* Unilateral Completed Results */
+.unilateral-completed-results {
+    display: flex;
+    gap: 10px;
+}
+
+.unilateral-completed-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg);
+}
+
+.unilateral-completed-side.side-left {
+    border-left: 4px solid #3b82f6;
+}
+
+.unilateral-completed-side.side-right {
+    border-left: 4px solid #ef4444;
+}
+
+.unilateral-completed-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.unilateral-completed-dot.dot-left {
+    background: #3b82f6;
+}
+
+.unilateral-completed-dot.dot-right {
+    background: #ef4444;
+}
+
+.unilateral-completed-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.unilateral-completed-value {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--success);
+    margin-left: auto;
 }
 
 /* ===== Utilities ===== */
