@@ -20,7 +20,54 @@ class App {
         await initializeData();
         await this.loadCurrentWorkout();
         this.bindEvents();
+        this.setupVisibilityHandler();
         await this.renderHome();
+    }
+    
+    setupVisibilityHandler() {
+        // Handle app returning from background on iOS
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                this.onAppResume();
+            }
+        });
+        
+        // Also handle page focus (alternative event)
+        window.addEventListener('focus', () => {
+            this.onAppResume();
+        });
+    }
+    
+    onAppResume() {
+        // Check if there's an active timer in localStorage
+        const timerEndTime = localStorage.getItem('restTimerEndTime');
+        if (timerEndTime) {
+            const remaining = Math.max(0, Math.ceil((parseInt(timerEndTime) - Date.now()) / 1000));
+            
+            if (remaining > 0 && this.currentScreen === 'exercise') {
+                // Timer still running, restore it
+                this.restTimerEndTime = parseInt(timerEndTime);
+                this.restTimeTotal = remaining; // Approximate, but good enough
+                
+                // Show timer overlay if not already visible
+                const overlay = document.getElementById('timer-overlay');
+                if (!overlay.classList.contains('active')) {
+                    overlay.classList.add('active');
+                }
+                
+                // Restart the update loop if not running
+                if (!this.restTimer) {
+                    this.updateRestTimer();
+                    this.restTimer = setInterval(() => this.updateRestTimer(), 100);
+                }
+            } else if (remaining <= 0) {
+                // Timer expired while app was in background
+                localStorage.removeItem('restTimerEndTime');
+                if (this.currentScreen === 'exercise') {
+                    this.onTimerComplete();
+                }
+            }
+        }
     }
 
     // ===== Navigation =====
@@ -692,6 +739,9 @@ class App {
         
         this.renderSeries();
         this.showScreen('exercise');
+        
+        // Check if there's an active timer from before
+        this.onAppResume();
     }
     
     // ===== SuperSet Exercise Screen =====
@@ -738,6 +788,9 @@ class App {
         
         this.renderSupersetSeries();
         this.showScreen('exercise');
+        
+        // Check if there's an active timer from before
+        this.onAppResume();
     }
     
     async loadSupersetLogbook() {
@@ -1263,41 +1316,49 @@ class App {
 
     // ===== Rest Timer =====
     startRestTimer(seconds) {
-        this.restTimeLeft = seconds;
+        // Store end timestamp instead of countdown
         this.restTimeTotal = seconds;
+        this.restTimerEndTime = Date.now() + (seconds * 1000);
+        localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+        
         const overlay = document.getElementById('timer-overlay');
         const countdown = document.getElementById('timer-countdown');
-        const progressRing = document.getElementById('timer-ring-progress');
         
         overlay.classList.add('active');
-        countdown.textContent = this.restTimeLeft;
         countdown.classList.remove('ending');
-        
-        // Update progress ring
-        this.updateTimerProgress();
         
         // Vibrate on start (if supported)
         if (navigator.vibrate) {
             navigator.vibrate(50);
         }
-
-        this.restTimer = setInterval(() => {
-            this.restTimeLeft--;
-            countdown.textContent = this.restTimeLeft;
-            this.updateTimerProgress();
-            
-            // Add ending animation when < 5 seconds
-            if (this.restTimeLeft <= 5 && this.restTimeLeft > 0) {
-                countdown.classList.add('ending');
-                if (navigator.vibrate) {
-                    navigator.vibrate(30);
-                }
+        
+        // Start update loop
+        this.updateRestTimer();
+        this.restTimer = setInterval(() => this.updateRestTimer(), 100);
+    }
+    
+    updateRestTimer() {
+        const countdown = document.getElementById('timer-countdown');
+        const remaining = Math.max(0, Math.ceil((this.restTimerEndTime - Date.now()) / 1000));
+        this.restTimeLeft = remaining;
+        
+        countdown.textContent = remaining;
+        this.updateTimerProgress();
+        
+        // Add ending animation when < 5 seconds
+        if (remaining <= 5 && remaining > 0) {
+            countdown.classList.add('ending');
+            if (navigator.vibrate && !this.lastVibrateAt) {
+                navigator.vibrate(30);
+                this.lastVibrateAt = Date.now();
+            } else if (this.lastVibrateAt && Date.now() - this.lastVibrateAt > 1000) {
+                this.lastVibrateAt = null;
             }
-
-            if (this.restTimeLeft <= 0) {
-                this.onTimerComplete();
-            }
-        }, 1000);
+        }
+        
+        if (remaining <= 0) {
+            this.onTimerComplete();
+        }
     }
     
     updateTimerProgress() {
@@ -1333,15 +1394,19 @@ class App {
             clearInterval(this.restTimer);
             this.restTimer = null;
         }
+        this.restTimerEndTime = null;
+        this.lastVibrateAt = null;
+        localStorage.removeItem('restTimerEndTime');
         document.getElementById('timer-overlay').classList.remove('active');
         document.getElementById('timer-countdown').classList.remove('ending');
     }
 
     adjustRestTimer(seconds) {
+        this.restTimerEndTime = this.restTimerEndTime + (seconds * 1000);
+        localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
         this.restTimeLeft = Math.max(0, this.restTimeLeft + seconds);
         this.restTimeTotal = Math.max(this.restTimeTotal, this.restTimeLeft);
-        document.getElementById('timer-countdown').textContent = this.restTimeLeft;
-        this.updateTimerProgress();
+        this.updateRestTimer();
     }
 
     // ===== Exercise Summary =====
@@ -1500,8 +1565,14 @@ class App {
 
         // Update next session index
         const sessions = await db.getSessions();
-        let nextIndex = await db.getSetting('nextSessionIndex') || 0;
-        nextIndex = (nextIndex + 1) % sessions.length;
+        const currentIndex = sessions.findIndex(s => s.id === this.currentSession.id);
+        let nextIndex;
+        if (currentIndex >= 0) {
+            nextIndex = (currentIndex + 1) % sessions.length;
+        } else {
+            const storedIndex = await db.getSetting('nextSessionIndex') || 0;
+            nextIndex = (storedIndex + 1) % sessions.length;
+        }
         await db.setSetting('nextSessionIndex', nextIndex);
 
         // Update weekly workouts

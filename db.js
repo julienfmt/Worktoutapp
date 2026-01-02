@@ -8,6 +8,8 @@ class Database {
     }
 
     async init() {
+        await this.requestPersistentStorage();
+        
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -59,6 +61,39 @@ class Database {
                 }
             };
         });
+    }
+
+    async requestPersistentStorage() {
+        if (navigator.storage && navigator.storage.persist) {
+            try {
+                const isPersisted = await navigator.storage.persisted();
+                
+                if (!isPersisted) {
+                    const granted = await navigator.storage.persist();
+                    if (granted) {
+                        console.log("✅ Stockage persistant accordé");
+                    } else {
+                        console.warn("❌ Stockage persistant refusé - Les données peuvent être supprimées après 7 jours d'inactivité sur iOS");
+                        console.warn("💡 Conseil: Installez l'app sur l'écran d'accueil pour garantir la persistance");
+                    }
+                } else {
+                    console.log("✅ Stockage déjà persistant");
+                }
+                
+                // Afficher les informations sur le quota de stockage
+                if (navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    const quotaMB = (estimate.quota / 1024 / 1024).toFixed(2);
+                    const usageMB = (estimate.usage / 1024 / 1024).toFixed(2);
+                    const availableMB = ((estimate.quota - estimate.usage) / 1024 / 1024).toFixed(2);
+                    console.log(`📊 Quota: ${quotaMB}MB | Utilisé: ${usageMB}MB | Disponible: ${availableMB}MB`);
+                }
+            } catch (error) {
+                console.error("Erreur lors de la demande de stockage persistant:", error);
+            }
+        } else {
+            console.warn("⚠️ API Storage non disponible - La persistance ne peut pas être garantie");
+        }
     }
 
     // Generic CRUD operations
@@ -169,6 +204,34 @@ class Database {
 
     async clearCurrentWorkout() {
         return this.clear('currentWorkout');
+    }
+
+    async getStorageInfo() {
+        const info = {
+            isPersisted: false,
+            quota: null,
+            usage: null,
+            available: null
+        };
+
+        if (navigator.storage) {
+            try {
+                if (navigator.storage.persisted) {
+                    info.isPersisted = await navigator.storage.persisted();
+                }
+                
+                if (navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    info.quota = estimate.quota;
+                    info.usage = estimate.usage;
+                    info.available = estimate.quota - estimate.usage;
+                }
+            } catch (error) {
+                console.error("Erreur lors de la récupération des informations de stockage:", error);
+            }
+        }
+
+        return info;
     }
 
     // Export all data
