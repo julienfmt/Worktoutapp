@@ -515,8 +515,32 @@
     <script src="data.js"></script>
     <script src="app.js"></script>
     <script>
+        // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                // Check for updates on load
+                reg.update();
+                
+                // Listen for new service worker installation
+                reg.addEventListener('updatefound', () => {
+                    const newSW = reg.installing;
+                    if (!newSW) return;
+                    
+                    newSW.addEventListener('statechange', () => {
+                        // When new SW is installed and there's an existing controller (old SW)
+                        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New version available - reload to activate it
+                            console.log('New version available - reloading...');
+                            window.location.reload();
+                        }
+                    });
+                });
+            });
+            
+            // Also check for updates every 60 seconds while app is open
+            setInterval(() => {
+                navigator.serviceWorker.ready.then(reg => reg.update());
+            }, 60000);
         }
     </script>
 </body>

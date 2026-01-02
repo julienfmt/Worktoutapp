@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const CACHE_NAME = 'muscu-v2';
+const CACHE_NAME = 'muscu-v3';
 const ASSETS = [
     './',
     './index.html',
@@ -33,8 +33,31 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network-first for index.html, cache-first for others
 self.addEventListener('fetch', (event) => {
+    const url = new URL(event.request.url);
+    
+    // Network-first strategy for index.html to get updates quickly
+    if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('/')) {
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    // Cache the new version
+                    const responseClone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseClone);
+                    });
+                    return response;
+                })
+                .catch(() => {
+                    // Fallback to cache if offline
+                    return caches.match(event.request);
+                })
+        );
+        return;
+    }
+    
+    // Cache-first for all other assets
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
