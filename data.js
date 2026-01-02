@@ -35,6 +35,147 @@ const VOLUME_THRESHOLDS = {
     maximum: 20    // Maximum récupérable (risque surentraînement au-delà)
 };
 
+// ===== ADVANCED HYPERTROPHY ENGINE - Scientific Constants =====
+// Based on: Israetel Volume Landmarks, Beardsley Effective Reps, Tuchscherer RPE
+
+// Volume Landmarks per muscle group (sets/week) - Israetel Framework
+// MV = Maintenance Volume, MEV = Minimum Effective, MAV = Maximum Adaptive, MRV = Maximum Recoverable
+const VOLUME_LANDMARKS = {
+    // Large muscle groups - higher volume tolerance
+    'pectoraux':        { MV: 6,  MEV: 10, MAV: 16, MRV: 22, recoveryDays: 2 },
+    'dos':              { MV: 8,  MEV: 12, MAV: 18, MRV: 25, recoveryDays: 2 },
+    'quadriceps':       { MV: 6,  MEV: 10, MAV: 16, MRV: 20, recoveryDays: 3 },
+    'ischio-jambiers':  { MV: 4,  MEV: 8,  MAV: 14, MRV: 18, recoveryDays: 2 },
+    'fessiers':         { MV: 4,  MEV: 8,  MAV: 14, MRV: 18, recoveryDays: 3 },
+    
+    // Medium muscle groups
+    'epaules':          { MV: 6,  MEV: 10, MAV: 16, MRV: 22, recoveryDays: 2 },
+    'trapèzes':         { MV: 4,  MEV: 8,  MAV: 12, MRV: 18, recoveryDays: 2 },
+    
+    // Small muscle groups - lower volume but higher frequency tolerance
+    'biceps':           { MV: 4,  MEV: 8,  MAV: 14, MRV: 20, recoveryDays: 1 },
+    'triceps':          { MV: 4,  MEV: 8,  MAV: 14, MRV: 18, recoveryDays: 1 },
+    'avant-bras':       { MV: 2,  MEV: 6,  MAV: 10, MRV: 14, recoveryDays: 1 },
+    'mollets':          { MV: 6,  MEV: 10, MAV: 16, MRV: 20, recoveryDays: 1 },
+    'abdominaux':       { MV: 4,  MEV: 8,  MAV: 16, MRV: 25, recoveryDays: 1 },
+    'lombaires':        { MV: 2,  MEV: 4,  MAV: 8,  MRV: 12, recoveryDays: 2 },
+    'coiffe':           { MV: 2,  MEV: 4,  MAV: 8,  MRV: 12, recoveryDays: 1 },
+    
+    // Default for unknown
+    'default':          { MV: 4,  MEV: 8,  MAV: 14, MRV: 18, recoveryDays: 2 }
+};
+
+// RPE-based Volume Scoring (Effective Reps weighting) - Beardsley Framework
+// Maps RPE to "hypertrophic value" of a set
+const RPE_VOLUME_SCORE = {
+    10:   1.2,   // Failure - maximal HTMU recruitment but high fatigue cost
+    9.5:  1.1,   // Near failure - excellent stimulus
+    9:    1.0,   // 1 RIR - peak stimulus-to-fatigue ratio
+    8.5:  0.95,  // 1-2 RIR - excellent
+    8:    0.85,  // 2 RIR - solid hypertrophy zone
+    7.5:  0.75,  // 2-3 RIR - good accumulation
+    7:    0.6,   // 3 RIR - threshold for effective volume
+    6.5:  0.35,  // 3-4 RIR - partial recruitment
+    6:    0.2,   // 4 RIR - maintenance only
+    5.5:  0.1,   // Sub-threshold
+    5:    0.0,   // Junk volume - discard
+    // Below 5 = warm-up, no hypertrophic value
+};
+
+// Axial Loading Coefficients for SFR (Stimulus-to-Fatigue Ratio)
+// Higher = more systemic fatigue per unit of stimulus
+const AXIAL_LOADING_COEFFICIENTS = {
+    // High axial load - spinal compression, high CNS demand
+    'squat': 1.8,
+    'deadlift': 2.0,
+    'good morning': 1.7,
+    'bent over row': 1.5,
+    'barbell row': 1.5,
+    
+    // Moderate axial load
+    'développé couché barre': 1.2,
+    'développé couché haltères': 1.1,
+    'développé incliné': 1.1,
+    'overhead press': 1.4,
+    'développé militaire': 1.4,
+    'dips': 1.2,
+    
+    // Low axial load - machine/supported movements
+    'leg press': 0.8,
+    'hack squat': 0.9,
+    'machine chest press': 0.7,
+    'smith machine': 0.9,
+    'leg extension': 0.5,
+    'leg curl': 0.5,
+    
+    // Isolation - minimal systemic fatigue
+    'curl': 0.4,
+    'extension': 0.4,
+    'lateral raise': 0.3,
+    'écarté': 0.3,
+    'pullover': 0.5,
+    'face pull': 0.3,
+    
+    // Default based on type
+    'compound_default': 1.0,
+    'isolation_default': 0.4
+};
+
+// Fatigue Phenotype Classification
+const FATIGUE_PHENOTYPES = {
+    HIGH_RESPONDER: {     // Fast-twitch dominant, needs more recovery
+        fatigueDecayRate: 'high',     // >25% rep drop across sets
+        optimalSetRange: [3, 4],       // Fewer sets, higher intensity
+        restMultiplier: 1.3,           // Longer rest periods
+        volumeTolerance: 0.8,          // 80% of standard MRV
+        repRangePreference: [5, 10]    // Lower reps, heavier weight
+    },
+    MODERATE_RESPONDER: { // Balanced fiber type
+        fatigueDecayRate: 'moderate',  // 15-25% rep drop
+        optimalSetRange: [3, 5],
+        restMultiplier: 1.0,
+        volumeTolerance: 1.0,
+        repRangePreference: [6, 12]
+    },
+    LOW_RESPONDER: {      // Slow-twitch dominant, high work capacity
+        fatigueDecayRate: 'low',       // <15% rep drop
+        optimalSetRange: [4, 6],       // More sets tolerated
+        restMultiplier: 0.8,           // Shorter rest OK
+        volumeTolerance: 1.2,          // Can handle more volume
+        repRangePreference: [8, 15]    // Higher reps work well
+    }
+};
+
+// Progression States for Volume Adjustment Matrix (Israetel Logic)
+const VOLUME_ADJUSTMENT_MATRIX = {
+    // [Performance Trend, Average RPE] -> Action
+    'improved_low':     { action: 'increase_load', setChange: 0, message: 'Performance up avec effort faible → Monte la charge' },
+    'improved_moderate': { action: 'add_volume', setChange: 1, message: 'Sweet spot ! Ajoute 1 série pour continuer à progresser' },
+    'improved_high':    { action: 'maintain', setChange: 0, message: 'Bonne progression mais effort max → Maintiens pour récupérer' },
+    'stalled_low':      { action: 'increase_effort', setChange: 0, message: 'Pas de progression, effort insuffisant → Pousse plus fort !' },
+    'stalled_moderate': { action: 'add_volume', setChange: 1, message: 'Plateau → Volume additionnel nécessaire' },
+    'stalled_high':     { action: 'maintain', setChange: 0, message: 'Approche du MRV → Ne rajoute pas de fatigue' },
+    'regressed_any':    { action: 'deload', setChange: -2, message: 'MRV dépassé → Deload immédiat pour surcompensation' }
+};
+
+// e1RM Lookup Table (RPE-based percentage of true 1RM)
+// Row = Reps, Column = RPE (used for prescribing load from e1RM)
+const E1RM_PERCENTAGE_TABLE = {
+    1:  { 10: 100, 9.5: 98, 9: 96, 8.5: 94, 8: 92, 7.5: 91, 7: 89 },
+    2:  { 10: 96,  9.5: 94, 9: 92, 8.5: 91, 8: 89, 7.5: 87, 7: 86 },
+    3:  { 10: 93,  9.5: 91, 9: 89, 8.5: 87, 8: 86, 7.5: 84, 7: 82 },
+    4:  { 10: 90,  9.5: 88, 9: 86, 8.5: 85, 8: 83, 7.5: 81, 7: 79 },
+    5:  { 10: 87,  9.5: 86, 9: 84, 8.5: 82, 8: 81, 7.5: 79, 7: 77 },
+    6:  { 10: 85,  9.5: 83, 9: 81, 8.5: 80, 8: 78, 7.5: 76, 7: 75 },
+    7:  { 10: 82,  9.5: 81, 9: 79, 8.5: 77, 8: 76, 7.5: 74, 7: 72 },
+    8:  { 10: 80,  9.5: 78, 9: 77, 8.5: 75, 8: 74, 7.5: 72, 7: 70 },
+    9:  { 10: 78,  9.5: 76, 9: 75, 8.5: 73, 8: 72, 7.5: 70, 7: 68 },
+    10: { 10: 75,  9.5: 74, 9: 72, 8.5: 71, 8: 70, 7.5: 68, 7: 67 },
+    12: { 10: 70,  9.5: 69, 9: 68, 8.5: 66, 8: 65, 7.5: 63, 7: 62 },
+    15: { 10: 65,  9.5: 64, 9: 62, 8.5: 61, 8: 60, 7.5: 58, 7: 57 },
+    20: { 10: 58,  9.5: 57, 9: 55, 8.5: 54, 8: 53, 7.5: 51, 7: 50 }
+};
+
 const INITIAL_SESSIONS = [
     {
         id: 'bras-a',

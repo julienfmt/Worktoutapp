@@ -258,7 +258,7 @@ class GamificationEngine {
         setTimeout(() => {
             this.showAchievement(
                 '🎉',
-                'Séance terminée !',
+                'Séance terminée',
                 `${sessionName} • ${stats.totalSets} séries • ${stats.duration} min`,
                 stats.xpGain
             );
@@ -711,7 +711,11 @@ class App {
         if (usedMuscleGroups.size === 0) {
             container.innerHTML = `
                 <div class="muscle-stats-empty" style="grid-column: 1 / -1;">
-                    <div class="muscle-stats-empty-icon">💪</div>
+                    <svg class="muscle-stats-empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>
+                        <line x1="16" y1="8" x2="2" y2="22"/>
+                        <line x1="17.5" y1="15" x2="9" y2="15"/>
+                    </svg>
                     <div>Configure les groupes musculaires dans tes exercices pour voir les stats</div>
                 </div>
             `;
@@ -738,21 +742,36 @@ class App {
             const hasVolume = volume > 0;
             const isOptimal = volume >= VOLUME_THRESHOLDS.minimum && volume <= VOLUME_THRESHOLDS.optimal;
             const isExcessive = volume > VOLUME_THRESHOLDS.maximum;
+            const isLow = hasVolume && volume < VOLUME_THRESHOLDS.minimum;
             
             const progressPercent = Math.min((volume / maxSets) * 100, 100);
             
             let statusClass = '';
-            if (isExcessive) statusClass = 'excessive';
-            else if (isOptimal) statusClass = 'optimal';
-            else if (hasVolume) statusClass = 'has-volume';
+            let statusLabel = '';
+            if (isExcessive) {
+                statusClass = 'excessive';
+                statusLabel = 'Excessif';
+            } else if (isOptimal) {
+                statusClass = 'optimal';
+                statusLabel = 'Optimal';
+            } else if (isLow) {
+                statusClass = 'has-volume low';
+                statusLabel = 'Insuffisant';
+            } else if (hasVolume) {
+                statusClass = 'has-volume';
+                statusLabel = '';
+            }
             
             html += `
                 <div class="muscle-stat-item ${statusClass}">
-                    <div class="muscle-stat-top">
-                        <span class="muscle-stat-icon">${muscleInfo.icon}</span>
-                        <span class="muscle-stat-sets">${volume}</span>
+                    <div class="muscle-stat-header">
+                        <span class="muscle-stat-name">${muscleInfo.name}</span>
+                        ${statusLabel ? `<span class="muscle-stat-status">${statusLabel}</span>` : ''}
                     </div>
-                    <div class="muscle-stat-name">${muscleInfo.name}</div>
+                    <div class="muscle-stat-value">
+                        <span class="muscle-stat-sets">${volume}</span>
+                        <span class="muscle-stat-unit">séries</span>
+                    </div>
                     <div class="muscle-stat-bar">
                         <div class="muscle-stat-fill" style="width: ${progressPercent}%"></div>
                     </div>
@@ -1529,6 +1548,8 @@ class App {
         this.currentSlot = await db.get('slots', slotId);
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
+        this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
+        this.userOverrideSets = false; // Reset deload override when changing exercise
         
         if (!this.currentSlot) return;
 
@@ -2006,28 +2027,58 @@ class App {
         const advice = this.currentCoachingAdvice;
         const coachingSuggestedWeight = advice && advice.suggestedWeight !== '?' ? advice.suggestedWeight : null;
         
+        // FLEXIBLE SETS: Check if coaching suggests fewer sets (deload, reactive_deload, etc.)
+        const programmedSets = this.currentSlot.sets;
+        const coachingSuggestedSets = advice?.suggestedSets || advice?.deloadSets;
+        const isDeloadAdvice = advice?.type === 'deload' || advice?.type === 'reactive_deload' || advice?.type === 'deload_mini' || advice?.isDeload;
+        
+        // Use suggested sets if deload advice AND user hasn't chosen to continue
+        const userWantsContinue = this.userOverrideSets === true;
+        const effectiveSets = (isDeloadAdvice && coachingSuggestedSets && !userWantsContinue)
+            ? Math.min(coachingSuggestedSets, programmedSets) 
+            : programmedSets;
+        
+        // Store for use in completion check
+        this.currentEffectiveSets = effectiveSets;
+        this.coachingSuggestedSets = coachingSuggestedSets;
+        this.isDeloadAdvice = isDeloadAdvice;
+        
         // Use dynamic target reps from genTargetReps
-        const { repsMin, repsMax, sets } = this.currentSlot;
-        const targetRepsArray = this.genTargetReps(repsMin, repsMax, sets);
+        const { repsMin, repsMax } = this.currentSlot;
+        const targetRepsArray = this.genTargetReps(repsMin, repsMax, effectiveSets);
         const getTargetReps = (setIndex) => targetRepsArray[setIndex] || repsMax;
 
-        for (let i = 0; i < this.currentSlot.sets; i++) {
+        for (let i = 0; i < effectiveSets; i++) {
             const setData = slotData.sets[i] || {};
             const isCompleted = setData.completed;
             
-            // Get suggested weight: coaching advice > last session > previous set
+            // Get suggested weight: intra-session adjustment > coaching advice > last session > previous set
             let suggestedWeight = '';
+            const isNextIncompleteSet = !isCompleted && slotData.sets.filter(s => s?.completed).length === i;
+            
             if (!setData.weight && !isCompleted) {
-                if (coachingSuggestedWeight && i === 0) {
-                    // Use coaching suggestion for first set
+                // PRIORITY 1: Intra-session RPE-based adjustment for the NEXT set only
+                if (isNextIncompleteSet && this.nextSetSuggestedWeight) {
+                    suggestedWeight = this.nextSetSuggestedWeight;
+                }
+                // PRIORITY 2: Coaching suggestion for first set
+                else if (coachingSuggestedWeight && i === 0) {
                     suggestedWeight = coachingSuggestedWeight;
-                } else if (lastSets[i]) {
-                    suggestedWeight = lastSets[i].weight;
-                } else if (i > 0 && slotData.sets[i-1]?.weight) {
+                }
+                // PRIORITY 3: Use weight from previous set in CURRENT session (maintain momentum)
+                else if (i > 0 && slotData.sets[i-1]?.weight) {
                     suggestedWeight = slotData.sets[i-1].weight;
-                } else if (coachingSuggestedWeight) {
+                }
+                // PRIORITY 4: Use last session's weight for this specific set
+                else if (lastSets[i]) {
+                    suggestedWeight = lastSets[i].weight;
+                }
+                // PRIORITY 5: Coaching suggestion as fallback
+                else if (coachingSuggestedWeight) {
                     suggestedWeight = coachingSuggestedWeight;
-                } else if (lastSets.length > 0) {
+                }
+                // PRIORITY 6: First set from last session
+                else if (lastSets.length > 0) {
                     suggestedWeight = lastSets[0].weight;
                 }
             }
@@ -2084,11 +2135,37 @@ class App {
             container.appendChild(card);
         }
 
-        // Check if exercise is complete
+        // Add "Continue with more sets" button if in deload mode and not all programmed sets shown
         const completedSets = slotData.sets.filter(s => s.completed).length;
-        if (completedSets === this.currentSlot.sets) {
+        if (isDeloadAdvice && coachingSuggestedSets && effectiveSets < programmedSets && !userWantsContinue) {
+            const continueCard = document.createElement('div');
+            continueCard.className = 'series-continue-card';
+            continueCard.innerHTML = `
+                <div class="series-continue-info">
+                    <span class="series-continue-label">Volume suggéré atteint</span>
+                    <span class="series-continue-sublabel">${effectiveSets}/${programmedSets} séries (deload)</span>
+                </div>
+                <button class="btn btn-continue-sets" id="btn-continue-sets">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Continuer quand même
+                </button>
+            `;
+            container.appendChild(continueCard);
+        }
+
+        // Check if exercise is complete (use effective sets, not programmed sets)
+        const targetSets = this.currentEffectiveSets || this.currentSlot.sets;
+        if (completedSets >= targetSets) {
             this.showExerciseSummary();
         }
+    }
+    
+    continueSetsOverride() {
+        this.userOverrideSets = true;
+        this.renderSeries();
     }
 
     async completeSet(setIndex) {
@@ -2134,9 +2211,10 @@ class App {
 
         this.renderSeries();
 
-        // Check if all sets are complete
+        // Check if all sets are complete (use effective sets for deload flexibility)
         const completedSets = slotData.sets.filter(s => s.completed).length;
-        if (completedSets === this.currentSlot.sets) {
+        const targetSets = this.currentEffectiveSets || this.currentSlot.sets;
+        if (completedSets >= targetSets) {
             // Show summary after a brief delay
             setTimeout(() => this.showExerciseSummary(), 300);
         } else {
@@ -2276,14 +2354,24 @@ class App {
         
         const rpe = parseInt(document.getElementById('rpe-slider').value);
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        const reps = this.lastCompletedSetReps;
+        const weight = this.lastCompletedSetWeight;
+        const isLastSet = this.lastCompletedSetIndex >= this.currentSlot.sets - 1;
         
         if (slotData && slotData.sets[this.lastCompletedSetIndex]) {
             slotData.sets[this.lastCompletedSetIndex].rpe = rpe;
             await db.saveCurrentWorkout(this.currentWorkout);
             
-            // === AUTO BACK-OFF: After set 1, if RPE >= 9, suggest weight reduction ===
-            if (this.lastCompletedSetIndex === 0 && rpe >= 9) {
-                await this.checkAutoBackoff(rpe);
+            // === INTRA-SESSION WEIGHT ADJUSTMENTS ===
+            if (!isLastSet) {
+                // HIGH RPE (>= 9): Suggest weight reduction for next sets
+                if (rpe >= 9) {
+                    await this.checkAutoBackoff(rpe);
+                }
+                // LOW RPE (<= 7) + high reps: Suggest weight increase for next set
+                else if (rpe <= 7 && reps >= this.currentSlot.repsMax - 1) {
+                    await this.suggestIntraSessionIncrease(rpe, reps, weight);
+                }
             }
             
             // === HOT/COLD DAY DETECTION after set 1 ===
@@ -2293,15 +2381,118 @@ class App {
         }
     }
     
+    async suggestIntraSessionIncrease(rpe, reps, weight) {
+        const isIsolation = this.currentSlot?.type === 'isolation';
+        const baseIncrement = (await db.getSetting('weightIncrement')) ?? 2;
+        const increment = isIsolation ? Math.min(baseIncrement, 1) : baseIncrement;
+        
+        // === SMART INTRA-SESSION ANALYSIS ===
+        // Check what the coaching advice suggested as the target weight
+        const coachingWeight = this.currentCoachingAdvice?.suggestedWeight;
+        const currentSetIndex = this.lastCompletedSetIndex || 0;
+        
+        // Don't suggest increase if this is set 1 and we're already above coaching suggestion
+        if (currentSetIndex === 0 && coachingWeight && typeof coachingWeight === 'number' && weight >= coachingWeight) {
+            // Already at or above target - be conservative, don't suggest increase after just 1 set
+            return;
+        }
+        
+        // Check if previous sets in this session had issues (dropped weight)
+        const currentSets = this.currentWorkout?.sets || [];
+        const completedSets = currentSets.filter(s => s.completed);
+        
+        // If this is not the first set, check the pattern
+        if (completedSets.length >= 2) {
+            const weights = completedSets.map(s => s.weight);
+            const hasDroppedBefore = weights.some((w, i) => i > 0 && w < weights[i-1]);
+            
+            // If user already dropped weight this session, don't suggest increasing
+            if (hasDroppedBefore) {
+                return;
+            }
+        }
+        
+        // Calculate suggested weight with conservative increment
+        let suggestedWeight = Math.round((weight + increment) * 2) / 2;
+        
+        // === CEILING CHECK ===
+        // Don't suggest going above what caused problems before
+        if (coachingWeight && typeof coachingWeight === 'number') {
+            // If coaching suggested a specific weight, don't exceed it much
+            const maxSuggested = coachingWeight + increment;
+            suggestedWeight = Math.min(suggestedWeight, maxSuggested);
+        }
+        
+        // Don't suggest if it's the same as current
+        if (suggestedWeight <= weight) return;
+        
+        // STORE the suggested weight for next set so renderSeries can use it
+        this.nextSetSuggestedWeight = suggestedWeight;
+        
+        // Re-render series to show updated suggestion
+        this.renderSeries();
+        
+        // Show suggestion toast
+        const existing = document.querySelector('.coach-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'coach-toast hot';
+        toast.innerHTML = `
+            <span class="coach-toast-icon">🔥</span>
+            <span class="coach-toast-text">RPE ${rpe} avec ${reps} reps = trop facile ! Tente <strong>${suggestedWeight}kg</strong> sur la prochaine série</span>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => toast.classList.add('visible'), 50);
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+    }
+    
     async checkAutoBackoff(rpe) {
         const isCompound = this.currentExerciseType === 'compound';
         const weight = this.lastCompletedSetWeight;
+        const reps = this.lastCompletedSetReps || 0;
+        const slot = this.currentSlot;
         
         // Only suggest back-off for compound exercises or very high RPE
         if (!isCompound && rpe < 10) return;
         
-        const backoffPercent = 10;
-        const suggestedWeight = Math.round(weight * (1 - backoffPercent / 100) * 2) / 2;
+        // === SMART BACKOFF CALCULATION ===
+        // Base backoff on how far below target reps we are
+        let backoffPercent = 10; // Default
+        
+        if (slot) {
+            const repsDeficit = slot.repsMin - reps;
+            if (repsDeficit > 3) {
+                backoffPercent = 15; // Big deficit = bigger backoff
+            } else if (repsDeficit <= 0) {
+                backoffPercent = 5; // Hit target but RPE too high = small backoff
+            }
+        }
+        
+        // Calculate suggested weight
+        let suggestedWeight = Math.round(weight * (1 - backoffPercent / 100) * 2) / 2;
+        
+        // === FLOOR CHECK ===
+        // Don't suggest going below what worked well before
+        const coachingWeight = this.currentCoachingAdvice?.suggestedWeight;
+        if (coachingWeight && typeof coachingWeight === 'number') {
+            // Don't go more than 10% below coaching suggestion
+            const minSuggested = Math.round(coachingWeight * 0.9 * 2) / 2;
+            suggestedWeight = Math.max(suggestedWeight, minSuggested);
+        }
+        
+        // Don't suggest if it's the same as current
+        if (suggestedWeight >= weight) return;
+        
+        // STORE the suggested weight for next set so renderSeries can use it
+        this.nextSetSuggestedWeight = suggestedWeight;
+        
+        // Re-render series to show updated suggestion
+        this.renderSeries();
         
         // Show subtle inline suggestion (not a modal)
         this.showBackoffSuggestion(suggestedWeight, rpe);
@@ -3633,6 +3824,12 @@ class App {
             const doneBtn = e.target.closest('.btn-series-done');
             if (doneBtn) {
                 this.completeSet(parseInt(doneBtn.dataset.setIndex));
+                return;
+            }
+            
+            const continueBtn = e.target.closest('#btn-continue-sets');
+            if (continueBtn) {
+                this.continueSetsOverride();
             }
         };
 
@@ -4082,6 +4279,577 @@ class App {
         await this.renderStreakSystem();
     }
     
+    // ===== ADVANCED HYPERTROPHY ENGINE =====
+    // Bio-Algorithmic Coaching System based on:
+    // - Beardsley Effective Reps Model
+    // - Israetel Volume Landmarks (MEV/MRV/MAV)
+    // - Tuchscherer RPE/e1RM Autoregulation
+    // - Stimulus-to-Fatigue Ratio Optimization
+    
+    // === CORE: Calculate e1RM with RPE-awareness (Tuchscherer Protocol) ===
+    // More accurate than basic Epley formula - accounts for submaximal effort
+    calculateE1RM(weight, reps, rpe = 10) {
+        if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
+        
+        // RIR = Reps In Reserve
+        const rir = Math.max(0, 10 - (rpe || 10));
+        const totalPotentialReps = reps + rir;
+        
+        // Modified Brzycki formula for RPE context
+        // e1RM = Weight / (1.0278 - 0.0278 × TotalReps)
+        if (totalPotentialReps >= 37) {
+            // Formula breaks down above ~37 reps, use linear approximation
+            return weight * (1 + totalPotentialReps * 0.025);
+        }
+        
+        const e1rm = weight / (1.0278 - 0.0278 * totalPotentialReps);
+        return Math.round(e1rm * 10) / 10; // Round to 0.1kg
+    }
+    
+    // === Get target load from e1RM for specific reps/RPE ===
+    getTargetLoadFromE1RM(e1rm, targetReps, targetRpe = 8) {
+        if (!e1rm || e1rm <= 0) return null;
+        
+        // Find closest rep count in table
+        const repKeys = Object.keys(E1RM_PERCENTAGE_TABLE).map(Number).sort((a, b) => a - b);
+        let closestReps = repKeys[0];
+        for (const r of repKeys) {
+            if (Math.abs(r - targetReps) < Math.abs(closestReps - targetReps)) {
+                closestReps = r;
+            }
+        }
+        
+        // Get percentage from table
+        const rpeKey = Math.min(10, Math.max(7, Math.round(targetRpe * 2) / 2));
+        const percentage = E1RM_PERCENTAGE_TABLE[closestReps]?.[rpeKey] || 70;
+        
+        const targetLoad = e1rm * (percentage / 100);
+        return Math.round(targetLoad * 2) / 2; // Round to 0.5kg
+    }
+    
+    // === Calculate Effective Volume Score for a set (Beardsley Framework) ===
+    calculateEffectiveVolumeScore(reps, rpe, weight = null, e1rmRef = null) {
+        if (rpe == null || rpe < 5) return 0; // Below threshold = junk volume
+        
+        // Get base score from RPE table
+        const rpeKey = Math.round(rpe * 2) / 2; // Round to nearest 0.5
+        let baseScore = RPE_VOLUME_SCORE[rpeKey];
+        if (baseScore === undefined) {
+            // Interpolate if not exact match
+            const lowerKey = Math.floor(rpe * 2) / 2;
+            const upperKey = Math.ceil(rpe * 2) / 2;
+            const lowerScore = RPE_VOLUME_SCORE[lowerKey] || 0;
+            const upperScore = RPE_VOLUME_SCORE[upperKey] || 0;
+            baseScore = (lowerScore + upperScore) / 2;
+        }
+        
+        // Heavy load bonus: >80% 1RM = all reps recruit HTMUs from rep 1
+        if (weight && e1rmRef && e1rmRef > 0) {
+            const intensity = weight / e1rmRef;
+            if (intensity >= 0.85) {
+                // Very heavy: full credit regardless of RPE (mechanical tension dominant)
+                baseScore = Math.max(baseScore, 1.0);
+            } else if (intensity >= 0.75) {
+                // Moderately heavy: bonus to score
+                baseScore = Math.min(1.2, baseScore * 1.15);
+            }
+        }
+        
+        // Low rep sets with high effort = full effective
+        if (reps <= 5 && rpe >= 7) {
+            baseScore = Math.max(baseScore, 1.0);
+        }
+        
+        return baseScore;
+    }
+    
+    // === Calculate total Effective Sets from a workout ===
+    calculateEffectiveSets(sets, e1rmRef = null) {
+        if (!sets || sets.length === 0) return { effectiveSets: 0, details: [] };
+        
+        let totalEffective = 0;
+        const details = [];
+        
+        for (const set of sets) {
+            const score = this.calculateEffectiveVolumeScore(
+                set.reps, 
+                set.rpe, 
+                set.weight, 
+                e1rmRef
+            );
+            totalEffective += score;
+            details.push({
+                reps: set.reps,
+                weight: set.weight,
+                rpe: set.rpe,
+                effectiveScore: score,
+                classification: score >= 0.8 ? 'effective' : score >= 0.5 ? 'partial' : 'junk'
+            });
+        }
+        
+        return { 
+            effectiveSets: Math.round(totalEffective * 10) / 10,
+            details 
+        };
+    }
+    
+    // === SANDBAGGING DETECTION (Ghost Variables Inference) ===
+    detectSandbagging(sets, historicalE1RM = null) {
+        const flags = {
+            detected: false,
+            confidence: 0,
+            reasons: [],
+            suggestedAction: null
+        };
+        
+        if (!sets || sets.length < 2) return flags;
+        
+        // Heuristic 1: Linearity Check
+        // If all sets are identical (same reps, same weight, all RPE 10), it's suspicious
+        const allSetsIdentical = sets.every(s => 
+            s.reps === sets[0].reps && 
+            Math.abs(s.weight - sets[0].weight) < 1
+        );
+        const allRpe10 = sets.every(s => s.rpe >= 9.5);
+        
+        if (allSetsIdentical && allRpe10 && sets.length >= 3) {
+            // Physiologically impossible to do 3+ identical sets all at RPE 10
+            flags.detected = true;
+            flags.confidence += 0.4;
+            flags.reasons.push('Performance identique sur toutes les séries avec RPE 10 = physiologiquement improbable');
+        }
+        
+        // Heuristic 2: No rep drop-off despite "max effort"
+        if (allRpe10) {
+            const firstReps = sets[0]?.reps || 0;
+            const lastReps = sets[sets.length - 1]?.reps || 0;
+            const expectedDrop = firstReps * 0.15; // Expect at least 15% drop at true failure
+            
+            if (firstReps - lastReps < expectedDrop && sets.length >= 3) {
+                flags.detected = true;
+                flags.confidence += 0.3;
+                flags.reasons.push(`Aucune baisse de reps malgré RPE 10 (attendu: -${Math.round(expectedDrop)} reps)`);
+            }
+        }
+        
+        // Heuristic 3: e1RM deviation from historical
+        if (historicalE1RM && historicalE1RM > 0) {
+            const currentE1RM = this.calculateE1RM(sets[0].weight, sets[0].reps, sets[0].rpe);
+            const deviation = (historicalE1RM - currentE1RM) / historicalE1RM;
+            
+            if (deviation > 0.15 && sets[0].rpe >= 9) {
+                // Current performance >15% below historical despite "max effort"
+                flags.confidence += 0.3;
+                flags.reasons.push(`e1RM actuel ${Math.round(deviation * 100)}% sous ton record malgré effort max`);
+                
+                // Could be sandbagging OR genuine fatigue - check trend
+                if (flags.detected) {
+                    flags.suggestedAction = 'amrap_test';
+                }
+            }
+        }
+        
+        // Final assessment
+        if (flags.confidence >= 0.5) {
+            flags.detected = true;
+            flags.suggestedAction = flags.suggestedAction || 'force_linear_increase';
+        }
+        
+        return flags;
+    }
+    
+    // === FATIGUE PHENOTYPE INFERENCE ===
+    inferFatiguePhenotype(workoutHistory) {
+        if (!workoutHistory || workoutHistory.length < 3) {
+            return { phenotype: 'MODERATE_RESPONDER', confidence: 'low', data: null };
+        }
+        
+        // Analyze rep drop-off patterns across multiple sessions
+        const dropOffRates = [];
+        
+        for (const workout of workoutHistory.slice(0, 10)) {
+            if (!workout.sets || workout.sets.length < 2) continue;
+            
+            const firstReps = workout.sets[0]?.reps || 0;
+            const lastReps = workout.sets[workout.sets.length - 1]?.reps || 0;
+            
+            if (firstReps > 0) {
+                const dropRate = (firstReps - lastReps) / firstReps;
+                dropOffRates.push(dropRate);
+            }
+        }
+        
+        if (dropOffRates.length < 3) {
+            return { phenotype: 'MODERATE_RESPONDER', confidence: 'low', data: null };
+        }
+        
+        const avgDropOff = dropOffRates.reduce((a, b) => a + b, 0) / dropOffRates.length;
+        
+        let phenotype, confidence;
+        if (avgDropOff > 0.25) {
+            phenotype = 'HIGH_RESPONDER';
+            confidence = avgDropOff > 0.35 ? 'high' : 'moderate';
+        } else if (avgDropOff < 0.15) {
+            phenotype = 'LOW_RESPONDER';
+            confidence = avgDropOff < 0.10 ? 'high' : 'moderate';
+        } else {
+            phenotype = 'MODERATE_RESPONDER';
+            confidence = 'moderate';
+        }
+        
+        return {
+            phenotype,
+            confidence,
+            data: {
+                avgDropOff: Math.round(avgDropOff * 100),
+                samples: dropOffRates.length,
+                recommendation: FATIGUE_PHENOTYPES[phenotype]
+            }
+        };
+    }
+    
+    // === STIMULUS-TO-FATIGUE RATIO (SFR) CALCULATION ===
+    calculateSFR(exerciseName, sets, e1rmRef = null) {
+        const effectiveData = this.calculateEffectiveSets(sets, e1rmRef);
+        const stimulus = effectiveData.effectiveSets;
+        
+        if (stimulus <= 0) return { sfr: 0, stimulus: 0, fatigue: 0 };
+        
+        // Get axial loading coefficient
+        let axialCoeff = AXIAL_LOADING_COEFFICIENTS['isolation_default'];
+        const nameLower = (exerciseName || '').toLowerCase();
+        
+        for (const [key, coeff] of Object.entries(AXIAL_LOADING_COEFFICIENTS)) {
+            if (nameLower.includes(key.toLowerCase())) {
+                axialCoeff = coeff;
+                break;
+            }
+        }
+        
+        // If compound type not found in name, use default
+        if (axialCoeff === AXIAL_LOADING_COEFFICIENTS['isolation_default']) {
+            // Check if it's likely a compound movement
+            const compoundKeywords = ['développé', 'squat', 'press', 'row', 'dips', 'tirage', 'soulevé'];
+            if (compoundKeywords.some(kw => nameLower.includes(kw))) {
+                axialCoeff = AXIAL_LOADING_COEFFICIENTS['compound_default'];
+            }
+        }
+        
+        // Calculate average intensity
+        const avgWeight = sets.reduce((sum, s) => sum + (s.weight || 0), 0) / sets.length;
+        const intensityFactor = e1rmRef ? (avgWeight / e1rmRef) : 0.75;
+        
+        // Fatigue = Effective Sets × Axial Coeff × Intensity
+        const fatigue = stimulus * axialCoeff * intensityFactor;
+        
+        // SFR = Stimulus / Fatigue (higher is better)
+        const sfr = fatigue > 0 ? stimulus / fatigue : 0;
+        
+        return {
+            sfr: Math.round(sfr * 100) / 100,
+            stimulus: Math.round(stimulus * 10) / 10,
+            fatigue: Math.round(fatigue * 10) / 10,
+            axialCoeff,
+            interpretation: sfr >= 1.5 ? 'excellent' : sfr >= 1.0 ? 'good' : sfr >= 0.7 ? 'moderate' : 'poor'
+        };
+    }
+    
+    // === VOLUME ADJUSTMENT MATRIX (Israetel Logic) ===
+    getVolumeAdjustment(performanceTrend, avgRpe, currentSets, maxSets) {
+        // Determine effort level
+        let effortLevel;
+        if (avgRpe === null || avgRpe < 7) {
+            effortLevel = 'low';
+        } else if (avgRpe <= 8.5) {
+            effortLevel = 'moderate';
+        } else {
+            effortLevel = 'high';
+        }
+        
+        // Build matrix key
+        let matrixKey;
+        if (performanceTrend === 'regressed') {
+            matrixKey = 'regressed_any';
+        } else {
+            matrixKey = `${performanceTrend}_${effortLevel}`;
+        }
+        
+        const adjustment = VOLUME_ADJUSTMENT_MATRIX[matrixKey] || VOLUME_ADJUSTMENT_MATRIX['stalled_moderate'];
+        
+        // Calculate new sets respecting limits
+        let newSets = currentSets + adjustment.setChange;
+        newSets = Math.max(2, Math.min(maxSets, newSets)); // Clamp to valid range
+        
+        return {
+            ...adjustment,
+            currentSets,
+            suggestedSets: newSets,
+            atVolumeLimit: newSets >= maxSets,
+            effortLevel
+        };
+    }
+    
+    // === e1RM TREND ANALYSIS ===
+    analyzeE1RMTrend(workoutHistory, windowSize = 5) {
+        if (!workoutHistory || workoutHistory.length < 2) {
+            return { trend: 'insufficient_data', slope: 0, r2: 0 };
+        }
+        
+        // Extract e1RM from each session
+        const e1rmHistory = [];
+        for (const workout of workoutHistory.slice(0, windowSize)) {
+            if (!workout.sets || workout.sets.length === 0) continue;
+            
+            // Find best e1RM in session
+            let bestE1RM = 0;
+            for (const set of workout.sets) {
+                const e1rm = this.calculateE1RM(set.weight, set.reps, set.rpe || 8);
+                if (e1rm > bestE1RM) bestE1RM = e1rm;
+            }
+            
+            if (bestE1RM > 0) {
+                e1rmHistory.push({
+                    date: new Date(workout.date),
+                    e1rm: bestE1RM
+                });
+            }
+        }
+        
+        if (e1rmHistory.length < 2) {
+            return { trend: 'insufficient_data', slope: 0, r2: 0 };
+        }
+        
+        // Simple linear regression
+        const n = e1rmHistory.length;
+        const xValues = e1rmHistory.map((_, i) => i);
+        const yValues = e1rmHistory.map(h => h.e1rm);
+        
+        const sumX = xValues.reduce((a, b) => a + b, 0);
+        const sumY = yValues.reduce((a, b) => a + b, 0);
+        const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+        const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
+        
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const avgY = sumY / n;
+        
+        // Determine trend
+        const slopePercent = (slope / avgY) * 100;
+        let trend;
+        if (slopePercent > 1) {
+            trend = 'improving';
+        } else if (slopePercent < -1) {
+            trend = 'declining';
+        } else {
+            trend = 'stable';
+        }
+        
+        return {
+            trend,
+            slope: Math.round(slope * 100) / 100,
+            slopePercent: Math.round(slopePercent * 10) / 10,
+            currentE1RM: e1rmHistory[0]?.e1rm || 0,
+            bestE1RM: Math.max(...yValues),
+            samples: n
+        };
+    }
+    
+    // === REACTIVE DELOAD DETECTION ===
+    shouldTriggerReactiveDeload(workoutHistory, fatigueScore = null) {
+        if (!workoutHistory || workoutHistory.length < 3) return { shouldDeload: false };
+        
+        const signals = {
+            e1rmDecline: false,
+            highFatigue: false,
+            consecutiveStalls: false,
+            rpeCreep: false
+        };
+        
+        // Signal 1: e1RM declining
+        const e1rmTrend = this.analyzeE1RMTrend(workoutHistory);
+        if (e1rmTrend.trend === 'declining' && e1rmTrend.slopePercent < -2) {
+            signals.e1rmDecline = true;
+        }
+        
+        // Signal 2: High fatigue score
+        if (fatigueScore && fatigueScore.level === 'high') {
+            signals.highFatigue = true;
+        }
+        
+        // Signal 3: Consecutive stalls (3+ sessions no progress)
+        let stalls = 0;
+        for (let i = 0; i < Math.min(4, workoutHistory.length - 1); i++) {
+            const curr = workoutHistory[i];
+            const prev = workoutHistory[i + 1];
+            
+            const currBestE1RM = Math.max(...(curr.sets || []).map(s => 
+                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+            ), 0);
+            const prevBestE1RM = Math.max(...(prev.sets || []).map(s => 
+                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+            ), 0);
+            
+            if (currBestE1RM <= prevBestE1RM) stalls++;
+        }
+        if (stalls >= 3) signals.consecutiveStalls = true;
+        
+        // Signal 4: RPE creep (same weight feels harder over time)
+        if (workoutHistory.length >= 3) {
+            const recentRPEs = workoutHistory.slice(0, 3)
+                .map(w => w.avgRpe)
+                .filter(r => r != null);
+            
+            if (recentRPEs.length >= 3 && 
+                recentRPEs[0] > recentRPEs[2] + 0.5 &&
+                recentRPEs[0] >= 9) {
+                signals.rpeCreep = true;
+            }
+        }
+        
+        // Count active signals
+        const activeSignals = Object.values(signals).filter(Boolean).length;
+        
+        return {
+            shouldDeload: activeSignals >= 2,
+            urgency: activeSignals >= 3 ? 'high' : activeSignals >= 2 ? 'moderate' : 'low',
+            signals,
+            recommendation: activeSignals >= 2 
+                ? 'Deload recommandé: fatigue systémique détectée'
+                : 'Continue l\'entraînement normal'
+        };
+    }
+    
+    // === ADVANCED: Generate Comprehensive Exercise Analysis ===
+    async generateExerciseAnalysis(exerciseId, slot) {
+        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        
+        // Group by workout
+        const workoutGroups = {};
+        for (const set of allSetHistory) {
+            if (!workoutGroups[set.workoutId]) {
+                workoutGroups[set.workoutId] = {
+                    date: set.date,
+                    sets: [],
+                    totalReps: 0,
+                    maxWeight: 0
+                };
+            }
+            workoutGroups[set.workoutId].sets.push(set);
+            workoutGroups[set.workoutId].totalReps += set.reps || 0;
+            workoutGroups[set.workoutId].maxWeight = Math.max(
+                workoutGroups[set.workoutId].maxWeight, 
+                set.weight || 0
+            );
+        }
+        
+        // Process each workout
+        for (const wId of Object.keys(workoutGroups)) {
+            const w = workoutGroups[wId];
+            w.sets.sort((a, b) => a.setNumber - b.setNumber);
+            
+            const setsWithRpe = w.sets.filter(s => s.rpe != null);
+            w.hasRealRpe = setsWithRpe.length > 0;
+            w.avgRpe = setsWithRpe.length > 0 
+                ? setsWithRpe.reduce((sum, s) => sum + s.rpe, 0) / setsWithRpe.length 
+                : null;
+        }
+        
+        const workouts = Object.values(workoutGroups)
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        if (workouts.length === 0) {
+            return { hasData: false };
+        }
+        
+        // Calculate comprehensive metrics
+        const lastWorkout = workouts[0];
+        const bestE1RM = Math.max(...lastWorkout.sets.map(s => 
+            this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+        ), 0);
+        
+        // Historical best e1RM
+        let historicalBestE1RM = 0;
+        for (const w of workouts) {
+            for (const s of w.sets) {
+                const e = this.calculateE1RM(s.weight, s.reps, s.rpe || 8);
+                if (e > historicalBestE1RM) historicalBestE1RM = e;
+            }
+        }
+        
+        // Effective sets calculation
+        const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM);
+        
+        // Sandbagging check
+        const sandbaggingCheck = this.detectSandbagging(lastWorkout.sets, historicalBestE1RM);
+        
+        // SFR calculation
+        const sfrData = this.calculateSFR(
+            slot.activeExercise || slot.name, 
+            lastWorkout.sets, 
+            historicalBestE1RM
+        );
+        
+        // Fatigue phenotype
+        const phenotype = this.inferFatiguePhenotype(workouts);
+        
+        // e1RM trend
+        const e1rmTrend = this.analyzeE1RMTrend(workouts);
+        
+        // Reactive deload check
+        const fatigueScore = await this.calculateFatigueScore(exerciseId, workouts);
+        const deloadCheck = this.shouldTriggerReactiveDeload(workouts, fatigueScore);
+        
+        // Performance trend determination
+        let performanceTrend = 'stalled';
+        if (workouts.length >= 2) {
+            const currE1RM = bestE1RM;
+            const prevE1RM = Math.max(...workouts[1].sets.map(s => 
+                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+            ), 0);
+            
+            if (currE1RM > prevE1RM * 1.01) {
+                performanceTrend = 'improved';
+            } else if (currE1RM < prevE1RM * 0.97) {
+                performanceTrend = 'regressed';
+            }
+        }
+        
+        // Volume adjustment recommendation
+        const maxSets = slot.type === 'isolation' ? 6 : 5;
+        const volumeAdjustment = this.getVolumeAdjustment(
+            performanceTrend,
+            lastWorkout.avgRpe,
+            slot.sets,
+            maxSets
+        );
+        
+        return {
+            hasData: true,
+            workouts,
+            lastWorkout,
+            metrics: {
+                currentE1RM: bestE1RM,
+                historicalBestE1RM,
+                e1rmPercentOfBest: historicalBestE1RM > 0 
+                    ? Math.round((bestE1RM / historicalBestE1RM) * 100) 
+                    : 100,
+                effectiveSets: effectiveData.effectiveSets,
+                effectiveDetails: effectiveData.details,
+                avgRpe: lastWorkout.avgRpe,
+                totalSets: lastWorkout.sets.length
+            },
+            analysis: {
+                sandbagging: sandbaggingCheck,
+                sfr: sfrData,
+                phenotype,
+                e1rmTrend,
+                performanceTrend,
+                volumeAdjustment,
+                fatigueScore,
+                deloadRecommendation: deloadCheck
+            }
+        };
+    }
+
     // ===== Coaching Intelligence =====
     
     // Generate dynamic target reps based on fatigue curve
@@ -4118,10 +4886,37 @@ class App {
     }
     
     // Calculate effective reps from a single set (hypertrophy-relevant reps)
-    effectiveRepsFromSet(reps, rpe) {
+    // REFACTORED: Heavy load exception - all reps count when load >85% 1RM (low reps + high effort)
+    effectiveRepsFromSet(reps, rpe, weight = null, e1rmRef = null) {
         if (rpe == null) return null;
         const rir = Math.max(0, 10 - rpe);
-        return Math.max(0, (reps || 0) - (rir + 5));
+        const actualReps = reps || 0;
+        
+        // HEAVY LOAD EXCEPTION (Scientific basis: >80-85% 1RM recruits all motor units from rep 1)
+        // If reps ≤5 AND effort high (RIR ≤3), ALL reps are effective (mechanical tension dominant)
+        if (actualReps <= 5 && rir <= 3) {
+            return actualReps;
+        }
+        
+        // MODERATE LOAD: Check if we can estimate intensity from e1RM
+        // If working at >80% e1RM, more reps count as effective
+        if (weight && e1rmRef && e1rmRef > 0) {
+            const intensity = weight / e1rmRef;
+            if (intensity >= 0.80) {
+                // High intensity: only subtract RIR, not the +5 buffer
+                return Math.max(0, actualReps - rir);
+            }
+        }
+        
+        // STANDARD MODEL (Beardsley): Moderate/high reps, subtract lead-in reps
+        // But apply non-linear decay for very low effort (RPE < 6 = junk volume risk)
+        if (rpe < 6) {
+            // Sub-threshold effort: exponential penalty
+            const penaltyFactor = Math.pow((rpe - 4) / 2, 2); // 0 at RPE 4, 1 at RPE 6
+            return Math.max(0, Math.floor((actualReps - (rir + 5)) * Math.max(0, penaltyFactor)));
+        }
+        
+        return Math.max(0, actualReps - (rir + 5));
     }
     
     // Estimate 1RM for Hot/Cold comparison
@@ -4130,6 +4925,8 @@ class App {
     }
     
     // Determine day status (hot/cold/normal) based on first set performance
+    // REFACTORED: Widened thresholds (±2% → ±6%) to avoid false positives from normal biological variance
+    // Scientific basis: Daily 1RM variance in natural lifters is typically 5-10% (CV studies)
     getDayStatus(currentSet, avgPerformance) {
         if (!currentSet || !avgPerformance) return null;
         const cur = this.e1rm(currentSet.weight, currentSet.reps);
@@ -4137,8 +4934,17 @@ class App {
         if (ref <= 0) return null;
 
         const delta = (cur - ref) / ref;
-        if (delta > 0.02) return 'hot';   // +2% ou plus
-        if (delta < -0.02) return 'cold'; // -2% ou plus
+        
+        // WIDENED THRESHOLDS: ±6% (scientific: filters normal daily noise, flags real fatigue)
+        // "Very hot": >10% = exceptional day, can push harder
+        // "Hot": >6% = good day, optimize volume
+        // "Normal": ±6% = standard variance, stick to plan
+        // "Cold": <-6% = potential fatigue, monitor but don't panic
+        // "Very cold": <-10% = significant fatigue, consider autoregulation
+        if (delta > 0.10) return 'very_hot';
+        if (delta > 0.06) return 'hot';
+        if (delta < -0.10) return 'very_cold';
+        if (delta < -0.06) return 'cold';
         return 'normal';
     }
     
@@ -4152,18 +4958,129 @@ class App {
         return (maxW - minW) > 2; // Écart > 2kg = ramping
     }
     
-    // Get reference weight from workout (top set for ramp, first set otherwise)
+    // === SMART WORKOUT PATTERN ANALYSIS ===
+    // Analyzes a workout to understand what really happened
+    analyzeWorkoutPattern(sets, slot) {
+        if (!sets || sets.length === 0) return null;
+        
+        const validSets = sets.filter(s => s.weight > 0 && s.reps > 0);
+        if (validSets.length === 0) return null;
+        
+        const weights = validSets.map(s => s.weight);
+        const reps = validSets.map(s => s.reps);
+        const firstWeight = weights[0];
+        const restWeights = weights.slice(1);
+        
+        // Calculate weight statistics
+        const maxWeight = Math.max(...weights);
+        const minWeight = Math.min(...weights);
+        const avgWeight = weights.reduce((a, b) => a + b, 0) / weights.length;
+        
+        // Find most common weight (mode)
+        const weightCounts = {};
+        weights.forEach(w => { weightCounts[w] = (weightCounts[w] || 0) + 1; });
+        const modeWeight = parseFloat(Object.entries(weightCounts).sort((a, b) => b[1] - a[1])[0][0]);
+        const modeCount = weightCounts[modeWeight];
+        
+        // Pattern detection
+        let pattern = 'stable'; // Default: same weight throughout
+        let referenceWeight = firstWeight;
+        let analysis = { firstSetTooHeavy: false, droppedMidSession: false, rampingUp: false };
+        
+        // Check if weights are all the same (or within 1kg)
+        const isStable = (maxWeight - minWeight) <= 1;
+        
+        if (!isStable && validSets.length >= 2) {
+            // Pattern 1: DROP MID-SESSION - First set heavier, then dropped
+            // Example: 38kg x 8, then 34kg x 10 x 3
+            const avgRestWeight = restWeights.length > 0 ? restWeights.reduce((a, b) => a + b, 0) / restWeights.length : firstWeight;
+            const droppedFromFirst = firstWeight > avgRestWeight + 1;
+            const restIsStable = restWeights.length > 0 && (Math.max(...restWeights) - Math.min(...restWeights)) <= 2;
+            
+            if (droppedFromFirst && restIsStable && restWeights.length >= 1) {
+                pattern = 'dropped';
+                // The REAL working weight is what they stabilized at
+                referenceWeight = modeWeight;
+                analysis.droppedMidSession = true;
+                analysis.firstSetTooHeavy = true;
+                analysis.originalFirstWeight = firstWeight;
+                analysis.stabilizedWeight = modeWeight;
+                
+                // Check if first set was actually too heavy (low reps)
+                const firstReps = reps[0];
+                const avgRestReps = reps.slice(1).reduce((a, b) => a + b, 0) / reps.slice(1).length;
+                analysis.firstSetStruggled = firstReps < avgRestReps;
+            }
+            
+            // Pattern 2: RAMPING UP - Progressive increase (warm-up style)
+            let isAscending = true;
+            for (let i = 1; i < weights.length; i++) {
+                if (weights[i] < weights[i-1] - 1) {
+                    isAscending = false;
+                    break;
+                }
+            }
+            if (isAscending && maxWeight > minWeight + 2) {
+                pattern = 'ramping';
+                // For ramping, reference is the top set that hit reps target
+                const validTopSets = validSets.filter(s => s.reps >= slot.repsMin);
+                if (validTopSets.length > 0) {
+                    referenceWeight = Math.max(...validTopSets.map(s => s.weight));
+                } else {
+                    referenceWeight = maxWeight;
+                }
+                analysis.rampingUp = true;
+            }
+            
+            // Pattern 3: INCONSISTENT - Random weights, use mode
+            if (pattern === 'stable' && !isStable) {
+                pattern = 'inconsistent';
+                referenceWeight = modeWeight;
+            }
+        }
+        
+        // Calculate effective performance at reference weight
+        const setsAtReference = validSets.filter(s => Math.abs(s.weight - referenceWeight) <= 1);
+        const avgRepsAtReference = setsAtReference.length > 0 
+            ? setsAtReference.reduce((sum, s) => sum + s.reps, 0) / setsAtReference.length 
+            : reps[0];
+        
+        // Count how many sets hit their targets at reference weight
+        let setsHitTargetAtRef = 0;
+        setsAtReference.forEach((s, i) => {
+            const targetForSet = slot.repsMax; // Simplified - could use genTargetReps
+            if (s.reps >= targetForSet) setsHitTargetAtRef++;
+        });
+        
+        return {
+            pattern,
+            referenceWeight,
+            modeWeight,
+            modeCount,
+            maxWeight,
+            minWeight,
+            avgWeight,
+            totalSets: validSets.length,
+            setsAtReference: setsAtReference.length,
+            avgRepsAtReference,
+            setsHitTargetAtRef,
+            analysis,
+            // For debugging
+            weights,
+            reps
+        };
+    }
+    
+    // Get reference weight from workout using smart pattern analysis
     getReferenceWeight(workout, slot) {
         const sets = workout.sets;
-        if (this.isRampingWorkout(sets)) {
-            // Ramping: find heaviest set with reps >= repsMin
-            const validSets = sets.filter(s => (s.reps || 0) >= slot.repsMin);
-            if (validSets.length > 0) {
-                return Math.max(...validSets.map(s => s.weight || 0));
-            }
-            return workout.maxWeight;
+        const analysis = this.analyzeWorkoutPattern(sets, slot);
+        
+        if (analysis) {
+            return analysis.referenceWeight;
         }
-        // Not ramping: use first set weight
+        
+        // Fallback to first set weight
         return sets[0]?.weight || workout.maxWeight;
     }
     
@@ -4202,6 +5119,28 @@ class App {
         
         // Update suggested reps
         document.getElementById('coaching-suggested-reps').textContent = advice.suggestedReps;
+        
+        // === ENHANCED: Display suggested sets for volume advice ===
+        const setsContainer = document.getElementById('coaching-suggested-sets-container');
+        if (setsContainer) {
+            if (advice.suggestedSets) {
+                setsContainer.style.display = 'block';
+                document.getElementById('coaching-suggested-sets').textContent = advice.suggestedSets + ' séries';
+            } else {
+                setsContainer.style.display = 'none';
+            }
+        }
+        
+        // === Show back-off weight for top-set progression ===
+        const backoffContainer = document.getElementById('coaching-backoff-container');
+        if (backoffContainer) {
+            if (advice.backOffWeight && advice.topSetProgression) {
+                backoffContainer.style.display = 'block';
+                document.getElementById('coaching-backoff-weight').textContent = advice.backOffWeight + ' kg';
+            } else {
+                backoffContainer.style.display = 'none';
+            }
+        }
     }
     
     getTrendArrowSVG(trend) {
@@ -4229,6 +5168,7 @@ class App {
                 </svg>`;
             case 'increase':
             case 'up':
+            case 'volume_up':
                 return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M12 19V5M5 12l7-7 7 7"/>
                 </svg>`;
@@ -4242,6 +5182,7 @@ class App {
                     <path d="M12 5v14M5 12l7 7 7-7"/>
                 </svg>`;
             case 'warning':
+            case 'deload_mini':
                 return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 9v4"/>
                     <path d="M12 17h.01"/>
@@ -4257,6 +5198,24 @@ class App {
                 return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M2 12h7l-3 3 3 3H2z"/>
                     <path d="M22 12h-7l3-3-3-3h7z"/>
+                </svg>`;
+            case 'intensify':
+            case 'lightning':
+                return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>`;
+            case 'very_hot':
+            case 'fire':
+                return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2c0 4-4 6-4 10a4 4 0 108 0c0-4-4-6-4-10z"/>
+                    <path d="M12 12c0 2-2 3-2 5a2 2 0 104 0c0-2-2-3-2-5z"/>
+                </svg>`;
+            case 'very_cold':
+            case 'snowflake':
+                return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v20M2 12h20"/>
+                    <path d="M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/>
+                    <circle cx="12" cy="12" r="3"/>
                 </svg>`;
             case 'maintain':
             default:
@@ -4282,10 +5241,16 @@ class App {
         const isDeloadMode = this.isDeloadMode || (await db.getSetting('isDeloadMode')) || false;
         const deloadIntensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
         
+        // === HYPERTROPHY-OPTIMIZED PARAMETERS ===
         // Isolation: micro-loading (+0.5-1kg), Compound: +2.5kg
         const weightIncrement = isIsolation ? Math.min(baseWeightIncrement, 1) : baseWeightIncrement;
         // Isolation: RPE 10 allowed, Compound: max RPE 9 for safety
         const maxSafeRpe = isIsolation ? 10 : 9;
+        
+        // VOLUME MANAGEMENT: Track current slot sets for potential volume ramp
+        const currentProgrammedSets = slot.sets || 3;
+        const maxSetsPerExercise = isIsolation ? 6 : 5; // MRV caps (scientific: diminishing returns)
+        const minSetsPerExercise = 2; // MEV floor
         
         // Get all set history for this exercise
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
@@ -4347,6 +5312,152 @@ class App {
             this.avgPerformance = null;
         }
         
+        // ===================================================================
+        // === ADVANCED HYPERTROPHY ENGINE INTEGRATION ===
+        // ===================================================================
+        
+        // Calculate historical best e1RM for reference
+        let historicalBestE1RM = 0;
+        for (const w of workouts) {
+            for (const s of w.sets) {
+                const e = this.calculateE1RM(s.weight, s.reps, s.rpe || 8);
+                if (e > historicalBestE1RM) historicalBestE1RM = e;
+            }
+        }
+        
+        // Store for later use
+        this.currentHistoricalBestE1RM = historicalBestE1RM;
+        
+        // Run advanced analysis if we have enough data
+        let advancedAnalysis = null;
+        if (workouts.length >= 2) {
+            const lastWorkout = workouts[0];
+            
+            // Calculate current session e1RM
+            const currentE1RM = Math.max(...lastWorkout.sets.map(s => 
+                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+            ), 0);
+            
+            // Effective sets analysis
+            const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM);
+            
+            // Sandbagging detection
+            const sandbaggingCheck = this.detectSandbagging(lastWorkout.sets, historicalBestE1RM);
+            
+            // SFR calculation
+            const sfrData = this.calculateSFR(exerciseId, lastWorkout.sets, historicalBestE1RM);
+            
+            // Fatigue phenotype
+            const phenotype = this.inferFatiguePhenotype(workouts);
+            
+            // e1RM trend analysis
+            const e1rmTrend = this.analyzeE1RMTrend(workouts);
+            
+            // Reactive deload check
+            const fatigueScore = await this.calculateFatigueScore(exerciseId, workouts);
+            const deloadCheck = this.shouldTriggerReactiveDeload(workouts, fatigueScore);
+            
+            // Performance trend
+            let performanceTrend = 'stalled';
+            if (workouts.length >= 2) {
+                const prevE1RM = Math.max(...workouts[1].sets.map(s => 
+                    this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
+                ), 0);
+                
+                if (currentE1RM > prevE1RM * 1.01) {
+                    performanceTrend = 'improved';
+                } else if (currentE1RM < prevE1RM * 0.97) {
+                    performanceTrend = 'regressed';
+                }
+            }
+            
+            // Volume adjustment recommendation (Israetel Matrix)
+            const volumeAdjustment = this.getVolumeAdjustment(
+                performanceTrend,
+                lastWorkout.avgRpe,
+                currentProgrammedSets,
+                maxSetsPerExercise
+            );
+            
+            advancedAnalysis = {
+                currentE1RM,
+                historicalBestE1RM,
+                e1rmPercentOfBest: historicalBestE1RM > 0 ? Math.round((currentE1RM / historicalBestE1RM) * 100) : 100,
+                effectiveSets: effectiveData.effectiveSets,
+                effectiveDetails: effectiveData.details,
+                sandbagging: sandbaggingCheck,
+                sfr: sfrData,
+                phenotype,
+                e1rmTrend,
+                performanceTrend,
+                volumeAdjustment,
+                fatigueScore,
+                deloadRecommendation: deloadCheck
+            };
+        }
+        
+        // Store advanced analysis for display
+        this.currentAdvancedAnalysis = advancedAnalysis;
+        
+        // === REACTIVE DELOAD CHECK (Priority 1) ===
+        // If multiple fatigue signals detected, recommend deload BEFORE other advice
+        if (advancedAnalysis?.deloadRecommendation?.shouldDeload && !isDeloadMode) {
+            const signals = advancedAnalysis.deloadRecommendation.signals;
+            const activeCount = Object.values(signals).filter(Boolean).length;
+            const signalMessages = [];
+            if (signals.e1rmDecline) signalMessages.push('e1RM en baisse');
+            if (signals.highFatigue) signalMessages.push('fatigue chronique');
+            if (signals.consecutiveStalls) signalMessages.push('3+ séances stagnantes');
+            if (signals.rpeCreep) signalMessages.push('effort croissant');
+            
+            return {
+                type: 'reactive_deload',
+                icon: 'warning',
+                title: '🔋 Deload Réactif Recommandé',
+                message: `${activeCount} signaux de fatigue détectés (${signalMessages.join(', ')}). Ton corps demande une récupération. Semaine prochaine : réduis à ${Math.max(2, Math.ceil(slot.sets * 0.5))} séries en gardant la charge.`,
+                suggestedWeight: workouts[0]?.maxWeight || '?',
+                weightTrend: 'same',
+                suggestedReps: targetReps,
+                suggestedSets: Math.max(2, Math.ceil(slot.sets * 0.5)),
+                scienceNote: 'Deload réactif > deload programmé : laisse ton corps dicter le timing',
+                advancedData: advancedAnalysis
+            };
+        }
+        
+        // === SANDBAGGING OVERRIDE ===
+        // If sandbagging detected with high confidence, force progression
+        if (advancedAnalysis?.sandbagging?.detected && advancedAnalysis.sandbagging.confidence >= 0.5) {
+            const reasons = advancedAnalysis.sandbagging.reasons;
+            const action = advancedAnalysis.sandbagging.suggestedAction;
+            
+            if (action === 'amrap_test') {
+                return {
+                    type: 'amrap_test',
+                    icon: 'lightning',
+                    title: '⚡ Test AMRAP',
+                    message: `Anomalie détectée : ${reasons[0]}. Dernière série = AMRAP (max reps possible) pour calibrer ton vrai niveau. Si tu dépasses largement tes logs, on recalibre à la hausse.`,
+                    suggestedWeight: workouts[0]?.maxWeight || '?',
+                    weightTrend: 'same',
+                    suggestedReps: `${targetReps} puis AMRAP`,
+                    amrapSet: true,
+                    advancedData: advancedAnalysis
+                };
+            } else {
+                // Force linear increase
+                const forceWeight = Math.round((workouts[0]?.maxWeight || 0) * 1.05 * 2) / 2;
+                return {
+                    type: 'force_increase',
+                    icon: 'lightning',
+                    title: '⚡ Challenge !',
+                    message: `Les données suggèrent une marge de progression inexploitée. Test : ${forceWeight}kg aujourd'hui. Si tu ne peux pas tenir ${slot.repsMin} reps, on revient en arrière.`,
+                    suggestedWeight: forceWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps,
+                    advancedData: advancedAnalysis
+                };
+            }
+        }
+        
         // === CASE 1: First time on this exercise ===
         if (workouts.length === 0) {
             return {
@@ -4365,21 +5476,82 @@ class App {
         // Use reference weight (top set for ramp, first set otherwise)
         let lastWeight = this.getReferenceWeight(lastWorkout, slot);
         
-        // === DELOAD MODE: Reduce intensity and provide specific advice ===
+        // === SMART PATTERN ANALYSIS ===
+        const patternAnalysis = this.analyzeWorkoutPattern(lastSets, slot);
+        const wasDroppedMidSession = patternAnalysis?.analysis?.droppedMidSession || false;
+        const firstSetWasTooHeavy = patternAnalysis?.analysis?.firstSetTooHeavy || false;
+        const stabilizedWeight = patternAnalysis?.analysis?.stabilizedWeight;
+        const originalFirstWeight = patternAnalysis?.analysis?.originalFirstWeight;
+        
+        // === CRITICAL: Handle "dropped mid-session" pattern ===
+        // This is when user started heavier but had to drop weight to maintain reps
+        // Example: 38kg x 8, then 34kg x 10 x 3 → real working weight is 34kg
+        if (wasDroppedMidSession && stabilizedWeight && originalFirstWeight) {
+            // Analyze performance at the STABILIZED weight (not the failed first set)
+            const setsAtStabilized = lastSets.filter(s => Math.abs(s.weight - stabilizedWeight) <= 1);
+            const avgRepsAtStabilized = setsAtStabilized.length > 0 
+                ? setsAtStabilized.reduce((sum, s) => sum + s.reps, 0) / setsAtStabilized.length 
+                : 0;
+            const allStabilizedHitMax = setsAtStabilized.every(s => s.reps >= slot.repsMax);
+            const mostStabilizedHitMax = setsAtStabilized.filter(s => s.reps >= slot.repsMax).length >= Math.ceil(setsAtStabilized.length * 0.75);
+            
+            // If they hit targets at stabilized weight, suggest staying there or small increase
+            if (allStabilizedHitMax && setsAtStabilized.length >= 2) {
+                // Great performance at lower weight - try a SMALL increase next time
+                const conservativeIncrement = isIsolation ? 1 : weightIncrement;
+                const newWeight = Math.round((stabilizedWeight + conservativeIncrement) * 2) / 2;
+                return {
+                    type: 'increase',
+                    icon: 'increase',
+                    title: 'Ajustement validé 👍',
+                    message: `Tu as baissé après la première série (${originalFirstWeight}kg → ${stabilizedWeight}kg) et tu as tenu les cibles. On teste un petit plus: ${newWeight}kg sur TOUTES les séries pour confirmer.`,
+                    suggestedWeight: newWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps
+                };
+            } else if (mostStabilizedHitMax) {
+                // Good performance - maintain the stabilized weight
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Bonne adaptation 💪',
+                    message: `${stabilizedWeight}kg était le bon choix après ${originalFirstWeight}kg. Reste à ${stabilizedWeight}kg pour TOUTES les séries et vise ${targetReps}.`,
+                    suggestedWeight: stabilizedWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            } else {
+                // Still struggling at stabilized weight
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Stabilise d\'abord',
+                    message: `Tu as ajusté à ${stabilizedWeight}kg. Reste à ce poids sur TOUTES les séries jusqu'à valider ${targetReps} avant d'augmenter.`,
+                    suggestedWeight: stabilizedWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
+        }
+        
+        // === DELOAD MODE: SCIENTIFIC APPROACH - Maintain intensity, reduce VOLUME ===
+        // Research shows: intensity maintenance preserves strength, volume reduction allows recovery
         if (isDeloadMode) {
-            const deloadWeight = Math.round(lastWeight * (1 - deloadIntensityReduction / 100) * 2) / 2;
-            const deloadSets = Math.max(2, Math.ceil(slot.sets * 0.5)); // 50% des séries, min 2
+            // KEEP INTENSITY (weight), REDUCE VOLUME (sets by 40-50%)
+            const deloadSets = Math.max(2, Math.ceil(slot.sets * 0.5));
             const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, deloadSets));
             
             return {
                 type: 'deload',
                 icon: 'maintain',
-                title: '🔋 Mode Deload actif',
-                message: `Semaine de récupération ! Charge réduite à ${deloadWeight}kg (-${deloadIntensityReduction}%), fais seulement ${deloadSets} séries. Focus sur la technique et le contrôle, pas l'intensité.`,
-                suggestedWeight: deloadWeight,
-                weightTrend: 'down',
+                title: '🔋 Semaine de récupération',
+                message: `GARDE la charge (${lastWeight}kg) mais fais seulement ${deloadSets} séries. L'intensité préserve tes acquis, le volume réduit permet la surcompensation.`,
+                suggestedWeight: lastWeight, // MAINTAIN intensity!
+                weightTrend: 'same',
                 suggestedReps: deloadReps,
-                isDeload: true
+                isDeload: true,
+                deloadSets: deloadSets,
+                scienceNote: 'Maintenir l\'intensité, réduire le volume = récupération optimale sans désentraînement'
             };
         }
         const hasRealRpe = lastWorkout.hasRealRpe;
@@ -4389,8 +5561,16 @@ class App {
         let effectiveRepsPerSet = null;
         if (hasRealRpe) {
             const setsWithRpe = lastSets.filter(s => s.rpe != null);
+            // Calculate e1RM reference from best set for intensity-based effective reps
+            const bestSet = lastSets.reduce((best, s) => {
+                const e1rm = this.e1rm(s.weight, s.reps);
+                return e1rm > (best?.e1rm || 0) ? { ...s, e1rm } : best;
+            }, null);
+            const e1rmRef = bestSet?.e1rm || null;
+            
             const totalEffective = setsWithRpe.reduce((sum, s) => {
-                return sum + (this.effectiveRepsFromSet(s.reps, s.rpe) || 0);
+                // Pass weight and e1RM for intensity-aware effective reps calculation
+                return sum + (this.effectiveRepsFromSet(s.reps, s.rpe, s.weight, e1rmRef) || 0);
             }, 0);
             effectiveRepsPerSet = setsWithRpe.length > 0 ? totalEffective / setsWithRpe.length : null;
         }
@@ -4399,38 +5579,72 @@ class App {
         const LOW_EFF = 1.5;  // per set average - too easy
         const HIGH_EFF = 3.0; // per set average - hard effort
         
-        // === ANALYZE FIRST SET (most important for progression) ===
+        // === ANALYZE SETS WITH TARGET REPS (not just repsMax) ===
         const firstSet = lastSets[0];
         const firstSetReps = firstSet?.reps || 0;
         const firstSetRpe = firstSet?.rpe;
         const firstSetHitMax = firstSetReps >= slot.repsMax;
         const firstSetBelowMin = firstSetReps < slot.repsMin;
         
-        // Check if ALL sets hit repsMax (only if enough sets recorded)
+        // Check if sets hit their TARGET reps (from genTargetReps, e.g. 10/10/9/7)
         const enoughSets = lastSets.length >= slot.sets;
         const allSetsHitMax = enoughSets && lastSets.every(s => (s.reps || 0) >= slot.repsMax);
         
+        // NEW: Check if sets hit their individual targets (more realistic)
+        let setsHitTargets = 0;
+        let totalTargetDeficit = 0;
+        for (let i = 0; i < lastSets.length; i++) {
+            const setReps = lastSets[i]?.reps || 0;
+            const targetForSet = targetRepsArray[i] || slot.repsMax;
+            if (setReps >= targetForSet) {
+                setsHitTargets++;
+            }
+            totalTargetDeficit += Math.max(0, targetForSet - setReps);
+        }
+        const allSetsHitTargets = enoughSets && setsHitTargets >= slot.sets;
+        const mostSetsHitTargets = enoughSets && setsHitTargets >= Math.ceil(slot.sets * 0.75); // 75%+
+        
+        // RPE-based progression signals
+        const avgRpeForSession = hasRealRpe && lastAvgRpe !== null ? lastAvgRpe : 8;
+        const isLowEffort = avgRpeForSession <= 7;
+        const isHighInRange = firstSetReps >= slot.repsMax - 1; // Within 1 rep of max
+        
         // === CASE 2: Only one workout ===
         if (workouts.length === 1) {
-            if (allSetsHitMax) {
-                // Determine increment based on effort
+            // Priority 1: All sets hit targets OR all sets hit max → increase
+            if (allSetsHitTargets || allSetsHitMax) {
                 let increment = weightIncrement;
-                if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF) {
-                    // Very easy - more aggressive increase for compounds
+                if (isLowEffort) {
                     increment = isIsolation ? weightIncrement : weightIncrement * 1.5;
                 }
                 const newWeight = Math.round((lastWeight + increment) * 2) / 2;
                 return {
                     type: 'increase',
                     icon: 'increase',
-                    title: 'Prêt à progresser !',
-                    message: `${slot.repsMax} reps atteint partout. Passe à ${newWeight}kg !`,
+                    title: 'Objectifs atteints ! 🎯',
+                    message: `Toutes les cibles validées${isLowEffort ? ' et effort modéré' : ''} ! Passe à ${newWeight}kg.`,
                     suggestedWeight: newWeight,
                     weightTrend: 'up',
                     suggestedReps: targetReps
                 };
-            } else if (firstSetBelowMin) {
-                // Check if it's effort issue or load issue
+            }
+            
+            // Priority 2: Low effort + high in range → increase anyway
+            if (isLowEffort && isHighInRange) {
+                const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+                return {
+                    type: 'increase',
+                    icon: 'increase',
+                    title: 'Trop facile ! 💪',
+                    message: `RPE ${avgRpeForSession} avec ${firstSetReps} reps = marge de progression. Tente ${newWeight}kg !`,
+                    suggestedWeight: newWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps
+                };
+            }
+            
+            // Priority 3: Below minimum with high effort → decrease
+            if (firstSetBelowMin) {
                 if (hasRealRpe && firstSetRpe != null && firstSetRpe >= 9) {
                     const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
                     return {
@@ -4447,7 +5661,7 @@ class App {
                         type: 'maintain',
                         icon: 'target',
                         title: 'Pousse plus fort !',
-                        message: `Reps basses mais effort faible. Engage-toi plus !`,
+                        message: `Reps basses mais effort faible. Engage-toi plus vers RPE 8-9 !`,
                         suggestedWeight: lastWeight,
                         weightTrend: 'same',
                         suggestedReps: targetReps
@@ -4465,50 +5679,276 @@ class App {
                     };
                 }
             }
+            
             return {
                 type: 'maintain',
                 icon: 'target',
                 title: 'Continue comme ça',
-                message: `Objectif : ${slot.repsMax} reps sur toutes les séries.`,
+                message: `Objectif : atteindre les cibles (${targetReps}) avec RPE 8-9.`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
                 suggestedReps: targetReps
             };
         }
         
-        // === CASE 3: Multiple workouts - PROGRESSION ANALYSIS ===
+        // === CASE 3: Multiple workouts - SMART MULTI-SESSION ANALYSIS ===
         const prevWorkout = workouts[1];
         const prevSets = prevWorkout.sets;
         const prevWeight = this.getReferenceWeight(prevWorkout, slot);
-        
         const prevFirstSet = prevSets[0];
         const prevFirstReps = prevFirstSet?.reps || 0;
+        
+        // Analyze previous session pattern too
+        const prevPatternAnalysis = this.analyzeWorkoutPattern(prevSets, slot);
+        const prevWasDropped = prevPatternAnalysis?.analysis?.droppedMidSession || false;
+        
+        // === MULTI-SESSION TREND ANALYSIS ===
+        // Look at the last 3-5 sessions to understand the real trend
+        let consistentWeight = null;
+        let weightTrend = 'stable'; // 'increasing', 'decreasing', 'stable', 'volatile'
+        
+        if (workouts.length >= 3) {
+            const recentWeights = workouts.slice(0, Math.min(5, workouts.length)).map(w => {
+                const analysis = this.analyzeWorkoutPattern(w.sets, slot);
+                return analysis?.referenceWeight || w.sets[0]?.weight || 0;
+            }).filter(w => w > 0);
+            
+            if (recentWeights.length >= 3) {
+                // Check if weights are consistent (within 2kg)
+                const maxRecent = Math.max(...recentWeights);
+                const minRecent = Math.min(...recentWeights);
+                
+                if (maxRecent - minRecent <= 2) {
+                    consistentWeight = recentWeights[0]; // Most recent
+                    weightTrend = 'stable';
+                } else {
+                    // Check direction
+                    const increasing = recentWeights[0] > recentWeights[recentWeights.length - 1];
+                    const decreasing = recentWeights[0] < recentWeights[recentWeights.length - 1];
+                    weightTrend = increasing ? 'increasing' : (decreasing ? 'decreasing' : 'volatile');
+                }
+            }
+        }
+        
+        // === DETECT REPEATED DROPS: User keeps starting too heavy ===
+        if (wasDroppedMidSession && prevWasDropped) {
+            // User has dropped weight mid-session 2x in a row - they're consistently starting too heavy
+            const suggestedStart = stabilizedWeight || lastWeight;
+            return {
+                type: 'maintain',
+                icon: 'warning',
+                title: 'Pattern détecté 📊',
+                message: `Tu commences trop lourd 2 séances de suite. Démarre directement à ${suggestedStart}kg pour toutes les séries.`,
+                suggestedWeight: suggestedStart,
+                weightTrend: 'same',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // === DETECT FAILED INCREASE: Weight went up but reps dropped significantly ===
+        const weightIncreased = lastWeight > prevWeight;
+        const repsDropped = firstSetReps < prevFirstReps - 2; // Dropped by more than 2 reps
+        const belowMinAfterIncrease = weightIncreased && firstSetBelowMin;
+        
+        if (belowMinAfterIncrease || (weightIncreased && repsDropped && firstSetReps < slot.repsMin + 1)) {
+            // The increase was too aggressive - suggest going back
+            return {
+                type: 'decrease',
+                icon: 'decrease',
+                title: 'Augmentation trop rapide',
+                message: `L'augmentation à ${lastWeight}kg était ambitieuse. Reviens à ${prevWeight}kg et valide les cibles avant de remonter.`,
+                suggestedWeight: prevWeight,
+                weightTrend: 'down',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // === SIGNAL VS NOISE: Check if previous session also hit targets (trend confirmation) ===
+        let prevSessionHitTargets = false;
+        if (workouts.length >= 2) {
+            const prevSets = prevWorkout.sets;
+            let prevSetsHitTargets = 0;
+            for (let i = 0; i < prevSets.length; i++) {
+                const setReps = prevSets[i]?.reps || 0;
+                const targetForSet = targetRepsArray[i] || slot.repsMax;
+                if (setReps >= targetForSet) prevSetsHitTargets++;
+            }
+            prevSessionHitTargets = prevSets.length >= slot.sets && prevSetsHitTargets >= Math.ceil(slot.sets * 0.75);
+        }
+        
+        // For compounds: require 2 consecutive sessions of hitting targets (signal confirmation)
+        // For isolation: 1 session is enough (can be more aggressive)
+        const signalConfirmed = isIsolation || prevSessionHitTargets || workouts.length === 1;
+        
+        // === PRIORITY 1: Check if targets are hit → INCREASE ===
+        if (allSetsHitTargets || allSetsHitMax) {
+            let increment = weightIncrement;
+            if (isLowEffort) {
+                increment = isIsolation ? weightIncrement : weightIncrement * 1.5;
+            }
+            const newWeight = Math.round((lastWeight + increment) * 2) / 2;
+            
+            // For compounds without signal confirmation: suggest maintaining but encourage
+            if (!signalConfirmed) {
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Bien joué ! 👍',
+                    message: `Cibles atteintes ! Refais ${lastWeight}kg la prochaine fois pour confirmer, puis on augmente.`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
+            
+            return {
+                type: 'increase',
+                icon: 'celebrate',
+                title: 'Progression validée ! 🎉',
+                message: `Cibles atteintes${!isIsolation && prevSessionHitTargets ? ' 2x de suite' : ''} à ${lastWeight}kg ! Passe à ${newWeight}kg.`,
+                suggestedWeight: newWeight,
+                weightTrend: 'up',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // === PRIORITY 2: Low effort + high in range → INCREASE (more aggressive for isolation) ===
+        if (isLowEffort && isHighInRange) {
+            const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+            
+            // For isolation: always increase on low effort
+            // For compounds: only if we have signal confirmation OR it's really too easy (RPE <= 6)
+            if (isIsolation || signalConfirmed || avgRpeForSession <= 6) {
+                return {
+                    type: 'increase',
+                    icon: 'increase',
+                    title: 'C\'est trop facile ! 💪',
+                    message: `RPE ${avgRpeForSession} avec ${firstSetReps} reps = marge de progression. Monte à ${newWeight}kg !`,
+                    suggestedWeight: newWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps
+                };
+            }
+        }
+        
+        // === PRIORITY 3: Most sets hit targets + decent effort → INCREASE (with signal check) ===
+        if (mostSetsHitTargets && !isLowEffort) {
+            const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+            
+            // For compounds without confirmation: encourage maintaining
+            if (!isIsolation && !signalConfirmed) {
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Presque ! 💪',
+                    message: `${setsHitTargets}/${slot.sets} séries validées. Confirme à ${lastWeight}kg puis on augmente !`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
+            
+            return {
+                type: 'increase',
+                icon: 'increase',
+                title: 'Quasi parfait ! 🚀',
+                message: `${setsHitTargets}/${slot.sets} séries validées. Tente ${newWeight}kg !`,
+                suggestedWeight: newWeight,
+                weightTrend: 'up',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // === PRIORITY 4: TOP-SET PROGRESSION (Reverse Pyramid Style) ===
+        // Scientific basis: Allows higher mechanical tension on fresh muscles
+        // User can push S1 heavier, then use back-off sets for volume
+        const s1WasAtReferenceWeight = Math.abs(firstSet.weight - lastWeight) < 1;
+        const s1HadGoodEffort = !hasRealRpe || (firstSetRpe != null && firstSetRpe >= 7);
+        
+        if (firstSetHitMax && s1WasAtReferenceWeight) {
+            const newTopSetWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+            const backOffWeight = lastWeight; // Keep current weight for back-off sets
+            
+            // For ISOLATION: more aggressive, can increase on S1 alone
+            if (isIsolation) {
+                return {
+                    type: 'increase',
+                    icon: 'increase',
+                    title: '🚀 Top set validée !',
+                    message: `${slot.repsMax} reps sur S1 = prêt pour ${newTopSetWeight}kg. Tu peux faire tes autres séries à ${backOffWeight}kg si besoin (back-off).`,
+                    suggestedWeight: newTopSetWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps,
+                    topSetProgression: true,
+                    backOffWeight: backOffWeight
+                };
+            }
+            // For COMPOUNDS: Top-set first, back-off sets formalized
+            else if (s1HadGoodEffort && setsHitTargets >= Math.ceil(slot.sets * 0.5)) {
+                return {
+                    type: 'increase',
+                    icon: 'increase',
+                    title: '🎯 Progression Top-Set',
+                    message: `S1 à ${slot.repsMax} reps ! Monte à ${newTopSetWeight}kg sur S1 (top set), puis ${backOffWeight}kg sur S2-S${slot.sets} (back-off -10%). C'est du Reverse Pyramid !`,
+                    suggestedWeight: newTopSetWeight,
+                    weightTrend: 'up',
+                    suggestedReps: targetReps,
+                    topSetProgression: true,
+                    backOffWeight: backOffWeight,
+                    scienceNote: 'Top set = tension max sur muscles frais, back-off = volume additionnel'
+                };
+            }
+        }
+        
+        // === PRIORITY 5: Below minimum → DECREASE ===
+        if (firstSetBelowMin) {
+            const shouldDecrease = !hasRealRpe || (firstSetRpe != null && firstSetRpe >= 8);
+            if (shouldDecrease) {
+                const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
+                return {
+                    type: 'decrease',
+                    icon: 'decrease',
+                    title: 'Ajustement nécessaire',
+                    message: `Sous ${slot.repsMin} reps malgré l'effort. Baisse à ${newWeight}kg pour progresser dans la bonne plage.`,
+                    suggestedWeight: newWeight,
+                    weightTrend: 'down',
+                    suggestedReps: targetReps
+                };
+            } else {
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Engage-toi plus ! 💪',
+                    message: `Reps basses mais effort modéré. Pousse vers RPE 8-9 pour valider la charge !`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
+        }
+        
+        // === STAGNATION DETECTION (only if no increase/decrease condition met) ===
+        // (prevFirstSet and prevFirstReps already declared above)
         
         // Progression indicators
         const firstSetRepsImproved = firstSetReps > prevFirstReps;
         const firstSetWeightImproved = lastWeight > prevWeight;
         const overallRepsImproved = lastWorkout.totalReps > prevWorkout.totalReps;
-        const overallWeightImproved = lastWorkout.maxWeight > prevWorkout.maxWeight;
         
-        const hasProgression = firstSetRepsImproved || firstSetWeightImproved || overallRepsImproved || overallWeightImproved;
+        const hasProgression = firstSetRepsImproved || firstSetWeightImproved || overallRepsImproved;
         
-        // === STAGNATION DETECTION WITH EFFORT AWARENESS ===
+        // Count stagnation only if NOT progressing
         let consecutiveStagnation = 0;
-        let lowEffortStagnation = 0;
-        let highEffortStagnation = 0;
         
         if (!hasProgression) {
             consecutiveStagnation = 1;
-            // Only count effort if we have real RPE data
-            if (hasRealRpe && lastAvgRpe !== null) {
-                if (lastAvgRpe < 8) lowEffortStagnation++;
-                else highEffortStagnation++;
-            }
             
-            // Check history
+            // Check history for consecutive stagnation
             for (let i = 1; i < Math.min(workouts.length - 1, 5); i++) {
                 const curr = workouts[i];
                 const prev = workouts[i + 1];
+                if (!prev) break;
+                
                 const currFirst = curr.sets[0];
                 const prevFirst = prev.sets[0];
                 
@@ -4519,95 +5959,111 @@ class App {
                 
                 if (noProgressHere) {
                     consecutiveStagnation++;
-                    if (curr.hasRealRpe && curr.avgRpe !== null) {
-                        if (curr.avgRpe < 8) lowEffortStagnation++;
-                        else highEffortStagnation++;
-                    }
                 } else {
                     break;
                 }
             }
         }
         
-        // === HIERARCHIE D'INTERVENTIONS SIMPLIFIÉE ===
+        // === STAGNATION RESPONSES - VOLUME-FIRST APPROACH FOR HYPERTROPHY ===
+        // Scientific basis: Volume is PRIMARY driver of hypertrophy (Schoenfeld, Israetel)
+        // Progressive overload via VOLUME before switching exercises
         
-        // Stagnation 1x : Encouragement + technique
-        if (consecutiveStagnation === 1) {
-            if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF) {
+        if (consecutiveStagnation >= 1 && consecutiveStagnation <= 2) {
+            // Light stagnation - first check if we can add volume
+            const canAddVolume = currentProgrammedSets < maxSetsPerExercise;
+            const deficitMsg = totalTargetDeficit > 0 
+                ? `Il te manque ${totalTargetDeficit} reps pour valider. ` 
+                : '';
+            
+            // STAGNATION 2: Suggest adding 1 set (volume ramp) if possible
+            if (consecutiveStagnation === 2 && canAddVolume) {
+                const newSets = currentProgrammedSets + 1;
+                const newTargetReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, newSets));
                 return {
-                    type: 'maintain',
-                    icon: 'target',
-                    title: 'Tu as de la marge ! 💪',
-                    message: `Pas de progression cette fois, mais ton effort était modéré. La prochaine série, rapproche-toi davantage de l'échec pour maximiser tes gains !`,
+                    type: 'volume_up',
+                    icon: 'increase',
+                    title: '📈 Augmente le volume !',
+                    message: `2 séances sans progression = signal d'adaptation. Passe à ${newSets} séries pour forcer une nouvelle réponse. Le volume est le levier #1 pour la masse.`,
                     suggestedWeight: lastWeight,
                     weightTrend: 'same',
-                    suggestedReps: targetReps
+                    suggestedReps: newTargetReps,
+                    suggestedSets: newSets,
+                    volumeAction: 'add_set',
+                    scienceNote: 'Volume = driver principal d\'hypertrophie (MEV → MRV)'
                 };
             }
-            const msg = hasRealRpe && lastAvgRpe !== null && lastAvgRpe >= 9 
-                ? `Bel effort malgré la stagnation ! C'est normal, le corps ne progresse pas linéairement. Continue avec la même intensité 🔥` 
-                : `Première stagnation, pas de panique ! Concentre-toi sur la qualité de chaque rep et essaie de gratter 1 rep de plus.`;
+            
             return {
                 type: 'maintain',
                 icon: 'target',
-                title: 'Persévère',
-                message: msg,
+                title: consecutiveStagnation === 1 ? '💪 Presque !' : '🎯 Continue !',
+                message: `${deficitMsg}Vise ${targetReps} avec RPE 8-9. Chaque rep te rapproche de la progression !`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
                 suggestedReps: targetReps
             };
         }
         
-        // Stagnation 2x : Suggestion variation tempo/technique
-        if (consecutiveStagnation === 2) {
-            return {
-                type: 'maintain',
-                icon: 'warning',
-                title: '2 séances sans progrès',
-                message: `Essaie de varier le tempo (3s en descente) ou améliore ta technique. Parfois un petit ajustement suffit à débloquer la progression !`,
-                suggestedWeight: lastWeight,
-                weightTrend: 'same',
-                suggestedReps: targetReps
-            };
-        }
-        
-        // Stagnation 3x : Deload volume suggéré
         if (consecutiveStagnation === 3) {
-            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, 2));
+            // 3 sessions: Try volume increase FIRST, not deload
+            const canAddVolume = currentProgrammedSets < maxSetsPerExercise;
+            
+            if (canAddVolume) {
+                const newSets = currentProgrammedSets + 1;
+                const newTargetReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, newSets));
+                return {
+                    type: 'volume_up',
+                    icon: 'increase',
+                    title: '📈 Volume = Progression',
+                    message: `3 séances au même niveau. Ajoute 1 série (${newSets} total) : plus de stimulus = plus de croissance. Tu n'as pas encore atteint ton MRV.`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: newTargetReps,
+                    suggestedSets: newSets,
+                    volumeAction: 'add_set'
+                };
+            }
+            
+            // At MRV: mini-deload then reset volume
+            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, minSetsPerExercise));
             return {
-                type: 'maintain',
+                type: 'deload_mini',
                 icon: 'warning',
-                title: '3 séances de stagnation',
-                message: `Ton corps a peut-être besoin de récupérer. Fais seulement 2 séries cette fois pour laisser tes muscles se régénérer. La surcompensation fera le reste ! 🔋`,
+                title: '🔋 Mini-deload stratégique',
+                message: `Volume max atteint (${currentProgrammedSets} séries). Fais ${minSetsPerExercise} séries cette fois, puis reprends à 3 séries avec un poids légèrement supérieur.`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
-                suggestedReps: deloadReps
+                suggestedReps: deloadReps,
+                suggestedSets: minSetsPerExercise,
+                volumeAction: 'reset_cycle'
             };
         }
         
-        // Stagnation 4x : Changement de rep-range suggéré
         if (consecutiveStagnation === 4) {
+            // 4 sessions: Try intensification technique (drop sets, rest-pause)
             const alternateReps = slot.repsMin >= 8 
-                ? `5-8 reps (plus lourd)` 
-                : `10-15 reps (plus léger)`;
+                ? `5-8 reps (charge +10%)` 
+                : `10-15 reps (charge -15%)`;
             return {
-                type: 'maintain',
+                type: 'intensify',
                 icon: 'warning',
-                title: '4 séances sans progrès',
-                message: `Essaie de changer ta plage de reps pendant 2-3 séances (${alternateReps}) pour stimuler différemment le muscle. Tu pourras revenir ensuite à ta plage habituelle.`,
+                title: '⚡ Technique d\'intensification',
+                message: `Essaie une technique d'intensification : drop set sur la dernière série, ou change de plage (${alternateReps}) pendant 2-3 séances.`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
-                suggestedReps: targetReps
+                suggestedReps: targetReps,
+                intensificationSuggestion: true
             };
         }
         
-        // Stagnation 5x+ : SUGGESTION de changement d'exercice (pas obligatoire)
+        // Stagnation 5x+ : THEN suggest exercise switch
         if (consecutiveStagnation >= 5) {
             return {
                 type: 'switch',
                 icon: 'switch',
-                title: `Plateau détecté (${consecutiveStagnation} séances)`,
-                message: `Malgré plusieurs tentatives, cet exercice stagne. Tu peux essayer une variante de la pool pour relancer la progression avec un nouveau stimulus. Ce n'est qu'une suggestion - si tu préfères continuer, c'est ton choix !`,
+                title: `🔄 Nouveau stimulus nécessaire`,
+                message: `${consecutiveStagnation} séances sans progression malgré le volume et l'intensité. Change d'exercice pour un nouveau stimulus mécanique. Tu reviendras sur celui-ci plus tard.`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
                 suggestedReps: targetReps,
@@ -4615,75 +6071,12 @@ class App {
             };
         }
         
-        // === PROGRESSION PATH ===
-        
-        // All sets hit max → increase weight
-        if (allSetsHitMax) {
-            let increment = weightIncrement;
-            // More aggressive if low effort
-            if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF && !isIsolation) {
-                increment = weightIncrement * 1.5;
-            }
-            const newWeight = Math.round((lastWeight + increment) * 2) / 2;
-            return {
-                type: 'increase',
-                icon: 'celebrate',
-                title: 'Progression validée ! 🎉',
-                message: `Excellente maîtrise de ${lastWeight}kg sur toutes les séries ! Tu as mérité cette progression → ${newWeight}kg. Garde la même technique solide !`,
-                suggestedWeight: newWeight,
-                weightTrend: 'up',
-                suggestedReps: targetReps
-            };
-        }
-        
-        // First set hit max → can try increase on S1
-        if (firstSetHitMax) {
-            const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
-            return {
-                type: 'increase',
-                icon: 'increase',
-                title: 'Série 1 au top ! 🚀',
-                message: `${slot.repsMax} reps clean sur S1 ! Tente ${newWeight}kg sur la première série. Si c'est trop dur, tu peux redescendre pour les séries suivantes.`,
-                suggestedWeight: newWeight,
-                weightTrend: 'up',
-                suggestedReps: targetReps
-            };
-        }
-        
-        // Below minimum → decrease
-        if (firstSetBelowMin) {
-            // Only decrease if effort was high or no RPE data
-            const shouldDecrease = !hasRealRpe || (firstSetRpe != null && firstSetRpe >= 8);
-            if (shouldDecrease) {
-                const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
-                return {
-                    type: 'decrease',
-                    icon: 'decrease',
-                    title: 'Ajustement nécessaire',
-                    message: `Tu étais sous ${slot.repsMin} reps malgré un effort intense. Baisse à ${newWeight}kg pour travailler dans la bonne plage et progresser durablement.`,
-                    suggestedWeight: newWeight,
-                    weightTrend: 'down',
-                    suggestedReps: targetReps
-                };
-            } else {
-                return {
-                    type: 'maintain',
-                    icon: 'target',
-                    title: 'Engage-toi plus ! 💪',
-                    message: `Tes reps sont basses mais ton effort semblait modéré. Concentre-toi et pousse plus près de l'échec - c'est là que la magie opère !`,
-                    suggestedWeight: lastWeight,
-                    weightTrend: 'same',
-                    suggestedReps: targetReps
-                };
-            }
-        }
-        
-        // === DEFAULT: Keep building ===
+        // === DEFAULT: Keep building (no stagnation detected, targets not yet hit) ===
         return {
             type: 'maintain',
             icon: 'maintain',
             title: 'Continue comme ça 💪',
-            message: `Tu progresses bien ! Vise ${slot.repsMax} reps sur toutes les séries avant d'augmenter la charge. Chaque rep compte !`,
+            message: `Vise les cibles (${targetReps}) avec RPE 8-9. Dès que tu les atteins, on augmente !`,
             suggestedWeight: lastWeight,
             weightTrend: 'same',
             suggestedReps: targetReps
@@ -4691,27 +6084,589 @@ class App {
     }
     
     // Get coaching suggestion for next sets based on current session performance
+    // ENHANCED: Granular day status with actionable advice + phenotype integration
     async getIntraSessionAdvice(currentSetIndex, currentSetData) {
         if (!this.currentSlot || !this.avgPerformance) return null;
         
-        // Only after first set
-        if (currentSetIndex !== 0) return null;
-        
-        // Detect hot/cold day
+        const slot = this.currentSlot;
         const dayStatus = this.getDayStatus(currentSetData, this.avgPerformance);
         
-        if (dayStatus === 'hot') {
+        // Calculate velocity proxy: compare actual vs expected reps
+        const expectedReps = slot.repsMax;
+        const actualReps = currentSetData.reps || 0;
+        const actualRpe = currentSetData.rpe;
+        const repsDelta = actualReps - expectedReps;
+        
+        // === INTRA-SESSION SET-BY-SET GUIDANCE ===
+        // After first set: assess day quality
+        if (currentSetIndex === 0) {
+            // VERY HOT: Exceptional performance (+10%)
+            if (dayStatus === 'very_hot') {
+                return {
+                    type: 'very_hot',
+                    title: '🔥 Journée exceptionnelle !',
+                    message: `Performance +10% vs moyenne ! C'est le moment de pousser : vise le haut de ta plage ou ajoute une série bonus pour capitaliser.`,
+                    actionable: 'Ajoute 1 série ou +2-3 reps par série',
+                    scienceNote: 'Pics de performance = fenêtre d\'adaptation maximale'
+                };
+            }
+            
+            // HOT: Good day (+6-10%)
+            if (dayStatus === 'hot') {
+                return {
+                    type: 'hot',
+                    title: '💪 Bonne forme !',
+                    message: `Tu es au-dessus de ta moyenne. Vise le haut de la plage (${slot.repsMax} reps) sur chaque série.`,
+                    actionable: `Pousse vers ${slot.repsMax} reps`
+                };
+            }
+            
+            // COLD: Subpar day (-6 to -10%)
+            if (dayStatus === 'cold') {
+                return {
+                    type: 'cold',
+                    title: '📊 Journée modérée',
+                    message: `Légèrement sous ta moyenne, mais c'est normal (variance biologique). Vise ${slot.repsMin}-${slot.repsMin + 2} reps, garde la technique propre.`,
+                    actionable: `Cible ${slot.repsMin} reps minimum, qualité > quantité`
+                };
+            }
+            
+            // VERY COLD: Significant fatigue (-10%+)
+            if (dayStatus === 'very_cold') {
+                return {
+                    type: 'very_cold',
+                    title: '⚠️ Fatigue détectée',
+                    message: `Performance -10% = fatigue accumulée probable. Aujourd'hui : réduis à ${Math.max(2, slot.sets - 1)} séries, garde la charge. Récupération > volume.`,
+                    actionable: `Fais ${Math.max(2, slot.sets - 1)} séries seulement`,
+                    warning: true,
+                    scienceNote: 'Fatigue chronique vs aiguë : mieux vaut un mini-deload que forcer'
+                };
+            }
+        }
+        
+        // === AFTER SET 1: RPE-BASED BACKOFF GUIDANCE ===
+        if (currentSetIndex >= 1 && actualRpe !== null) {
+            // If RPE too high (≥9.5), suggest weight reduction for remaining sets
+            if (actualRpe >= 9.5) {
+                const backoffWeight = Math.round(currentSetData.weight * 0.95 * 2) / 2;
+                return {
+                    type: 'backoff',
+                    title: '⚠️ Backoff recommandé',
+                    message: `RPE ${actualRpe} = proche de l'échec. Baisse à ${backoffWeight}kg pour les séries restantes afin de maintenir le volume sans compromettre la qualité.`,
+                    actionable: `${backoffWeight}kg pour séries ${currentSetIndex + 2}+`,
+                    backoffWeight,
+                    scienceNote: 'Maintenir le volume > forcer chaque série à l\'échec'
+                };
+            }
+            
+            // If RPE suspiciously low on later sets (potential sandbagging)
+            if (actualRpe <= 6 && actualReps >= expectedReps) {
+                const bumpWeight = Math.round(currentSetData.weight * 1.05 * 2) / 2;
+                return {
+                    type: 'push_harder',
+                    title: '💪 Monte l\'intensité !',
+                    message: `RPE ${actualRpe} avec ${actualReps} reps = marge inexploitée. Essaie ${bumpWeight}kg sur les prochaines séries pour maximiser le stimulus.`,
+                    actionable: `Tente ${bumpWeight}kg`,
+                    bumpWeight
+                };
+            }
+        }
+        
+        return null;
+    }
+    
+    // === ADVANCED: Real-time load prescription based on e1RM ===
+    getE1RMBasedPrescription(targetReps, targetRpe = 8) {
+        if (!this.currentHistoricalBestE1RM || this.currentHistoricalBestE1RM <= 0) {
+            return null;
+        }
+        
+        const prescribedLoad = this.getTargetLoadFromE1RM(
+            this.currentHistoricalBestE1RM,
+            targetReps,
+            targetRpe
+        );
+        
+        return {
+            e1rm: this.currentHistoricalBestE1RM,
+            targetReps,
+            targetRpe,
+            prescribedLoad,
+            prescription: `${prescribedLoad}kg × ${targetReps} @ RPE ${targetRpe}`
+        };
+    }
+    
+    // === PHENOTYPE-ADJUSTED RECOMMENDATIONS ===
+    getPhenotypeAdjustedAdvice(baseAdvice, phenotypeData) {
+        if (!phenotypeData || phenotypeData.confidence === 'low') {
+            return baseAdvice;
+        }
+        
+        const phenotype = phenotypeData.phenotype;
+        const adjustedAdvice = { ...baseAdvice };
+        
+        if (phenotype === 'HIGH_RESPONDER') {
+            // Fast-twitch dominant: fewer sets, more rest, lower rep ranges
+            if (adjustedAdvice.suggestedSets) {
+                adjustedAdvice.suggestedSets = Math.max(2, adjustedAdvice.suggestedSets - 1);
+            }
+            adjustedAdvice.phenotypeNote = 'Ton profil (fatigue rapide) suggère moins de séries mais plus intenses';
+            adjustedAdvice.restRecommendation = '2-3 min de repos entre séries';
+        } else if (phenotype === 'LOW_RESPONDER') {
+            // Slow-twitch dominant: more sets tolerated, shorter rest OK
+            if (adjustedAdvice.suggestedSets && adjustedAdvice.suggestedSets < 6) {
+                adjustedAdvice.suggestedSets = adjustedAdvice.suggestedSets + 1;
+            }
+            adjustedAdvice.phenotypeNote = 'Ton profil (endurance) te permet plus de volume';
+            adjustedAdvice.restRecommendation = '60-90s de repos suffisent';
+        }
+        
+        return adjustedAdvice;
+    }
+    
+    // === MESOCYCLE POSITION TRACKING ===
+    async getMesocyclePosition() {
+        const cycleStartDate = await db.getSetting('cycleStartDate');
+        if (!cycleStartDate) return null;
+        
+        const start = new Date(cycleStartDate);
+        const now = new Date();
+        const daysSinceStart = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+        const weekInCycle = Math.floor(daysSinceStart / 7) + 1;
+        const cycleLength = DEFAULT_PERIODIZATION.cycleLength || 5;
+        
+        // Position in mesocycle affects volume recommendations
+        let phase, volumeMultiplier, rpeTarget;
+        
+        if (weekInCycle === 1) {
+            phase = 'introduction';
+            volumeMultiplier = 0.8;  // Start at ~MEV
+            rpeTarget = 7;
+        } else if (weekInCycle === cycleLength) {
+            phase = 'deload';
+            volumeMultiplier = 0.5;  // Drop to MV
+            rpeTarget = 6;
+        } else if (weekInCycle >= cycleLength - 1) {
+            phase = 'overreach';
+            volumeMultiplier = 1.1;  // Push toward MRV
+            rpeTarget = 9;
+        } else {
+            phase = 'accumulation';
+            volumeMultiplier = 1.0 + (weekInCycle - 1) * 0.05; // Gradual ramp
+            rpeTarget = 8;
+        }
+        
+        return {
+            weekInCycle,
+            cycleLength,
+            phase,
+            volumeMultiplier,
+            rpeTarget,
+            daysSinceStart,
+            recommendation: this.getMesocyclePhaseRecommendation(phase)
+        };
+    }
+    
+    getMesocyclePhaseRecommendation(phase) {
+        const recommendations = {
+            introduction: 'Semaine d\'introduction : établis tes charges de travail, RPE modéré',
+            accumulation: 'Phase d\'accumulation : augmente progressivement le volume',
+            overreach: 'Semaine intensive : pousse vers ton MRV, fatigue attendue',
+            deload: 'Semaine de récupération : volume réduit, maintiens l\'intensité'
+        };
+        return recommendations[phase] || '';
+    }
+    
+    // === WEEKLY VOLUME TRACKING PER MUSCLE GROUP ===
+    async calculateWeeklyMuscleVolume(muscleGroup) {
+        const landmarks = VOLUME_LANDMARKS[muscleGroup] || VOLUME_LANDMARKS['default'];
+        
+        // Get this week's workouts
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const allHistory = await db.getAll('workoutHistory');
+        const thisWeekWorkouts = allHistory.filter(w => new Date(w.date) >= startOfWeek);
+        
+        // Get all sets from this week
+        let totalEffectiveSets = 0;
+        let totalRawSets = 0;
+        const exerciseBreakdown = {};
+        
+        for (const workout of thisWeekWorkouts) {
+            // Get slots for this workout's session
+            const slots = await db.getByIndex('slots', 'sessionId', workout.sessionId);
+            
+            for (const slot of slots) {
+                // Check if this slot targets the muscle group
+                // Simple heuristic: check exercise name and slot type
+                const exerciseName = (slot.activeExercise || slot.name || '').toLowerCase();
+                const muscleKeywords = this.getMuscleKeywords(muscleGroup);
+                
+                const targetsThisMuscle = muscleKeywords.some(kw => exerciseName.includes(kw));
+                if (!targetsThisMuscle) continue;
+                
+                // Get sets for this exercise in this workout
+                const exerciseId = slot.activeExercise || slot.name;
+                const setHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+                const workoutSets = setHistory.filter(s => s.workoutId === workout.id);
+                
+                if (workoutSets.length === 0) continue;
+                
+                // Calculate effective sets
+                const effectiveData = this.calculateEffectiveSets(workoutSets);
+                totalEffectiveSets += effectiveData.effectiveSets;
+                totalRawSets += workoutSets.length;
+                
+                if (!exerciseBreakdown[exerciseName]) {
+                    exerciseBreakdown[exerciseName] = { raw: 0, effective: 0 };
+                }
+                exerciseBreakdown[exerciseName].raw += workoutSets.length;
+                exerciseBreakdown[exerciseName].effective += effectiveData.effectiveSets;
+            }
+        }
+        
+        // Determine volume status relative to landmarks
+        let volumeStatus, recommendation;
+        if (totalEffectiveSets < landmarks.MV) {
+            volumeStatus = 'under_maintenance';
+            recommendation = `Volume insuffisant (${totalEffectiveSets.toFixed(1)}/${landmarks.MV} MV). Risque de désentraînement.`;
+        } else if (totalEffectiveSets < landmarks.MEV) {
+            volumeStatus = 'maintenance';
+            recommendation = `Volume de maintenance (${totalEffectiveSets.toFixed(1)}/${landmarks.MEV} MEV). Ajoute des séries pour progresser.`;
+        } else if (totalEffectiveSets <= landmarks.MAV) {
+            volumeStatus = 'optimal';
+            recommendation = `Volume optimal (${totalEffectiveSets.toFixed(1)} séries, zone MAV). Continue comme ça !`;
+        } else if (totalEffectiveSets <= landmarks.MRV) {
+            volumeStatus = 'high';
+            recommendation = `Volume élevé (${totalEffectiveSets.toFixed(1)}/${landmarks.MRV} MRV). Surveille ta récupération.`;
+        } else {
+            volumeStatus = 'excessive';
+            recommendation = `⚠️ Volume excessif (${totalEffectiveSets.toFixed(1)} > MRV ${landmarks.MRV}). Risque de surentraînement !`;
+        }
+        
+        return {
+            muscleGroup,
+            totalRawSets,
+            totalEffectiveSets: Math.round(totalEffectiveSets * 10) / 10,
+            landmarks,
+            volumeStatus,
+            recommendation,
+            exerciseBreakdown,
+            percentOfMRV: Math.round((totalEffectiveSets / landmarks.MRV) * 100)
+        };
+    }
+    
+    getMuscleKeywords(muscleGroup) {
+        const keywordMap = {
+            'pectoraux': ['pec', 'chest', 'développé', 'écarté', 'dips', 'pompes', 'push'],
+            'dos': ['dos', 'back', 'row', 'tirage', 'pull', 'lat', 'tractions'],
+            'epaules': ['épaule', 'shoulder', 'delto', 'élévation', 'lateral', 'military', 'overhead'],
+            'biceps': ['biceps', 'curl', 'flexion'],
+            'triceps': ['triceps', 'extension', 'pushdown', 'dips', 'skull', 'barre au front'],
+            'quadriceps': ['quad', 'squat', 'leg press', 'extension jambe', 'fente', 'lunge'],
+            'ischio-jambiers': ['ischio', 'hamstring', 'leg curl', 'soulevé de terre', 'deadlift'],
+            'mollets': ['mollet', 'calf', 'calves'],
+            'abdominaux': ['abdo', 'crunch', 'planche', 'core'],
+            'fessiers': ['fessier', 'glute', 'hip thrust']
+        };
+        return keywordMap[muscleGroup] || [muscleGroup];
+    }
+    
+    // === SFR-BASED EXERCISE OPTIMIZATION ===
+    async analyzeSFRForExerciseSwap(exerciseId, slot) {
+        const analysis = await this.generateExerciseAnalysis(exerciseId, slot);
+        if (!analysis.hasData) return null;
+        
+        const sfr = analysis.analysis.sfr;
+        
+        // If SFR is poor, suggest alternatives
+        if (sfr.interpretation === 'poor' || sfr.interpretation === 'moderate') {
+            const alternatives = this.getSFROptimizedAlternatives(slot, sfr);
+            
             return {
-                type: 'hot',
-                message: 'Journée en forme ! Tu peux viser le haut de la plage.'
-            };
-        } else if (dayStatus === 'cold') {
-            return {
-                type: 'cold',
-                message: 'Journée difficile. Vise le bas de la plage, garde la forme.'
+                currentSFR: sfr,
+                recommendation: sfr.interpretation === 'poor' 
+                    ? `SFR faible (${sfr.sfr}) : cet exercice génère beaucoup de fatigue pour peu de stimulus`
+                    : `SFR modéré (${sfr.sfr}) : des alternatives pourraient être plus efficaces`,
+                alternatives,
+                suggestSwap: sfr.interpretation === 'poor'
             };
         }
-        return null;
+        
+        return {
+            currentSFR: sfr,
+            recommendation: `SFR ${sfr.interpretation} (${sfr.sfr}) : bon ratio stimulus/fatigue`,
+            suggestSwap: false
+        };
+    }
+    
+    getSFROptimizedAlternatives(slot, currentSFR) {
+        // Suggest exercises with lower axial loading (better SFR)
+        const alternatives = [];
+        
+        if (slot.pool && slot.pool.length > 1) {
+            for (const exercise of slot.pool) {
+                const nameLower = exercise.toLowerCase();
+                let estimatedCoeff = AXIAL_LOADING_COEFFICIENTS['isolation_default'];
+                
+                for (const [key, coeff] of Object.entries(AXIAL_LOADING_COEFFICIENTS)) {
+                    if (nameLower.includes(key.toLowerCase())) {
+                        estimatedCoeff = coeff;
+                        break;
+                    }
+                }
+                
+                if (estimatedCoeff < currentSFR.axialCoeff) {
+                    alternatives.push({
+                        name: exercise,
+                        estimatedAxialCoeff: estimatedCoeff,
+                        sfrImprovement: `+${Math.round((currentSFR.axialCoeff / estimatedCoeff - 1) * 100)}%`
+                    });
+                }
+            }
+        }
+        
+        // Sort by best improvement
+        alternatives.sort((a, b) => a.estimatedAxialCoeff - b.estimatedAxialCoeff);
+        
+        return alternatives.slice(0, 3);
+    }
+    
+    // === PROGRESSIVE OVERLOAD TRACKING ===
+    async getProgressionSummary(exerciseId) {
+        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        if (allSetHistory.length === 0) return null;
+        
+        // Group by workout and calculate e1RM progression
+        const workoutE1RMs = {};
+        for (const set of allSetHistory) {
+            if (!workoutE1RMs[set.workoutId]) {
+                workoutE1RMs[set.workoutId] = {
+                    date: set.date,
+                    bestE1RM: 0,
+                    totalVolume: 0
+                };
+            }
+            const e1rm = this.calculateE1RM(set.weight, set.reps, set.rpe || 8);
+            if (e1rm > workoutE1RMs[set.workoutId].bestE1RM) {
+                workoutE1RMs[set.workoutId].bestE1RM = e1rm;
+            }
+            workoutE1RMs[set.workoutId].totalVolume += (set.weight || 0) * (set.reps || 0);
+        }
+        
+        const sortedWorkouts = Object.values(workoutE1RMs)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        if (sortedWorkouts.length < 2) return null;
+        
+        // Calculate progression metrics
+        const firstE1RM = sortedWorkouts[0].bestE1RM;
+        const lastE1RM = sortedWorkouts[sortedWorkouts.length - 1].bestE1RM;
+        const peakE1RM = Math.max(...sortedWorkouts.map(w => w.bestE1RM));
+        
+        const totalGain = lastE1RM - firstE1RM;
+        const totalGainPercent = firstE1RM > 0 ? (totalGain / firstE1RM) * 100 : 0;
+        
+        // Calculate weekly progression rate
+        const daysBetween = (new Date(sortedWorkouts[sortedWorkouts.length - 1].date) - new Date(sortedWorkouts[0].date)) / (1000 * 60 * 60 * 24);
+        const weeksBetween = Math.max(1, daysBetween / 7);
+        const weeklyProgressionRate = totalGainPercent / weeksBetween;
+        
+        // Assess progression quality
+        let progressionQuality, recommendation;
+        if (weeklyProgressionRate > 1.5) {
+            progressionQuality = 'excellent';
+            recommendation = 'Progression excellente ! Continue sur cette lancée.';
+        } else if (weeklyProgressionRate > 0.5) {
+            progressionQuality = 'good';
+            recommendation = 'Bonne progression. Assure-toi de maintenir ce rythme.';
+        } else if (weeklyProgressionRate > 0) {
+            progressionQuality = 'slow';
+            recommendation = 'Progression lente. Considère d\'ajouter du volume ou varier l\'intensité.';
+        } else {
+            progressionQuality = 'stalled';
+            recommendation = 'Pas de progression récente. Changement de stimulus recommandé.';
+        }
+        
+        return {
+            exerciseId,
+            sessions: sortedWorkouts.length,
+            firstE1RM: Math.round(firstE1RM * 10) / 10,
+            lastE1RM: Math.round(lastE1RM * 10) / 10,
+            peakE1RM: Math.round(peakE1RM * 10) / 10,
+            totalGainKg: Math.round(totalGain * 10) / 10,
+            totalGainPercent: Math.round(totalGainPercent * 10) / 10,
+            weeklyProgressionRate: Math.round(weeklyProgressionRate * 100) / 100,
+            progressionQuality,
+            recommendation,
+            atPeak: lastE1RM >= peakE1RM * 0.98 // Within 2% of peak
+        };
+    }
+    
+    // === GENERATE COMPREHENSIVE WORKOUT INTELLIGENCE REPORT ===
+    async generateIntelligenceReport() {
+        const report = {
+            timestamp: new Date().toISOString(),
+            mesocycle: await this.getMesocyclePosition(),
+            muscleVolume: {},
+            exerciseAnalysis: [],
+            overallRecommendations: []
+        };
+        
+        // Analyze volume for each muscle group
+        for (const muscleId of Object.keys(VOLUME_LANDMARKS)) {
+            if (muscleId === 'default') continue;
+            try {
+                const volumeData = await this.calculateWeeklyMuscleVolume(muscleId);
+                if (volumeData.totalRawSets > 0) {
+                    report.muscleVolume[muscleId] = volumeData;
+                }
+            } catch (e) {
+                // Skip if error
+            }
+        }
+        
+        // Generate overall recommendations
+        const undertrainedMuscles = Object.entries(report.muscleVolume)
+            .filter(([_, data]) => data.volumeStatus === 'under_maintenance' || data.volumeStatus === 'maintenance')
+            .map(([muscle, _]) => muscle);
+        
+        const overtrainedMuscles = Object.entries(report.muscleVolume)
+            .filter(([_, data]) => data.volumeStatus === 'excessive')
+            .map(([muscle, _]) => muscle);
+        
+        if (undertrainedMuscles.length > 0) {
+            report.overallRecommendations.push({
+                type: 'undertrained',
+                priority: 'medium',
+                message: `Muscles sous-entraînés cette semaine : ${undertrainedMuscles.join(', ')}. Ajoute du volume ou de la fréquence.`
+            });
+        }
+        
+        if (overtrainedMuscles.length > 0) {
+            report.overallRecommendations.push({
+                type: 'overtrained',
+                priority: 'high',
+                message: `⚠️ Volume excessif détecté : ${overtrainedMuscles.join(', ')}. Réduis les séries ou prends un deload.`
+            });
+        }
+        
+        // Mesocycle-based recommendation
+        if (report.mesocycle) {
+            report.overallRecommendations.push({
+                type: 'mesocycle',
+                priority: 'info',
+                message: report.mesocycle.recommendation
+            });
+        }
+        
+        return report;
+    }
+    
+    // === ADVANCED: Calculate cumulative fatigue score from recent sessions ===
+    async calculateFatigueScore(exerciseId, recentWorkouts) {
+        if (!recentWorkouts || recentWorkouts.length < 3) return null;
+        
+        // Analyze last 3-5 sessions for fatigue indicators
+        let fatigueIndicators = 0;
+        let totalIndicators = 0;
+        
+        for (let i = 0; i < Math.min(5, recentWorkouts.length - 1); i++) {
+            const current = recentWorkouts[i];
+            const previous = recentWorkouts[i + 1];
+            if (!current || !previous) continue;
+            
+            totalIndicators++;
+            
+            // Indicator 1: Declining reps at same weight
+            const currFirstReps = current.sets[0]?.reps || 0;
+            const prevFirstReps = previous.sets[0]?.reps || 0;
+            const currWeight = current.sets[0]?.weight || 0;
+            const prevWeight = previous.sets[0]?.weight || 0;
+            
+            if (Math.abs(currWeight - prevWeight) < 2 && currFirstReps < prevFirstReps) {
+                fatigueIndicators++;
+            }
+            
+            // Indicator 2: Increasing RPE for same performance
+            if (current.hasRealRpe && previous.hasRealRpe) {
+                if (current.avgRpe > previous.avgRpe + 0.5 && currFirstReps <= prevFirstReps) {
+                    fatigueIndicators++;
+                    totalIndicators++;
+                }
+            }
+            
+            // Indicator 3: Dropped mid-session pattern
+            const currPattern = this.analyzeWorkoutPattern(current.sets, this.currentSlot);
+            if (currPattern?.analysis?.droppedMidSession) {
+                fatigueIndicators++;
+                totalIndicators++;
+            }
+        }
+        
+        if (totalIndicators === 0) return null;
+        
+        const fatigueRatio = fatigueIndicators / totalIndicators;
+        
+        // Return fatigue assessment
+        if (fatigueRatio >= 0.6) {
+            return {
+                level: 'high',
+                score: fatigueRatio,
+                recommendation: 'Deload recommandé : fatigue chronique probable',
+                suggestedAction: 'deload'
+            };
+        } else if (fatigueRatio >= 0.3) {
+            return {
+                level: 'moderate',
+                score: fatigueRatio,
+                recommendation: 'Fatigue modérée : surveille ta récupération',
+                suggestedAction: 'monitor'
+            };
+        }
+        
+        return {
+            level: 'low',
+            score: fatigueRatio,
+            recommendation: 'Récupération OK',
+            suggestedAction: 'continue'
+        };
+    }
+    
+    // === VELOCITY PROXY: Estimate bar speed from rep performance ===
+    // Without actual VBT device, we can infer velocity loss from rep drop-off
+    estimateVelocityLoss(sets) {
+        if (!sets || sets.length < 2) return null;
+        
+        const firstSetReps = sets[0]?.reps || 0;
+        const lastSetReps = sets[sets.length - 1]?.reps || 0;
+        
+        if (firstSetReps === 0) return null;
+        
+        // Rep drop-off as proxy for velocity loss
+        // Research: 30% rep drop ≈ 20-25% velocity loss (optimal hypertrophy zone)
+        const repDropPercent = ((firstSetReps - lastSetReps) / firstSetReps) * 100;
+        
+        // Convert to estimated velocity loss (rough correlation)
+        const estimatedVelocityLoss = repDropPercent * 0.8;
+        
+        return {
+            repDropPercent: Math.round(repDropPercent),
+            estimatedVelocityLoss: Math.round(estimatedVelocityLoss),
+            zone: estimatedVelocityLoss < 15 ? 'strength' : 
+                  estimatedVelocityLoss < 30 ? 'hypertrophy_optimal' : 
+                  estimatedVelocityLoss < 45 ? 'hypertrophy_high' : 'endurance',
+            interpretation: estimatedVelocityLoss < 15 
+                ? 'Peu de fatigue métabolique - zone force/neural'
+                : estimatedVelocityLoss < 30 
+                    ? 'Zone hypertrophie optimale ✓'
+                    : estimatedVelocityLoss < 45
+                        ? 'Fatigue métabolique élevée - bon pour la masse'
+                        : 'Fatigue excessive - risque de junk volume'
+        };
     }
 }
 

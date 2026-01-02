@@ -805,7 +805,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: linear-gradient(135deg, var(--success), #16a34a);
+    background: var(--success);
     color: white;
     font-weight: 700;
     font-size: 13px;
@@ -1041,6 +1041,56 @@ body {
 .input-group.coaching-suggested .suggested-label {
     background: rgba(34, 197, 94, 0.15);
     color: var(--success);
+}
+
+/* Continue sets card (deload override) */
+.series-continue-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
+    border: 1px dashed rgba(59, 130, 246, 0.3);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+}
+
+.series-continue-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.series-continue-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+.series-continue-sublabel {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.btn-continue-sets {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: var(--radius-md);
+    color: #3b82f6;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-continue-sets:active {
+    transform: scale(0.97);
+    background: rgba(59, 130, 246, 0.15);
 }
 
 .input-group input::placeholder {
@@ -2853,25 +2903,28 @@ body {
 /* ===== Coaching Advice Card ===== */
 .coaching-advice {
     margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-light);
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
 }
 
 .coaching-advice-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 
 .coaching-advice-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     background: rgba(99, 102, 241, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .coaching-advice-icon svg {
@@ -2880,25 +2933,27 @@ body {
 }
 
 .coaching-advice-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.3;
 }
 
 .coaching-advice-message {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-secondary);
-    line-height: 1.5;
-    padding: 12px;
-    border-radius: var(--radius-md);
-    margin-bottom: 12px;
+    line-height: 1.6;
+    padding: 14px 16px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 14px;
+    background: var(--bg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* Coaching advice color variants */
+/* Coaching advice color variants - Professional clean design */
 .coaching-advice.advice-increase .coaching-advice-message {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.05));
-    border: 2px solid rgba(34, 197, 94, 0.2);
-    color: #15803d;
+    background: rgba(34, 197, 94, 0.08);
+    color: #166534;
 }
 
 .coaching-advice.advice-increase .coaching-advice-title {
@@ -2906,14 +2961,13 @@ body {
 }
 
 .coaching-advice.advice-increase .coaching-advice-icon {
-    background: rgba(34, 197, 94, 0.15);
+    background: rgba(34, 197, 94, 0.12);
     color: var(--success);
 }
 
 .coaching-advice.advice-maintain .coaching-advice-message {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.05));
-    border: 2px solid rgba(245, 158, 11, 0.2);
-    color: #b45309;
+    background: rgba(245, 158, 11, 0.08);
+    color: #92400e;
 }
 
 .coaching-advice.advice-maintain .coaching-advice-title {
@@ -2921,14 +2975,13 @@ body {
 }
 
 .coaching-advice.advice-maintain .coaching-advice-icon {
-    background: rgba(245, 158, 11, 0.12);
+    background: rgba(245, 158, 11, 0.1);
     color: var(--warning);
 }
 
 .coaching-advice.advice-decrease .coaching-advice-message {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.05));
-    border: 2px solid rgba(239, 68, 68, 0.2);
-    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.08);
+    color: #991b1b;
 }
 
 .coaching-advice.advice-decrease .coaching-advice-title {
@@ -2936,14 +2989,13 @@ body {
 }
 
 .coaching-advice.advice-decrease .coaching-advice-icon {
-    background: rgba(239, 68, 68, 0.12);
+    background: rgba(239, 68, 68, 0.1);
     color: var(--danger);
 }
 
 .coaching-advice.advice-switch .coaching-advice-message {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
-    border: 2px solid rgba(239, 68, 68, 0.3);
-    color: #991b1b;
+    background: rgba(239, 68, 68, 0.1);
+    color: #7f1d1d;
 }
 
 .coaching-advice.advice-switch .coaching-advice-title {
@@ -2951,14 +3003,13 @@ body {
 }
 
 .coaching-advice.advice-switch .coaching-advice-icon {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.12);
     color: var(--danger);
 }
 
 .coaching-advice.advice-new .coaching-advice-message {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.05));
-    border: 2px solid rgba(99, 102, 241, 0.2);
-    color: var(--primary-dark);
+    background: rgba(99, 102, 241, 0.08);
+    color: #3730a3;
 }
 
 .coaching-advice.advice-new .coaching-advice-title {
@@ -2966,39 +3017,133 @@ body {
 }
 
 .coaching-advice.advice-new .coaching-advice-icon {
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(99, 102, 241, 0.1);
     color: var(--primary);
+}
+
+/* Volume Up - Purple for growth emphasis */
+.coaching-advice.advice-volume_up .coaching-advice-message {
+    background: rgba(139, 92, 246, 0.08);
+    color: #5b21b6;
+}
+
+.coaching-advice.advice-volume_up .coaching-advice-title {
+    color: #7c3aed;
+}
+
+.coaching-advice.advice-volume_up .coaching-advice-icon {
+    background: rgba(139, 92, 246, 0.12);
+    color: #7c3aed;
+}
+
+/* Deload - Calming blue for recovery */
+.coaching-advice.advice-deload .coaching-advice-message {
+    background: rgba(59, 130, 246, 0.08);
+    color: #1e40af;
+}
+
+.coaching-advice.advice-deload .coaching-advice-title {
+    color: #3b82f6;
+}
+
+.coaching-advice.advice-deload .coaching-advice-icon {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+/* Reactive Deload - Cyan for urgent recovery */
+.coaching-advice.advice-reactive_deload .coaching-advice-message {
+    background: rgba(6, 182, 212, 0.08);
+    color: #0e7490;
+}
+
+.coaching-advice.advice-reactive_deload .coaching-advice-title {
+    color: #06b6d4;
+}
+
+.coaching-advice.advice-reactive_deload .coaching-advice-icon {
+    background: rgba(6, 182, 212, 0.1);
+    color: #06b6d4;
+}
+
+/* Mini Deload - Lighter blue variant */
+.coaching-advice.advice-deload_mini .coaching-advice-message {
+    background: rgba(14, 165, 233, 0.08);
+    color: #0369a1;
+}
+
+.coaching-advice.advice-deload_mini .coaching-advice-title {
+    color: #0ea5e9;
+}
+
+.coaching-advice.advice-deload_mini .coaching-advice-icon {
+    background: rgba(14, 165, 233, 0.1);
+    color: #0ea5e9;
+}
+
+/* Intensify - Electric orange for high intensity */
+.coaching-advice.advice-intensify .coaching-advice-message {
+    background: rgba(249, 115, 22, 0.08);
+    color: #c2410c;
+}
+
+.coaching-advice.advice-intensify .coaching-advice-title {
+    color: #f97316;
+}
+
+.coaching-advice.advice-intensify .coaching-advice-icon {
+    background: rgba(249, 115, 22, 0.12);
+    color: #f97316;
+}
+
+/* Force Increase / AMRAP Test - Bold purple */
+.coaching-advice.advice-force_increase .coaching-advice-message,
+.coaching-advice.advice-amrap_test .coaching-advice-message {
+    background: rgba(168, 85, 247, 0.08);
+    color: #7e22ce;
+}
+
+.coaching-advice.advice-force_increase .coaching-advice-title,
+.coaching-advice.advice-amrap_test .coaching-advice-title {
+    color: #a855f7;
+}
+
+.coaching-advice.advice-force_increase .coaching-advice-icon,
+.coaching-advice.advice-amrap_test .coaching-advice-icon {
+    background: rgba(168, 85, 247, 0.12);
+    color: #a855f7;
 }
 
 .coaching-suggestion-row {
     display: flex;
-    gap: 12px;
+    gap: 10px;
 }
 
 .coaching-suggestion {
     flex: 1;
-    background: var(--bg-tertiary);
+    background: var(--bg);
     border-radius: var(--radius-md);
-    padding: 12px;
+    padding: 12px 10px;
     text-align: center;
+    border: 1px solid var(--border-light);
 }
 
 .coaching-suggestion-label {
     display: block;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
 }
 
 .coaching-suggestion-value {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    font-size: 18px;
+    gap: 4px;
+    font-size: 17px;
     font-weight: 800;
     color: var(--text-primary);
 }
@@ -3008,19 +3153,34 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
 }
 
 .coaching-weight-trend svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
+}
+
+.coaching-weight-trend.trend-up {
+    background: rgba(34, 197, 94, 0.12);
 }
 
 .coaching-weight-trend.trend-up svg {
     color: var(--success);
 }
 
+.coaching-weight-trend.trend-same {
+    background: rgba(245, 158, 11, 0.1);
+}
+
 .coaching-weight-trend.trend-same svg {
     color: var(--warning);
+}
+
+.coaching-weight-trend.trend-down {
+    background: rgba(239, 68, 68, 0.1);
 }
 
 .coaching-weight-trend.trend-down svg {
@@ -3100,53 +3260,61 @@ body {
     bottom: 100px;
     left: 50%;
     transform: translateX(-50%) translateY(20px);
-    background: rgba(30, 41, 59, 0.95);
-    color: white;
-    padding: 12px 20px;
-    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 1), rgba(30, 41, 59, 1));
+    color: #313265;
+    padding: 16px 24px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     z-index: 1000;
     opacity: 0;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
     max-width: calc(100vw - 40px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .coach-toast.visible {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(1);
 }
 
 .coach-toast-icon {
-    font-size: 20px;
+    font-size: 24px;
     flex-shrink: 0;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .coach-toast-text {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 .coach-toast-text strong {
     font-weight: 700;
-    color: var(--primary-light);
+    color: #4f46e5;
 }
 
 .coach-toast.backoff {
-    border-left: 4px solid var(--warning);
+    background: linear-gradient(135deg, rgba(251, 146, 60, 0.25), rgba(249, 115, 22, 0.25));
+    border: 1px solid rgba(251, 146, 60, 0.4);
+    box-shadow: 0 8px 32px rgba(251, 146, 60, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .coach-toast.cold {
-    border-left: 4px solid #60a5fa;
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.25));
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    box-shadow: 0 8px 32px rgba(96, 165, 250, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .coach-toast.hot {
-    border-left: 4px solid var(--success);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(22, 163, 74, 0.25));
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    box-shadow: 0 8px 32px rgba(34, 197, 94, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* ===== Stimulus Score Overlay ===== */
@@ -3549,61 +3717,112 @@ body {
 .muscle-stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
 .muscle-stat-item {
     background: var(--bg-tertiary);
-    border-radius: var(--radius-md);
+    border-radius: 12px;
     padding: 12px;
     position: relative;
     overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.muscle-stat-item:active {
-    transform: scale(0.98);
+    transition: all 0.2s ease;
+    border: 1.5px solid transparent;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .muscle-stat-item.has-volume {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.04));
-    border: 1px solid rgba(99, 102, 241, 0.15);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.02));
+    border-color: rgba(99, 102, 241, 0.12);
+}
+
+.muscle-stat-item.has-volume.low {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.03));
+    border-color: rgba(245, 158, 11, 0.15);
 }
 
 .muscle-stat-item.optimal {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.04));
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.03));
+    border-color: rgba(34, 197, 94, 0.18);
 }
 
 .muscle-stat-item.excessive {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.04));
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03));
+    border-color: rgba(239, 68, 68, 0.18);
 }
 
-.muscle-stat-top {
+/* New header structure */
+.muscle-stat-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 6px;
+    min-height: 20px;
+}
+
+.muscle-stat-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0;
+    line-height: 1.2;
+}
+
+.muscle-stat-status {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.muscle-stat-item.optimal .muscle-stat-status {
+    background: rgba(34, 197, 94, 0.15);
+    color: #15803d;
+}
+
+.muscle-stat-item.excessive .muscle-stat-status {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
+}
+
+.muscle-stat-item.has-volume.low .muscle-stat-status {
+    background: rgba(245, 158, 11, 0.15);
+    color: #b45309;
+}
+
+/* Value display */
+.muscle-stat-value {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
     margin-bottom: 8px;
 }
 
-.muscle-stat-icon {
-    font-size: 18px;
-    filter: grayscale(0.3);
-}
-
-.muscle-stat-item.has-volume .muscle-stat-icon {
-    filter: none;
-}
-
 .muscle-stat-sets {
-    font-size: 18px;
+    font-size: 28px;
     font-weight: 800;
+    line-height: 1;
     color: var(--text-muted);
+    letter-spacing: -0.5px;
+}
+
+.muscle-stat-unit {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    opacity: 0.7;
 }
 
 .muscle-stat-item.has-volume .muscle-stat-sets {
     color: var(--primary);
+}
+
+.muscle-stat-item.has-volume.low .muscle-stat-sets {
+    color: var(--warning);
 }
 
 .muscle-stat-item.optimal .muscle-stat-sets {
@@ -3614,50 +3833,55 @@ body {
     color: var(--danger);
 }
 
-.muscle-stat-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-}
-
+/* Progress bar */
 .muscle-stat-bar {
-    height: 4px;
-    background: rgba(148, 163, 184, 0.2);
-    border-radius: 2px;
+    height: 5px;
+    background: rgba(148, 163, 184, 0.12);
+    border-radius: 10px;
     overflow: hidden;
 }
 
 .muscle-stat-fill {
     height: 100%;
-    border-radius: 2px;
-    transition: width 0.5s ease;
-    background: var(--text-muted);
+    border-radius: 10px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(148, 163, 184, 0.3);
 }
 
 .muscle-stat-item.has-volume .muscle-stat-fill {
     background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+}
+
+.muscle-stat-item.has-volume.low .muscle-stat-fill {
+    background: linear-gradient(90deg, var(--warning), #fbbf24);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
 }
 
 .muscle-stat-item.optimal .muscle-stat-fill {
     background: linear-gradient(90deg, var(--success), #4ade80);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
 }
 
 .muscle-stat-item.excessive .muscle-stat-fill {
     background: linear-gradient(90deg, var(--danger), #f87171);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
 }
 
+/* Empty state */
 .muscle-stats-empty {
     text-align: center;
-    padding: 24px 16px;
+    padding: 32px 16px;
     color: var(--text-muted);
     font-size: 13px;
+    line-height: 1.5;
 }
 
 .muscle-stats-empty-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
-    opacity: 0.5;
+    display: block;
+    margin: 0 auto 12px;
+    opacity: 0.4;
+    color: var(--text-muted);
 }
 
 /* ===== Confetti Animation ===== */
