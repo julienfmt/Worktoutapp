@@ -21,7 +21,27 @@ class App {
         await this.loadCurrentWorkout();
         this.bindEvents();
         this.setupVisibilityHandler();
+        await this.updateStorageInfo();
+        setInterval(() => this.updateStorageInfo(), 5000);
         await this.renderHome();
+    }
+    
+    async updateStorageInfo() {
+        try {
+            const storageInfo = await db.getStorageInfo();
+            const storageElement = document.getElementById('storage-info');
+            
+            if (storageInfo.quota && storageInfo.usage) {
+                const usedMB = (storageInfo.usage / 1024 / 1024).toFixed(2);
+                const quotaMB = (storageInfo.quota / 1024 / 1024).toFixed(2);
+                const percentUsed = Math.round((storageInfo.usage / storageInfo.quota) * 100);
+                
+                const persistStatus = storageInfo.isPersisted ? '✅' : '⚠️';
+                storageElement.textContent = `${persistStatus} ${usedMB}MB / ${quotaMB}MB (${percentUsed}%)`;
+            }
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour des informations de stockage:', error);
+        }
     }
     
     setupVisibilityHandler() {
@@ -1639,6 +1659,9 @@ class App {
                 const slots = await db.getSlotsBySession(session.id);
                 document.getElementById('session-slots').textContent = `${slots.length} exercices`;
                 document.getElementById('session-duration').textContent = `~${session.estimatedDuration} min`;
+                
+                await db.setSetting('nextSessionIndex', i);
+                
                 this.hideChangeSessionSheet();
             };
             container.appendChild(btn);
