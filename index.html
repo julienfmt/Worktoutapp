@@ -31,19 +31,22 @@
         <!-- Écran Accueil -->
         <div id="screen-home" class="screen active">
             <header class="header-home">
-                <div class="xp-bar">
-                    <div class="xp-fill" id="xp-fill"></div>
-                </div>
                 <div class="header-top">
                     <h1>Prêt pour ta séance ?</h1>
-                    <div class="streak-badge" id="streak-badge">
-                        <span class="streak-icon">🔥</span>
-                        <span class="streak-count" id="streak-count">0/3</span>
-                    </div>
                 </div>
             </header>
 
             <main class="home-content">
+                <!-- Streak Card - Consolidated -->
+                <div class="streak-card" id="streak-card">
+                    <!-- Content generated dynamically -->
+                </div>
+                
+                <!-- Week Prediction/Warning -->
+                <div class="week-prediction" id="week-prediction" style="display: none;">
+                    <!-- Content generated dynamically -->
+                </div>
+                
                 <div class="suggested-session-card" id="suggested-session">
                     <div class="session-label">Séance suivante</div>
                     <h2 class="session-name" id="session-name">Chargement...</h2>
@@ -149,7 +152,24 @@
                             <canvas id="frequency-chart" width="320" height="120"></canvas>
                         </div>
                     </div>
+                    
+                    <!-- Muscle Group Stats -->
+                    <div class="muscle-stats-section">
+                        <div class="muscle-stats-header">
+                            <span class="muscle-stats-title">Volume par muscle (cette semaine)</span>
+                            <span class="muscle-stats-subtitle">Séries effectives</span>
+                        </div>
+                        <div class="muscle-stats-grid" id="muscle-stats-grid">
+                            <!-- Generated dynamically -->
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Footer version -->
+                <footer class="app-footer">
+                    <span class="app-version">v3.0</span>
+                    <span class="storage-info" id="storage-info"></span>
+                </footer>
             </main>
         </div>
 
@@ -436,6 +456,41 @@
             </div>
         </div>
 
+        <!-- Modal Suggestion Deload -->
+        <div class="modal" id="modal-deload">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-deload">
+                <div class="deload-icon">🔋</div>
+                <h3>Semaine de récupération suggérée</h3>
+                <div class="deload-reason" id="deload-reason">
+                    <!-- Raison générée dynamiquement -->
+                </div>
+                <div class="deload-explanation">
+                    <p><strong>Qu'est-ce qu'un deload ?</strong></p>
+                    <p>Une semaine allégée permet à ton corps de récupérer et de surcompenser. C'est scientifiquement prouvé : après 4-6 semaines d'entraînement intensif, une phase de récupération optimise les gains musculaires.</p>
+                    <div class="deload-changes">
+                        <div class="deload-change">
+                            <span class="change-icon">📉</span>
+                            <span>Volume réduit de <strong id="deload-volume-reduction">50%</strong></span>
+                        </div>
+                        <div class="deload-change">
+                            <span class="change-icon">🏋️</span>
+                            <span>Charges réduites de <strong id="deload-intensity-reduction">10%</strong></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="btn-skip-deload">Non, séance normale</button>
+                    <button class="btn btn-primary" id="btn-accept-deload">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Activer le deload
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Bottom Sheet Paramètres -->
         <div class="bottom-sheet" id="sheet-settings">
             <div class="sheet-backdrop"></div>
@@ -526,16 +581,62 @@
                     </div>
                 </div>
 
+                <div class="settings-divider"></div>
+                <h4 class="settings-group-title">🔋 Périodisation & Deload</h4>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+                        </svg>
+                        Durée du cycle
+                    </h4>
+                    <p class="settings-description">Nombre de semaines avant une semaine de deload suggérée</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-cycle-length" class="settings-slider" min="3" max="8" value="5">
+                        <div class="settings-slider-value">
+                            <span id="setting-cycle-length-value">5</span> semaines (dont 1 deload)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                        Détection auto deload
+                    </h4>
+                    <p class="settings-description">Suggérer un deload après plusieurs "journées froides" consécutives</p>
+                    <div class="settings-toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-auto-deload" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Activé</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 20V10M12 20V4M6 20v-6"/>
+                        </svg>
+                        Réduction volume deload
+                    </h4>
+                    <p class="settings-description">Pourcentage de réduction des séries en mode deload</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-deload-volume" class="settings-slider" min="30" max="70" step="10" value="50">
+                        <div class="settings-slider-value">
+                            <span id="setting-deload-volume-value">50</span>% de réduction
+                        </div>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary btn-large" id="btn-save-settings">Enregistrer les paramètres</button>
             </div>
         </div>
     </div>
-
-    <!-- Footer version -->
-    <footer class="app-footer">
-        <span class="app-version">v3.0</span>
-        <span class="storage-info" id="storage-info"></span>
-    </footer>
 
     <script src="db.js"></script>
     <script src="data.js"></script>

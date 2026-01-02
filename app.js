@@ -1,3 +1,322 @@
+// ===== Streak Engine =====
+class StreakEngine {
+    constructor() {
+        this.LEVELS = [
+            { name: 'Rookie', min: 0, max: 3, color: '#94a3b8' },
+            { name: 'Focus', min: 4, max: 7, color: '#f59e0b' },
+            { name: 'Machine', min: 8, max: 15, color: '#8b5cf6' },
+            { name: 'Légende', min: 16, max: Infinity, color: '#ef4444' }
+        ];
+        this.MAX_SHIELDS = 3;
+    }
+
+    getWeekBounds(date = new Date()) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diffToMonday = day === 0 ? -6 : 1 - day;
+        const monday = new Date(d);
+        monday.setDate(d.getDate() + diffToMonday);
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        return { start: monday, end: sunday };
+    }
+
+    async getCurrentWeekSessions() {
+        const { start, end } = this.getWeekBounds();
+        const history = await db.getAll('workoutHistory');
+        return history.filter(w => {
+            const d = new Date(w.date);
+            return d >= start && d <= end;
+        }).length;
+    }
+
+    async getStreakData() {
+        const streakCount = (await db.getSetting('streakCount')) ?? 0;
+        const shieldCount = (await db.getSetting('shieldCount')) ?? 0;
+        const weekProtected = (await db.getSetting('weekProtected')) ?? false;
+        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
+        const currentWeekSessions = await this.getCurrentWeekSessions();
+        const lastWeekCheck = await db.getSetting('lastWeekCheck');
+        
+        return {
+            streakCount,
+            shieldCount,
+            weekProtected,
+            weeklyGoal,
+            currentWeekSessions,
+            lastWeekCheck
+        };
+    }
+
+    getLevel(streakCount) {
+        for (const level of this.LEVELS) {
+            if (streakCount >= level.min && streakCount <= level.max) {
+                return level;
+            }
+        }
+        return this.LEVELS[0];
+    }
+
+    async getWeekPrediction() {
+        const { weeklyGoal, currentWeekSessions, weekProtected, shieldCount, streakCount } = await this.getStreakData();
+        const { end } = this.getWeekBounds();
+        const now = new Date();
+        
+        const daysLeft = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+        const sessionsNeeded = weeklyGoal - currentWeekSessions;
+        
+        if (sessionsNeeded <= 0) {
+            return { status: 'success', message: 'Objectif atteint !', daysLeft, sessionsNeeded: 0 };
+        }
+        
+        if (sessionsNeeded > daysLeft) {
+            if (shieldCount >= 1 || weekProtected) {
+                return { 
+                    status: 'danger', 
+                    message: `Impossible d'atteindre l'objectif. Bouclier en jeu.`,
+                    daysLeft, 
+                    sessionsNeeded,
+                    shieldAtRisk: true
+                };
+            }
+            return { 
+                status: 'danger', 
+                message: `Plus assez de jours ! Streak en danger.`,
+                daysLeft, 
+                sessionsNeeded,
+                streakAtRisk: true
+            };
+        }
+        
+        if (sessionsNeeded === daysLeft) {
+            const protectionMsg = shieldCount >= 1 ? ' Bouclier disponible.' : '';
+            return { 
+                status: 'warning', 
+                message: `${sessionsNeeded} séance${sessionsNeeded > 1 ? 's' : ''} requise${sessionsNeeded > 1 ? 's' : ''} en ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.${protectionMsg}`,
+                daysLeft, 
+                sessionsNeeded 
+            };
+        }
+        
+        return { 
+            status: 'ontrack', 
+            message: `${sessionsNeeded} séance${sessionsNeeded > 1 ? 's' : ''} restante${sessionsNeeded > 1 ? 's' : ''} cette semaine.`,
+            daysLeft, 
+            sessionsNeeded 
+        };
+    }
+
+    async checkAndProcessWeekEnd() {
+        const lastWeekCheck = await db.getSetting('lastWeekCheck');
+        const { start: currentWeekStart } = this.getWeekBounds();
+        
+        if (lastWeekCheck) {
+            const lastCheckDate = new Date(lastWeekCheck);
+            const { start: lastCheckWeekStart } = this.getWeekBounds(lastCheckDate);
+            
+            if (lastCheckWeekStart.getTime() === currentWeekStart.getTime()) {
+                return null;
+            }
+            
+            const weeksPassed = Math.floor((currentWeekStart - lastCheckWeekStart) / (7 * 24 * 60 * 60 * 1000));
+            
+            if (weeksPassed > 0) {
+                return await this.processWeekTransition(weeksPassed, lastCheckWeekStart);
+            }
+        }
+        
+        await db.setSetting('lastWeekCheck', new Date().toISOString());
+        return null;
+    }
+
+    async processWeekTransition(weeksPassed, lastCheckWeekStart) {
+        let streakCount = (await db.getSetting('streakCount')) ?? 0;
+        let shieldCount = (await db.getSetting('shieldCount')) ?? 0;
+        let weekProtected = (await db.getSetting('weekProtected')) ?? false;
+        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
+        
+        const results = [];
+        
+        for (let i = 1; i <= weeksPassed; i++) {
+            const weekToCheck = new Date(lastCheckWeekStart);
+            weekToCheck.setDate(weekToCheck.getDate() + (i * 7));
+            const { start, end } = this.getWeekBounds(weekToCheck);
+            
+            const history = await db.getAll('workoutHistory');
+            const weekSessions = history.filter(w => {
+                const d = new Date(w.date);
+                return d >= start && d <= end;
+            }).length;
+            
+            const goalMet = weekSessions >= weeklyGoal;
+            
+            if (goalMet) {
+                streakCount++;
+                if (!weekProtected) {
+                    shieldCount = Math.min(shieldCount + 0.5, this.MAX_SHIELDS);
+                }
+                weekProtected = false;
+                results.push({ week: i, success: true, streakCount, shieldCount });
+            } else {
+                if (shieldCount >= 1) {
+                    shieldCount -= 1;
+                    weekProtected = true;
+                    results.push({ week: i, success: false, protected: true, streakCount, shieldCount });
+                } else {
+                    streakCount = 0;
+                    weekProtected = false;
+                    results.push({ week: i, success: false, protected: false, streakCount: 0, shieldCount });
+                }
+            }
+        }
+        
+        await db.setSetting('streakCount', streakCount);
+        await db.setSetting('shieldCount', shieldCount);
+        await db.setSetting('weekProtected', weekProtected);
+        await db.setSetting('lastWeekCheck', new Date().toISOString());
+        
+        return results;
+    }
+
+    async recordWorkoutForStreak() {
+        await this.checkAndProcessWeekEnd();
+    }
+}
+
+const streakEngine = new StreakEngine();
+
+// ===== Gamification Engine =====
+class GamificationEngine {
+    constructor() {
+        this.confettiColors = ['#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6'];
+    }
+    
+    triggerConfetti(intensity = 'medium') {
+        const container = document.createElement('div');
+        container.className = 'confetti-container';
+        document.body.appendChild(container);
+        
+        const counts = { light: 30, medium: 60, heavy: 100 };
+        const count = counts[intensity] || 60;
+        
+        for (let i = 0; i < count; i++) {
+            const confetti = document.createElement('div');
+            const shapes = ['circle', 'square', 'triangle'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            
+            confetti.className = `confetti ${shape}`;
+            confetti.style.left = Math.random() * 100 + '%';
+            confetti.style.backgroundColor = this.confettiColors[Math.floor(Math.random() * this.confettiColors.length)];
+            confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
+            confetti.style.animationDelay = Math.random() * 0.5 + 's';
+            
+            container.appendChild(confetti);
+        }
+        
+        setTimeout(() => container.remove(), 4000);
+    }
+    
+    showAchievement(icon, title, message, xpGain = null) {
+        // Remove existing toast if any
+        const existing = document.querySelector('.achievement-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'achievement-toast';
+        toast.innerHTML = `
+            <div class="achievement-toast-icon">${icon}</div>
+            <div class="achievement-toast-title">${title}</div>
+            <div class="achievement-toast-message">${message}</div>
+            ${xpGain ? `<div class="achievement-toast-xp">+${xpGain} XP</div>` : ''}
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+        
+        // Auto-dismiss
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 400);
+        }, 2500);
+        
+        // Dismiss on tap
+        toast.addEventListener('click', () => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 400);
+        });
+    }
+    
+    celebrateWorkoutComplete(sessionName, stats) {
+        this.triggerConfetti('medium');
+        
+        setTimeout(() => {
+            this.showAchievement(
+                '🎉',
+                'Séance terminée !',
+                `${sessionName} • ${stats.totalSets} séries • ${stats.duration} min`,
+                stats.xpGain
+            );
+        }, 300);
+    }
+    
+    celebrateWeeklyGoal() {
+        this.triggerConfetti('heavy');
+        
+        setTimeout(() => {
+            this.showAchievement(
+                '🏆',
+                'Objectif atteint !',
+                'Tu as validé ton objectif hebdomadaire !',
+                50
+            );
+        }, 300);
+        
+        // Add celebration class to streak card
+        const streakCard = document.getElementById('streak-card');
+        if (streakCard) {
+            streakCard.classList.add('celebrating');
+            setTimeout(() => streakCard.classList.remove('celebrating'), 2000);
+        }
+    }
+    
+    celebrateStreak(streakCount) {
+        const milestones = {
+            4: { icon: '🔥', title: 'Focus atteint !', message: 'Tu passes au niveau Focus !' },
+            8: { icon: '⚡', title: 'Machine !', message: 'Tu es une vraie machine !' },
+            16: { icon: '👑', title: 'Légende !', message: 'Tu es une légende vivante !' },
+            25: { icon: '🌟', title: 'Incroyable !', message: '25 semaines consécutives !' },
+            50: { icon: '💎', title: 'Diamant !', message: '50 semaines ! Tu es exceptionnel !' }
+        };
+        
+        const milestone = milestones[streakCount];
+        if (milestone) {
+            this.triggerConfetti('heavy');
+            setTimeout(() => {
+                this.showAchievement(milestone.icon, milestone.title, milestone.message, 100);
+            }, 300);
+        }
+    }
+    
+    celebratePersonalRecord(exerciseName) {
+        this.triggerConfetti('light');
+        this.showAchievement('💪', 'Nouveau record !', `PR sur ${exerciseName}`);
+    }
+    
+    pulseElement(element) {
+        element.style.animation = 'none';
+        element.offsetHeight; // Trigger reflow
+        element.style.animation = 'indicatorPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    }
+}
+
+const gamification = new GamificationEngine();
+
 // ===== Main Application =====
 class App {
     constructor() {
@@ -99,8 +418,11 @@ class App {
 
     // ===== Home Screen =====
     async renderHome() {
+        // Process any week transitions first
+        await streakEngine.checkAndProcessWeekEnd();
+        
         const sessions = await db.getSessions();
-        const nextIndex = await db.getSetting('nextSessionIndex') || 0;
+        const nextIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
         const nextSession = sessions[nextIndex];
         
         if (nextSession) {
@@ -123,18 +445,217 @@ class App {
             document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSession?.name || 'Inconnue'}, ${daysText}`;
         }
 
-        // Streak & XP with configurable goal
-        const weeklyWorkouts = await db.getSetting('weeklyWorkouts') || 0;
-        const weeklyGoal = await db.getSetting('weeklyGoal') || 3;
-        document.getElementById('streak-count').textContent = `${weeklyWorkouts}/${weeklyGoal}`;
-        
-        const xp = await db.getSetting('xp') || 0;
-        document.getElementById('xp-fill').style.width = `${Math.min(xp % 1000 / 10, 100)}%`;
+        // Render streak system
+        await this.renderStreakSystem();
 
         // Render stats
         await this.renderStats();
 
         this.showScreen('home');
+    }
+    
+    // ===== Streak System Rendering =====
+    async renderStreakSystem() {
+        const data = await streakEngine.getStreakData();
+        const prediction = await streakEngine.getWeekPrediction();
+        const level = streakEngine.getLevel(data.streakCount);
+        const nextLevel = streakEngine.LEVELS.find(l => l.min > data.streakCount) || level;
+        
+        // Render consolidated streak card
+        this.renderStreakCard(data, prediction, level, nextLevel);
+        
+        // Render prediction/warning
+        this.renderWeekPrediction(prediction);
+    }
+    
+    renderStreakCard(data, prediction, level, nextLevel) {
+        const container = document.getElementById('streak-card');
+        if (!container) return;
+        
+        const isComplete = data.currentWeekSessions >= data.weeklyGoal;
+        
+        // Calculate progress to next level
+        const progressInLevel = data.streakCount - level.min;
+        const levelRange = (nextLevel.min - level.min) || 1;
+        const levelProgress = Math.min((progressInLevel / levelRange) * 100, 100);
+        const weeksToNext = nextLevel.min - data.streakCount;
+        
+        // Generate session indicators
+        let sessionsHtml = '';
+        for (let i = 0; i < data.weeklyGoal; i++) {
+            const filled = i < data.currentWeekSessions;
+            sessionsHtml += `<span class="session-indicator ${filled ? 'filled' : ''}">
+                ${filled ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>` : ''}
+            </span>`;
+        }
+        
+        // Generate shields
+        let shieldsHtml = '';
+        const fullShields = Math.floor(data.shieldCount);
+        const hasHalf = data.shieldCount % 1 >= 0.5;
+        for (let i = 0; i < 3; i++) {
+            if (i < fullShields) {
+                shieldsHtml += `<span class="shield-icon filled">${this.getShieldSVG('full')}</span>`;
+            } else if (i === fullShields && hasHalf) {
+                shieldsHtml += `<span class="shield-icon half">${this.getShieldSVG('half')}</span>`;
+            } else {
+                shieldsHtml += `<span class="shield-icon empty">${this.getShieldSVG('empty')}</span>`;
+            }
+        }
+        
+        const protectedBadge = data.weekProtected ? 
+            `<div class="protected-badge">
+                ${this.getShieldSVG('full')}
+                <span>Semaine protégée</span>
+            </div>` : '';
+        
+        // Better week status messaging
+        const sessionsRemaining = data.weeklyGoal - data.currentWeekSessions;
+        const weekStatusText = isComplete 
+            ? `<span class="week-status-count success">${data.currentWeekSessions}/${data.weeklyGoal} séances</span>`
+            : sessionsRemaining === 1
+                ? `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} séances <span class="week-hint">· Plus qu'une séance</span></span>`
+                : `<span class="week-status-count partial">${data.currentWeekSessions}/${data.weeklyGoal} séances <span class="week-hint">· ${sessionsRemaining} restantes</span></span>`;
+        
+        // Streak label that makes sense
+        const streakLabel = data.streakCount === 0 ? 'Série validée' : `Semaine${data.streakCount > 1 ? 's' : ''} consécutive${data.streakCount > 1 ? 's' : ''}`;
+        const streakSubtext = data.streakCount === 0 ? 'Semaines où l\'objectif est validé' : 'Semaines consécutives validées';
+        
+        container.innerHTML = `
+            <div class="streak-main">
+                <div class="streak-score">
+                    <div class="streak-number">${data.streakCount}</div>
+                    <div class="streak-label">${streakLabel}</div>
+                    <div class="streak-subtext">${streakSubtext}</div>
+                </div>
+                <div class="streak-info">
+                    <div class="streak-level-badge" style="--level-color: ${level.color}">
+                        ${this.getLevelIconSVG(level.name)}
+                        <span>${level.name}</span>
+                    </div>
+                    <div class="streak-progress-section">
+                        <div class="streak-progress-bar">
+                            <div class="streak-progress-fill" style="width: ${levelProgress}%; background: ${level.color}"></div>
+                        </div>
+                        <div class="streak-next-level">
+                            ${weeksToNext > 0 ? `Prochain niveau: <strong>${nextLevel.name}</strong> · ${weeksToNext}/${levelRange} semaine${weeksToNext > 1 ? 's' : ''}` : 'Niveau max atteint !'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="streak-divider"></div>
+            
+            <div class="streak-week">
+                <div class="week-header">
+                    <span class="week-title">CETTE SEMAINE</span>
+                    ${protectedBadge}
+                </div>
+                <div class="week-content">
+                    <div class="week-sessions">
+                        ${weekStatusText}
+                        <div class="sessions-row">${sessionsHtml}</div>
+                    </div>
+                    <div class="week-shields">
+                        <div class="shields-count">Boucliers: ${Math.floor(data.shieldCount * 10) / 10}/3</div>
+                        <div class="shields-row">${shieldsHtml}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    getLevelIconSVG(levelName) {
+        const name = levelName.toLowerCase();
+        
+        if (name === 'rookie') {
+            // Rookie: Simple target/goal icon
+            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+            </svg>`;
+        } else if (name === 'focus') {
+            // Focus: Lightning bolt for energy/focus
+            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>`;
+        } else if (name === 'machine') {
+            // Machine: Gear/cog for mechanical precision
+            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+            </svg>`;
+        } else {
+            // Légende: Crown/star for legendary status
+            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>`;
+        }
+    }
+    
+    getShieldSVG(type) {
+        if (type === 'full') {
+            return `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/>
+            </svg>`;
+        } else if (type === 'half') {
+            return `<svg width="18" height="18" viewBox="0 0 24 24">
+                <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z" 
+                      fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91V2z" fill="currentColor"/>
+            </svg>`;
+        }
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/>
+        </svg>`;
+    }
+    
+    renderWeekPrediction(prediction) {
+        const container = document.getElementById('week-prediction');
+        if (!container) return;
+        
+        if (prediction.status === 'success') {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'flex';
+        container.className = `week-prediction prediction-${prediction.status}`;
+        
+        let icon = '';
+        if (prediction.status === 'danger') {
+            icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>`;
+        } else if (prediction.status === 'warning') {
+            icon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="9" fill="url(#warningGradient)" stroke="none"></circle>
+                <defs>
+                    <linearGradient id="warningGradient" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#fef3c7"/>
+                        <stop offset="100%" stop-color="#fcd34d"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" fill="none"></circle>
+                <path d="M12 6v6.5" stroke-linecap="round"></path>
+                <circle cx="12" cy="15.8" r="1.1" fill="currentColor" stroke="none"></circle>
+            </svg>`;
+        } else {
+            icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 11 12 14 22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+            </svg>`;
+        }
+        
+        container.innerHTML = `
+            <span class="prediction-icon">${icon}</span>
+            <span class="prediction-message">${prediction.message}</span>
+        `;
     }
 
     // ===== Stats Section =====
@@ -166,6 +687,80 @@ class App {
         // Charts
         this.renderVolumeChart(setHistory);
         this.renderFrequencyChart(history);
+        
+        // Muscle group stats
+        await this.renderMuscleStats();
+    }
+    
+    async renderMuscleStats() {
+        const container = document.getElementById('muscle-stats-grid');
+        if (!container) return;
+        
+        const volumeByMuscle = await this.getWeeklyVolumeByMuscle();
+        const slots = await db.getAll('slots');
+        
+        // Get unique muscle groups from slots that have been used
+        const usedMuscleGroups = new Set();
+        for (const slot of slots) {
+            if (slot.muscleGroup) {
+                usedMuscleGroups.add(slot.muscleGroup);
+            }
+        }
+        
+        // If no muscle groups configured, show empty state
+        if (usedMuscleGroups.size === 0) {
+            container.innerHTML = `
+                <div class="muscle-stats-empty" style="grid-column: 1 / -1;">
+                    <div class="muscle-stats-empty-icon">💪</div>
+                    <div>Configure les groupes musculaires dans tes exercices pour voir les stats</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build muscle stats HTML
+        let html = '';
+        const maxSets = 20; // Reference for progress bar
+        
+        // Sort muscle groups: those with volume first, then alphabetically
+        const sortedGroups = Array.from(usedMuscleGroups).sort((a, b) => {
+            const volA = volumeByMuscle[a]?.effectiveSets || 0;
+            const volB = volumeByMuscle[b]?.effectiveSets || 0;
+            if (volB !== volA) return volB - volA;
+            return a.localeCompare(b);
+        });
+        
+        for (const muscleId of sortedGroups) {
+            const muscleInfo = MUSCLE_GROUPS.find(m => m.id === muscleId);
+            if (!muscleInfo) continue;
+            
+            const volume = volumeByMuscle[muscleId]?.effectiveSets || 0;
+            const hasVolume = volume > 0;
+            const isOptimal = volume >= VOLUME_THRESHOLDS.minimum && volume <= VOLUME_THRESHOLDS.optimal;
+            const isExcessive = volume > VOLUME_THRESHOLDS.maximum;
+            
+            const progressPercent = Math.min((volume / maxSets) * 100, 100);
+            
+            let statusClass = '';
+            if (isExcessive) statusClass = 'excessive';
+            else if (isOptimal) statusClass = 'optimal';
+            else if (hasVolume) statusClass = 'has-volume';
+            
+            html += `
+                <div class="muscle-stat-item ${statusClass}">
+                    <div class="muscle-stat-top">
+                        <span class="muscle-stat-icon">${muscleInfo.icon}</span>
+                        <span class="muscle-stat-sets">${volume}</span>
+                    </div>
+                    <div class="muscle-stat-name">${muscleInfo.name}</div>
+                    <div class="muscle-stat-bar">
+                        <div class="muscle-stat-fill" style="width: ${progressPercent}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
     }
     
     formatVolume(vol) {
@@ -458,21 +1053,195 @@ class App {
         });
     }
 
+    // ===== Deload System =====
+    async checkDeloadSuggestion() {
+        const cycleLength = (await db.getSetting('cycleLength')) ?? 5;
+        const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
+        const coldDayThreshold = (await db.getSetting('coldDayThreshold')) ?? 3;
+        
+        // Get workout history
+        const history = await db.getAll('workoutHistory');
+        if (history.length === 0) return { shouldSuggest: false };
+        
+        // Sort by date
+        const sortedHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Check 1: Cycle-based deload (every X weeks)
+        const lastDeloadDate = await db.getSetting('lastDeloadDate');
+        const cycleStartDate = await db.getSetting('cycleStartDate');
+        
+        if (cycleStartDate) {
+            const weeksSinceCycleStart = Math.floor((Date.now() - new Date(cycleStartDate)) / (7 * 24 * 60 * 60 * 1000));
+            if (weeksSinceCycleStart >= cycleLength - 1) {
+                return {
+                    shouldSuggest: true,
+                    reason: 'cyclique',
+                    message: `Tu as complété ${weeksSinceCycleStart} semaines d'entraînement intensif. Ton corps a besoin de récupérer pour continuer à progresser !`
+                };
+            }
+        }
+        
+        // Check 2: Auto-deload based on cold days (if enabled)
+        if (autoDeloadEnabled && sortedHistory.length >= coldDayThreshold) {
+            let consecutiveColdDays = 0;
+            
+            for (let i = 0; i < Math.min(sortedHistory.length, coldDayThreshold + 2); i++) {
+                const workout = sortedHistory[i];
+                if (workout.dayStatus === 'cold' || workout.performanceDown) {
+                    consecutiveColdDays++;
+                } else {
+                    break;
+                }
+            }
+            
+            if (consecutiveColdDays >= coldDayThreshold) {
+                return {
+                    shouldSuggest: true,
+                    reason: 'fatigue',
+                    message: `Tes ${consecutiveColdDays} dernières séances montrent des signes de fatigue accumulée. Une semaine de récupération t'aidera à revenir plus fort !`
+                };
+            }
+        }
+        
+        return { shouldSuggest: false };
+    }
+    
+    async showDeloadModal(deloadInfo) {
+        const modal = document.getElementById('modal-deload');
+        const reasonEl = document.getElementById('deload-reason');
+        
+        const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
+        const deloadIntensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
+        
+        reasonEl.innerHTML = `
+            <div class="deload-reason-badge ${deloadInfo.reason}">
+                ${deloadInfo.reason === 'cyclique' ? '📅 Fin de cycle' : '😓 Fatigue détectée'}
+            </div>
+            <p>${deloadInfo.message}</p>
+        `;
+        
+        document.getElementById('deload-volume-reduction').textContent = deloadVolumeReduction + '%';
+        document.getElementById('deload-intensity-reduction').textContent = deloadIntensityReduction + '%';
+        
+        modal.classList.add('active');
+        
+        return new Promise((resolve) => {
+            const acceptBtn = document.getElementById('btn-accept-deload');
+            const skipBtn = document.getElementById('btn-skip-deload');
+            
+            const cleanup = () => {
+                acceptBtn.removeEventListener('click', onAccept);
+                skipBtn.removeEventListener('click', onSkip);
+                modal.classList.remove('active');
+            };
+            
+            const onAccept = async () => {
+                cleanup();
+                await db.setSetting('isDeloadMode', true);
+                await db.setSetting('lastDeloadDate', new Date().toISOString());
+                await db.setSetting('cycleStartDate', new Date().toISOString()); // Reset cycle
+                resolve(true);
+            };
+            
+            const onSkip = () => {
+                cleanup();
+                resolve(false);
+            };
+            
+            acceptBtn.addEventListener('click', onAccept);
+            skipBtn.addEventListener('click', onSkip);
+        });
+    }
+    
+    async getDeloadModifiers() {
+        const isDeload = await db.getSetting('isDeloadMode');
+        if (!isDeload) return { volume: 1, intensity: 1 };
+        
+        const volumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
+        const intensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
+        
+        return {
+            volume: 1 - (volumeReduction / 100),
+            intensity: 1 - (intensityReduction / 100)
+        };
+    }
+
+    // ===== Volume Tracker =====
+    async getWeeklyVolumeByMuscle() {
+        const { start, end } = streakEngine.getWeekBounds();
+        const setHistory = await db.getAll('setHistory');
+        const slots = await db.getAll('slots');
+        
+        // Build slot -> muscleGroup map
+        const slotMuscleMap = {};
+        for (const slot of slots) {
+            if (slot.muscleGroup) {
+                slotMuscleMap[slot.id] = slot.muscleGroup;
+            }
+        }
+        
+        // Count sets per muscle this week
+        const volumeByMuscle = {};
+        
+        for (const set of setHistory) {
+            const setDate = new Date(set.date);
+            if (setDate >= start && setDate <= end) {
+                const muscleGroup = slotMuscleMap[set.slotId];
+                if (muscleGroup) {
+                    if (!volumeByMuscle[muscleGroup]) {
+                        volumeByMuscle[muscleGroup] = { sets: 0, effectiveSets: 0 };
+                    }
+                    volumeByMuscle[muscleGroup].sets++;
+                    // Effective sets = sets where RPE >= 7
+                    if (set.rpe >= 7 || set.rpe === undefined) {
+                        volumeByMuscle[muscleGroup].effectiveSets++;
+                    }
+                }
+            }
+        }
+        
+        return volumeByMuscle;
+    }
+    
+    async getVolumeStatus(muscleGroup) {
+        const volumeByMuscle = await this.getWeeklyVolumeByMuscle();
+        const volume = volumeByMuscle[muscleGroup]?.effectiveSets || 0;
+        
+        if (volume < VOLUME_THRESHOLDS.minimum) {
+            return { status: 'low', sets: volume, message: `Volume faible (${volume}/${VOLUME_THRESHOLDS.minimum} séries min)` };
+        } else if (volume <= VOLUME_THRESHOLDS.optimal) {
+            return { status: 'optimal', sets: volume, message: `Volume optimal (${volume} séries)` };
+        } else if (volume <= VOLUME_THRESHOLDS.maximum) {
+            return { status: 'high', sets: volume, message: `Volume élevé (${volume} séries)` };
+        } else {
+            return { status: 'excessive', sets: volume, message: `⚠️ Volume excessif (${volume}/${VOLUME_THRESHOLDS.maximum} max)` };
+        }
+    }
+
     // ===== Session Screen =====
     async startSession(session) {
+        // Check if deload should be suggested
+        const deloadCheck = await this.checkDeloadSuggestion();
+        if (deloadCheck.shouldSuggest) {
+            const accepted = await this.showDeloadModal(deloadCheck);
+            // Continue with session regardless of choice
+        }
+        
         this.currentSession = session;
         this.sessionStartTime = Date.now();
+        this.isDeloadMode = await db.getSetting('isDeloadMode') || false;
         
         // Initialize current workout
         this.currentWorkout = {
             sessionId: session.id,
             startTime: this.sessionStartTime,
             slots: {},
-            completedSlots: []
+            completedSlots: [],
+            isDeload: this.isDeloadMode
         };
         await db.saveCurrentWorkout(this.currentWorkout);
 
-        document.getElementById('current-session-name').textContent = session.name;
+        document.getElementById('current-session-name').textContent = session.name + (this.isDeloadMode ? ' 🔋' : '');
         
         // Start session timer
         this.startSessionTimer();
@@ -545,7 +1314,7 @@ class App {
     // ===== Performance Status (RPE-aware) =====
     async getExerciseStatus(slot) {
         const exerciseId = slot.activeExercise || slot.name;
-        const failureThreshold = await db.getSetting('failureCount') || 3;
+        const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
         
         // Get all set history for this exercise
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
@@ -554,7 +1323,7 @@ class App {
             return { class: '', title: 'Nouveau' };
         }
         
-        // Group by workout with RPE
+        // Group by workout
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
@@ -562,8 +1331,7 @@ class App {
                     date: set.date,
                     sets: [],
                     totalReps: 0,
-                    maxWeight: 0,
-                    avgRpe: 0
+                    maxWeight: 0
                 };
             }
             workoutGroups[set.workoutId].sets.push(set);
@@ -571,11 +1339,14 @@ class App {
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
         }
         
-        // Calculate avgRpe and sort sets
+        // Calculate avgRpe only from real data
         for (const wId of Object.keys(workoutGroups)) {
             const sets = workoutGroups[wId].sets;
-            const totalRpe = sets.reduce((sum, s) => sum + (s.rpe || 8), 0);
-            workoutGroups[wId].avgRpe = sets.length > 0 ? totalRpe / sets.length : 8;
+            const setsWithRpe = sets.filter(s => s.rpe != null);
+            workoutGroups[wId].hasRealRpe = setsWithRpe.length > 0;
+            workoutGroups[wId].avgRpe = setsWithRpe.length > 0 
+                ? setsWithRpe.reduce((sum, s) => sum + s.rpe, 0) / setsWithRpe.length 
+                : null;
             workoutGroups[wId].sets.sort((a, b) => a.setNumber - b.setNumber);
         }
         
@@ -606,9 +1377,9 @@ class App {
             return { class: 'success', title: 'Progression !' };
         }
         
-        // Count consecutive stagnation with RPE awareness
+        // Count consecutive stagnation with RPE awareness (only if real RPE data exists)
         let consecutiveStagnation = 1;
-        let lowEffortCount = current.avgRpe < 8 ? 1 : 0;
+        let lowEffortCount = (current.hasRealRpe && current.avgRpe !== null && current.avgRpe < 8) ? 1 : 0;
         
         for (let i = 1; i < Math.min(workouts.length - 1, failureThreshold + 1); i++) {
             const curr = workouts[i];
@@ -623,7 +1394,7 @@ class App {
             
             if (noProgress) {
                 consecutiveStagnation++;
-                if (curr.avgRpe < 8) lowEffortCount++;
+                if (curr.hasRealRpe && curr.avgRpe !== null && curr.avgRpe < 8) lowEffortCount++;
             } else {
                 break;
             }
@@ -631,17 +1402,17 @@ class App {
         
         // Intelligent status based on stagnation count and effort
         if (consecutiveStagnation >= failureThreshold) {
-            return { class: 'danger', title: `Plateau (${consecutiveStagnation}x) - Switch ?` };
+            return { class: 'danger', title: `Plateau (${consecutiveStagnation}x)` };
         } else if (consecutiveStagnation >= 2) {
             if (lowEffortCount >= 2) {
                 return { class: 'warning', title: 'Effort insuffisant' };
             }
             return { class: 'warning', title: 'Deload suggéré' };
         } else {
-            if (current.avgRpe < 7.5) {
+            if (current.hasRealRpe && current.avgRpe !== null && current.avgRpe < 7.5) {
                 return { class: 'warning', title: 'Pousse plus !' };
             }
-            return { class: 'warning', title: 'Stable - Persévère' };
+            return { class: 'warning', title: 'Persévère' };
         }
     }
 
@@ -1051,7 +1822,7 @@ class App {
         await db.saveCurrentWorkout(this.currentWorkout);
 
         // Add XP for both
-        let xp = await db.getSetting('xp') || 0;
+        let xp = (await db.getSetting('xp')) ?? 0;
         xp += 20; // Double XP for superset
         await db.setSetting('xp', xp);
 
@@ -1235,14 +2006,10 @@ class App {
         const advice = this.currentCoachingAdvice;
         const coachingSuggestedWeight = advice && advice.suggestedWeight !== '?' ? advice.suggestedWeight : null;
         
-        // Calculate target reps based on series position (higher reps earlier, fatigue later)
-        const getTargetReps = (setIndex) => {
-            const { repsMin, repsMax, sets } = this.currentSlot;
-            // First series: aim for max, last series: aim for middle of range
-            if (setIndex === 0) return repsMax;
-            if (setIndex === sets - 1) return Math.round((repsMin + repsMax) / 2);
-            return repsMax; // Middle series still aim high
-        };
+        // Use dynamic target reps from genTargetReps
+        const { repsMin, repsMax, sets } = this.currentSlot;
+        const targetRepsArray = this.genTargetReps(repsMin, repsMax, sets);
+        const getTargetReps = (setIndex) => targetRepsArray[setIndex] || repsMax;
 
         for (let i = 0; i < this.currentSlot.sets; i++) {
             const setData = slotData.sets[i] || {};
@@ -1343,7 +2110,7 @@ class App {
             reps,
             completed: true,
             timestamp: Date.now(),
-            rpe: 8 // Default RPE, will be updated during rest
+            rpe: null // Will be set during rest timer if user provides it
         };
         
         // Track last completed set for RPE capture
@@ -1354,9 +2121,16 @@ class App {
         await db.saveCurrentWorkout(this.currentWorkout);
 
         // Add XP
-        let xp = await db.getSetting('xp') || 0;
+        let xp = (await db.getSetting('xp')) ?? 0;
         xp += 10;
         await db.setSetting('xp', xp);
+        
+        // Hot/Cold detection after first set
+        if (setIndex === 0 && this.avgPerformance) {
+            const currentSetData = { weight, reps };
+            const dayStatus = this.getDayStatus(currentSetData, this.avgPerformance);
+            this.currentDayStatus = dayStatus;
+        }
 
         this.renderSeries();
 
@@ -1366,7 +2140,7 @@ class App {
             // Show summary after a brief delay
             setTimeout(() => this.showExerciseSummary(), 300);
         } else {
-            // Start rest timer (with RPE capture)
+            // Start rest timer (with RPE capture + Hot/Cold feedback)
             this.resetRpeSlider();
             this.startRestTimer(this.currentSlot.rest);
         }
@@ -1556,22 +2330,19 @@ class App {
     detectDayStatus(rpe) {
         const weight = this.lastCompletedSetWeight;
         const reps = this.lastCompletedSetReps;
-        const avg = this.avgPerformance;
         
-        // Calculate performance score compared to average
-        const weightRatio = weight / avg.weight;
-        const repsRatio = reps / avg.reps;
-        const rpeRatio = avg.rpe / rpe; // Inverse: lower RPE with same perf = better
+        if (!this.avgPerformance) return;
         
-        const perfScore = (weightRatio * 0.4 + repsRatio * 0.4 + rpeRatio * 0.2);
+        // Use e1RM-based comparison (more robust)
+        const currentSet = { weight, reps };
+        const status = this.getDayStatus(currentSet, this.avgPerformance);
         
-        if (perfScore < 0.9) {
-            // Cold day: performance 10%+ below average
+        if (status === 'cold') {
             this.showDayStatusToast('cold');
-        } else if (perfScore > 1.1 || (rpe <= 7 && reps >= avg.reps)) {
-            // Hot day: performance 10%+ above average or easy with same reps
+        } else if (status === 'hot') {
             this.showDayStatusToast('hot');
         }
+        // 'normal' = no toast
     }
     
     showDayStatusToast(status) {
@@ -1776,37 +2547,58 @@ class App {
         if (currentIndex >= 0) {
             nextIndex = (currentIndex + 1) % sessions.length;
         } else {
-            const storedIndex = await db.getSetting('nextSessionIndex') || 0;
+            const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
             nextIndex = (storedIndex + 1) % sessions.length;
         }
         await db.setSetting('nextSessionIndex', nextIndex);
 
-        // Update weekly workouts
-        let weeklyWorkouts = await db.getSetting('weeklyWorkouts') || 0;
-        const lastWorkoutDate = await db.getSetting('lastWorkoutDate');
-        const now = new Date();
+        // Check weekly goal status BEFORE recording (to detect if we just completed it)
+        const streakDataBefore = await streakEngine.getStreakData();
+        const wasGoalMetBefore = streakDataBefore.currentWeekSessions >= streakDataBefore.weeklyGoal;
         
-        if (lastWorkoutDate) {
-            const lastDate = new Date(lastWorkoutDate);
-            const daysDiff = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
-            if (daysDiff >= 7) {
-                weeklyWorkouts = 1;
-            } else {
-                weeklyWorkouts = Math.min(weeklyWorkouts + 1, 7);
-            }
-        } else {
-            weeklyWorkouts = 1;
+        // Update streak system
+        await streakEngine.recordWorkoutForStreak();
+        await db.setSetting('lastWorkoutDate', new Date().toISOString());
+        
+        // Check if we just met the weekly goal
+        const streakDataAfter = await streakEngine.getStreakData();
+        const isGoalMetNow = streakDataAfter.currentWeekSessions >= streakDataAfter.weeklyGoal;
+        const justMetWeeklyGoal = !wasGoalMetBefore && isGoalMetNow;
+        
+        // Reset deload mode after session (deload is per-session)
+        if (this.isDeloadMode) {
+            await db.setSetting('isDeloadMode', false);
+            this.isDeloadMode = false;
         }
 
-        await db.setSetting('weeklyWorkouts', weeklyWorkouts);
-        await db.setSetting('lastWorkoutDate', now.toISOString());
-
+        // Calculate workout stats for celebration (before clearing)
+        const duration = Math.round((Date.now() - this.sessionStartTime) / 60000);
+        let totalSets = 0;
+        for (const slotData of Object.values(this.currentWorkout.slots)) {
+            totalSets += slotData.sets.filter(s => s && s.completed).length;
+        }
+        const sessionName = this.currentSession.name;
+        
         // Clear current workout
         await db.clearCurrentWorkout();
         this.currentWorkout = null;
 
         // Show Stimulus Score animation before going home
         await this.showStimulusScoreAnimation(stimulusScore);
+        
+        // Trigger celebrations after stimulus score
+        gamification.celebrateWorkoutComplete(sessionName, {
+            totalSets,
+            duration,
+            xpGain: Math.round(stimulusScore.total * 2)
+        });
+        
+        // Celebrate weekly goal if just achieved
+        if (justMetWeeklyGoal) {
+            setTimeout(() => {
+                gamification.celebrateWeeklyGoal();
+            }, 3000);
+        }
     }
     
     async calculateStimulusScore() {
@@ -1981,7 +2773,7 @@ class App {
     // ===== Change Session Sheet =====
     async showChangeSessionSheet() {
         const sessions = await db.getSessions();
-        const nextIndex = await db.getSetting('nextSessionIndex') || 0;
+        const nextIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
         const container = document.getElementById('session-options');
         container.innerHTML = '';
 
@@ -2284,6 +3076,17 @@ class App {
                 <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
             </div>
             <div class="form-group">
+                <label>Groupe musculaire principal</label>
+                <select id="edit-slot-muscle-group" class="form-input form-select">
+                    <option value="">-- Sélectionner --</option>
+                    ${MUSCLE_GROUPS.map(mg => `
+                        <option value="${mg.id}" ${slot.muscleGroup === mg.id ? 'selected' : ''}>
+                            ${mg.icon} ${mg.name}
+                        </option>
+                    `).join('')}
+                </select>
+            </div>
+            <div class="form-group">
                 <label>Consignes d'exécution</label>
                 <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${slot.instructions || ''}</textarea>
             </div>
@@ -2365,6 +3168,7 @@ class App {
         slot.rest = parseInt(document.getElementById('edit-slot-rest').value) || 90;
         slot.rir = parseInt(document.getElementById('edit-slot-rir').value) || 2;
         slot.type = document.getElementById('edit-slot-type').value || 'compound';
+        slot.muscleGroup = document.getElementById('edit-slot-muscle-group').value || '';
         slot.instructions = document.getElementById('edit-slot-instructions').value.trim();
         
         // Get pool from individual inputs
@@ -3179,11 +3983,16 @@ class App {
     // ===== Settings Management =====
     async showSettingsSheet() {
         // Load current settings
-        const weeklyGoal = await db.getSetting('weeklyGoal') || 3;
-        const failureCount = await db.getSetting('failureCount') || 3;
-        const deloadPercent = await db.getSetting('deloadPercent') || 10;
-        const weightIncrement = await db.getSetting('weightIncrement') || 2;
-        const lockWeeks = await db.getSetting('lockWeeks') || 4;
+        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
+        const failureCount = (await db.getSetting('failureCount')) ?? 5;
+        const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
+        const weightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
+        const lockWeeks = (await db.getSetting('lockWeeks')) ?? 4;
+        
+        // Periodization settings
+        const cycleLength = (await db.getSetting('cycleLength')) ?? 5;
+        const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
+        const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
         
         // Set slider values
         document.getElementById('setting-weekly-goal').value = weeklyGoal;
@@ -3201,6 +4010,15 @@ class App {
         document.getElementById('setting-lock-weeks').value = lockWeeks;
         document.getElementById('setting-lock-weeks-value').textContent = lockWeeks;
         
+        // Periodization settings
+        document.getElementById('setting-cycle-length').value = cycleLength;
+        document.getElementById('setting-cycle-length-value').textContent = cycleLength;
+        
+        document.getElementById('setting-auto-deload').checked = autoDeloadEnabled;
+        
+        document.getElementById('setting-deload-volume').value = deloadVolumeReduction;
+        document.getElementById('setting-deload-volume-value').textContent = deloadVolumeReduction;
+        
         document.getElementById('sheet-settings').classList.add('active');
     }
     
@@ -3214,7 +4032,9 @@ class App {
             { id: 'setting-failure-count', valueId: 'setting-failure-count-value' },
             { id: 'setting-deload-percent', valueId: 'setting-deload-percent-value' },
             { id: 'setting-weight-increment', valueId: 'setting-weight-increment-value' },
-            { id: 'setting-lock-weeks', valueId: 'setting-lock-weeks-value' }
+            { id: 'setting-lock-weeks', valueId: 'setting-lock-weeks-value' },
+            { id: 'setting-cycle-length', valueId: 'setting-cycle-length-value' },
+            { id: 'setting-deload-volume', valueId: 'setting-deload-volume-value' }
         ];
         
         sliders.forEach(({ id, valueId }) => {
@@ -3234,20 +4054,119 @@ class App {
         const weightIncrement = parseFloat(document.getElementById('setting-weight-increment').value);
         const lockWeeks = parseInt(document.getElementById('setting-lock-weeks').value);
         
+        // Periodization settings
+        const cycleLength = parseInt(document.getElementById('setting-cycle-length').value);
+        const autoDeloadEnabled = document.getElementById('setting-auto-deload').checked;
+        const deloadVolumeReduction = parseInt(document.getElementById('setting-deload-volume').value);
+        
         await db.setSetting('weeklyGoal', weeklyGoal);
         await db.setSetting('failureCount', failureCount);
         await db.setSetting('deloadPercent', deloadPercent);
         await db.setSetting('weightIncrement', weightIncrement);
         await db.setSetting('lockWeeks', lockWeeks);
         
+        // Periodization settings
+        await db.setSetting('cycleLength', cycleLength);
+        await db.setSetting('autoDeloadEnabled', autoDeloadEnabled);
+        await db.setSetting('deloadVolumeReduction', deloadVolumeReduction);
+        
+        // Initialize cycle start date if not set
+        const cycleStartDate = await db.getSetting('cycleStartDate');
+        if (!cycleStartDate) {
+            await db.setSetting('cycleStartDate', new Date().toISOString());
+        }
+        
         this.hideSettingsSheet();
         
-        // Update streak display with new goal
-        const weeklyWorkouts = await db.getSetting('weeklyWorkouts') || 0;
-        document.getElementById('streak-count').textContent = `${weeklyWorkouts}/${weeklyGoal}`;
+        // Refresh streak system display with new goal
+        await this.renderStreakSystem();
     }
     
     // ===== Coaching Intelligence =====
+    
+    // Generate dynamic target reps based on fatigue curve
+    genTargetReps(repsMin, repsMax, sets) {
+        if (!sets || sets <= 0) return [];
+        if (sets === 1) return [repsMax];
+
+        const range = repsMax - repsMin;
+        const slope = repsMax <= 12 ? 1 : 2; // fatigue plus forte sur plages longues
+        const dropTotal = Math.min(range, (sets - 1) * slope);
+        const lastTarget = repsMax - dropTotal;
+        const anchorHigh = sets >= 4 ? 2 : 1;
+
+        const targets = [];
+        for (let i = 0; i < sets; i++) {
+            let t;
+            if (i < anchorHigh) {
+                t = repsMax;
+            } else {
+                const remaining = sets - anchorHigh;
+                const k = (i - anchorHigh + 1) / remaining;
+                t = Math.round(repsMax + (lastTarget - repsMax) * k);
+            }
+            t = Math.max(repsMin, Math.min(repsMax, t));
+            if (i > 0) t = Math.min(t, targets[i - 1]);
+            targets.push(t);
+        }
+        return targets;
+    }
+    
+    // Format target reps array as string
+    formatTargetReps(targets) {
+        return targets.join(' / ');
+    }
+    
+    // Calculate effective reps from a single set (hypertrophy-relevant reps)
+    effectiveRepsFromSet(reps, rpe) {
+        if (rpe == null) return null;
+        const rir = Math.max(0, 10 - rpe);
+        return Math.max(0, (reps || 0) - (rir + 5));
+    }
+    
+    // Estimate 1RM for Hot/Cold comparison
+    e1rm(weight, reps) {
+        return (weight || 0) * (1 + (reps || 0) / 30);
+    }
+    
+    // Determine day status (hot/cold/normal) based on first set performance
+    getDayStatus(currentSet, avgPerformance) {
+        if (!currentSet || !avgPerformance) return null;
+        const cur = this.e1rm(currentSet.weight, currentSet.reps);
+        const ref = this.e1rm(avgPerformance.weight, avgPerformance.reps);
+        if (ref <= 0) return null;
+
+        const delta = (cur - ref) / ref;
+        if (delta > 0.02) return 'hot';   // +2% ou plus
+        if (delta < -0.02) return 'cold'; // -2% ou plus
+        return 'normal';
+    }
+    
+    // Detect if workout uses ramping (ascending weights)
+    isRampingWorkout(sets) {
+        if (sets.length < 2) return false;
+        const weights = sets.map(s => s.weight || 0).filter(w => w > 0);
+        if (weights.length < 2) return false;
+        const maxW = Math.max(...weights);
+        const minW = Math.min(...weights);
+        return (maxW - minW) > 2; // Écart > 2kg = ramping
+    }
+    
+    // Get reference weight from workout (top set for ramp, first set otherwise)
+    getReferenceWeight(workout, slot) {
+        const sets = workout.sets;
+        if (this.isRampingWorkout(sets)) {
+            // Ramping: find heaviest set with reps >= repsMin
+            const validSets = sets.filter(s => (s.reps || 0) >= slot.repsMin);
+            if (validSets.length > 0) {
+                return Math.max(...validSets.map(s => s.weight || 0));
+            }
+            return workout.maxWeight;
+        }
+        // Not ramping: use first set weight
+        return sets[0]?.weight || workout.maxWeight;
+    }
+    
     async showCoachingAdvice() {
         const adviceCard = document.getElementById('coaching-advice');
         if (!this.currentSlot) {
@@ -3354,22 +4273,24 @@ class App {
         const exerciseId = slot.activeExercise || slot.name;
         const isIsolation = slot.type === 'isolation';
         
-        // Get settings - adapt based on exercise type
-        const failureThreshold = await db.getSetting('failureCount') || 3;
-        const deloadPercent = await db.getSetting('deloadPercent') || 10;
-        const baseWeightIncrement = await db.getSetting('weightIncrement') || 2;
+        // Get settings with ?? to handle 0 values correctly
+        const failureThreshold = (await db.getSetting('failureCount')) ?? 5;
+        const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
+        const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         
-        // Isolation: micro-loading (+0.5-1kg), Compound: +2.5-5kg
+        // Check if deload mode is active
+        const isDeloadMode = this.isDeloadMode || (await db.getSetting('isDeloadMode')) || false;
+        const deloadIntensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
+        
+        // Isolation: micro-loading (+0.5-1kg), Compound: +2.5kg
         const weightIncrement = isIsolation ? Math.min(baseWeightIncrement, 1) : baseWeightIncrement;
         // Isolation: RPE 10 allowed, Compound: max RPE 9 for safety
         const maxSafeRpe = isIsolation ? 10 : 9;
-        // Isolation: priority reps (15-20 before increasing), Compound: priority weight
-        const repsThresholdForIncrease = isIsolation ? Math.max(slot.repsMax, 15) : slot.repsMax;
         
         // Get all set history for this exercise
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
         
-        // Group by workout with per-set analysis (Double Progression Dynamique)
+        // Group by workout with per-set analysis
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
@@ -3377,9 +4298,7 @@ class App {
                     date: set.date,
                     sets: [],
                     totalReps: 0,
-                    maxWeight: 0,
-                    avgWeight: 0,
-                    avgRpe: 0
+                    maxWeight: 0
                 };
             }
             workoutGroups[set.workoutId].sets.push(set);
@@ -3387,15 +4306,22 @@ class App {
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
         }
         
-        // Calculate average weight and RPE for each workout
+        // Calculate metrics for each workout
         for (const wId of Object.keys(workoutGroups)) {
             const sets = workoutGroups[wId].sets;
-            const totalWeight = sets.reduce((sum, s) => sum + (s.weight || 0), 0);
-            const totalRpe = sets.reduce((sum, s) => sum + (s.rpe || 8), 0);
-            workoutGroups[wId].avgWeight = sets.length > 0 ? totalWeight / sets.length : 0;
-            workoutGroups[wId].avgRpe = sets.length > 0 ? totalRpe / sets.length : 8;
+            // Check if any set has real RPE data (not fallback)
+            const setsWithRpe = sets.filter(s => s.rpe != null);
+            workoutGroups[wId].hasRealRpe = setsWithRpe.length > 0;
+            
+            // Calculate avgRpe only from real data, or null if none
+            if (setsWithRpe.length > 0) {
+                workoutGroups[wId].avgRpe = setsWithRpe.reduce((sum, s) => sum + s.rpe, 0) / setsWithRpe.length;
+            } else {
+                workoutGroups[wId].avgRpe = null;
+            }
+            
             // Sort sets by setNumber
-            workoutGroups[wId].sets.sort((a, b) => a.setNumber - b.setNumber);
+            sets.sort((a, b) => a.setNumber - b.setNumber);
         }
         
         // Sort workouts by date (most recent first)
@@ -3403,23 +4329,22 @@ class App {
             new Date(b.date) - new Date(a.date)
         );
         
-        // Build target reps string (dégressive: max/max/mid)
-        const targetReps = `${slot.repsMax} / ${slot.repsMax} / ${Math.round((slot.repsMin + slot.repsMax) / 2)}`;
+        // Build dynamic target reps based on slot.sets
+        const targetRepsArray = this.genTargetReps(slot.repsMin, slot.repsMax, slot.sets);
+        const targetReps = this.formatTargetReps(targetRepsArray);
         
-        // Store exercise type info for later use (Auto Back-off, Hot/Cold detection)
+        // Store exercise type info
         this.currentExerciseType = isIsolation ? 'isolation' : 'compound';
         this.currentMaxSafeRpe = maxSafeRpe;
         
-        // === HOT/COLD DAY DETECTION (compare to last 3 sessions average) ===
-        let dayStatus = null; // 'hot', 'cold', or null
+        // === HOT/COLD DAY DETECTION (store average for use after set 1) ===
         if (workouts.length >= 3) {
             const last3Workouts = workouts.slice(0, 3);
             const avgFirstSetWeight = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.weight || 0), 0) / 3;
             const avgFirstSetReps = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.reps || 0), 0) / 3;
-            const avgFirstSetRpe = last3Workouts.reduce((sum, w) => sum + (w.sets[0]?.rpe || 8), 0) / 3;
-            
-            // Store for current session comparison after set 1
-            this.avgPerformance = { weight: avgFirstSetWeight, reps: avgFirstSetReps, rpe: avgFirstSetRpe };
+            this.avgPerformance = { weight: avgFirstSetWeight, reps: avgFirstSetReps };
+        } else {
+            this.avgPerformance = null;
         }
         
         // === CASE 1: First time on this exercise ===
@@ -3436,112 +4361,151 @@ class App {
         }
         
         const lastWorkout = workouts[0];
-        const lastWeight = lastWorkout.avgWeight || lastWorkout.maxWeight;
         const lastSets = lastWorkout.sets;
+        // Use reference weight (top set for ramp, first set otherwise)
+        let lastWeight = this.getReferenceWeight(lastWorkout, slot);
+        
+        // === DELOAD MODE: Reduce intensity and provide specific advice ===
+        if (isDeloadMode) {
+            const deloadWeight = Math.round(lastWeight * (1 - deloadIntensityReduction / 100) * 2) / 2;
+            const deloadSets = Math.max(2, Math.ceil(slot.sets * 0.5)); // 50% des séries, min 2
+            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, deloadSets));
+            
+            return {
+                type: 'deload',
+                icon: 'maintain',
+                title: '🔋 Mode Deload actif',
+                message: `Semaine de récupération ! Charge réduite à ${deloadWeight}kg (-${deloadIntensityReduction}%), fais seulement ${deloadSets} séries. Focus sur la technique et le contrôle, pas l'intensité.`,
+                suggestedWeight: deloadWeight,
+                weightTrend: 'down',
+                suggestedReps: deloadReps,
+                isDeload: true
+            };
+        }
+        const hasRealRpe = lastWorkout.hasRealRpe;
         const lastAvgRpe = lastWorkout.avgRpe;
         
-        // === DOUBLE PROGRESSION DYNAMIQUE: Analyze per-set performance ===
-        // Check first set specifically (most important for tension mécanique)
+        // === EFFECTIVE REPS CALCULATION (only if RPE data exists) ===
+        let effectiveRepsPerSet = null;
+        if (hasRealRpe) {
+            const setsWithRpe = lastSets.filter(s => s.rpe != null);
+            const totalEffective = setsWithRpe.reduce((sum, s) => {
+                return sum + (this.effectiveRepsFromSet(s.reps, s.rpe) || 0);
+            }, 0);
+            effectiveRepsPerSet = setsWithRpe.length > 0 ? totalEffective / setsWithRpe.length : null;
+        }
+        
+        // Effort thresholds for effective reps
+        const LOW_EFF = 1.5;  // per set average - too easy
+        const HIGH_EFF = 3.0; // per set average - hard effort
+        
+        // === ANALYZE FIRST SET (most important for progression) ===
         const firstSet = lastSets[0];
         const firstSetReps = firstSet?.reps || 0;
-        const firstSetRpe = firstSet?.rpe || 8;
-        const firstSetHitMax = firstSetReps >= repsThresholdForIncrease;
+        const firstSetRpe = firstSet?.rpe;
+        const firstSetHitMax = firstSetReps >= slot.repsMax;
         const firstSetBelowMin = firstSetReps < slot.repsMin;
         
-        // Check if ALL sets hit top of range (use higher threshold for isolation)
-        const allSetsHitMax = lastSets.every(s => (s.reps || 0) >= repsThresholdForIncrease);
-        
-        // Calculate effective reps (RPE-weighted: higher RPE = more effective)
-        const effectiveReps = lastSets.reduce((sum, s) => {
-            const rpeMultiplier = Math.max(0, (s.rpe || 8) - 5) / 5; // 0 at RPE 5, 1 at RPE 10
-            return sum + (s.reps || 0) * rpeMultiplier;
-        }, 0);
+        // Check if ALL sets hit repsMax (only if enough sets recorded)
+        const enoughSets = lastSets.length >= slot.sets;
+        const allSetsHitMax = enoughSets && lastSets.every(s => (s.reps || 0) >= slot.repsMax);
         
         // === CASE 2: Only one workout ===
         if (workouts.length === 1) {
-            // Analyze based on RPE and performance
-            if (allSetsHitMax && lastAvgRpe <= 8.5) {
-                // Crushed it with room to spare - increase
-                const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
-                const progressMsg = isIsolation 
-                    ? `${repsThresholdForIncrease} reps atteint ! Micro-augmentation de +${weightIncrement}kg.`
-                    : `${repsThresholdForIncrease} reps atteint partout. Augmente la charge !`;
+            if (allSetsHitMax) {
+                // Determine increment based on effort
+                let increment = weightIncrement;
+                if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF) {
+                    // Very easy - more aggressive increase for compounds
+                    increment = isIsolation ? weightIncrement : weightIncrement * 1.5;
+                }
+                const newWeight = Math.round((lastWeight + increment) * 2) / 2;
                 return {
                     type: 'increase',
                     icon: 'increase',
                     title: 'Prêt à progresser !',
-                    message: progressMsg,
+                    message: `${slot.repsMax} reps atteint partout. Passe à ${newWeight}kg !`,
                     suggestedWeight: newWeight,
                     weightTrend: 'up',
                     suggestedReps: targetReps
                 };
-            } else if (firstSetBelowMin && firstSetRpe >= 9) {
-                // Too heavy - RPE confirms it's not just lack of effort
-                const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
-                return {
-                    type: 'decrease',
-                    icon: 'warning',
-                    title: 'Charge trop élevée',
-                    message: `Tu n'atteins pas ${slot.repsMin} reps malgré un effort max. Baisse pour progresser.`,
-                    suggestedWeight: newWeight,
-                    weightTrend: 'down',
-                    suggestedReps: targetReps
-                };
-            } else if (firstSetBelowMin && firstSetRpe < 8) {
-                // Below min but low effort - encourage intensity
-                return {
-                    type: 'maintain',
-                    icon: 'target',
-                    title: 'Pousse plus fort !',
-                    message: `Reps basses mais effort faible (RPE ${firstSetRpe}). Engage-toi plus sur la prochaine !`,
-                    suggestedWeight: lastWeight,
-                    weightTrend: 'same',
-                    suggestedReps: targetReps
-                };
-            } else {
-                return {
-                    type: 'maintain',
-                    icon: 'target',
-                    title: 'Continue comme ça',
-                    message: `Objectif : ${slot.repsMax} reps sur la 1ère série avant d'augmenter.`,
-                    suggestedWeight: lastWeight,
-                    weightTrend: 'same',
-                    suggestedReps: targetReps
-                };
+            } else if (firstSetBelowMin) {
+                // Check if it's effort issue or load issue
+                if (hasRealRpe && firstSetRpe != null && firstSetRpe >= 9) {
+                    const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
+                    return {
+                        type: 'decrease',
+                        icon: 'warning',
+                        title: 'Charge trop élevée',
+                        message: `Sous ${slot.repsMin} reps malgré effort max. Baisse à ${newWeight}kg.`,
+                        suggestedWeight: newWeight,
+                        weightTrend: 'down',
+                        suggestedReps: targetReps
+                    };
+                } else if (hasRealRpe && firstSetRpe != null && firstSetRpe < 8) {
+                    return {
+                        type: 'maintain',
+                        icon: 'target',
+                        title: 'Pousse plus fort !',
+                        message: `Reps basses mais effort faible. Engage-toi plus !`,
+                        suggestedWeight: lastWeight,
+                        weightTrend: 'same',
+                        suggestedReps: targetReps
+                    };
+                } else {
+                    const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
+                    return {
+                        type: 'decrease',
+                        icon: 'warning',
+                        title: 'Ajuste la charge',
+                        message: `Sous ${slot.repsMin} reps. Essaie ${newWeight}kg.`,
+                        suggestedWeight: newWeight,
+                        weightTrend: 'down',
+                        suggestedReps: targetReps
+                    };
+                }
             }
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Continue comme ça',
+                message: `Objectif : ${slot.repsMax} reps sur toutes les séries.`,
+                suggestedWeight: lastWeight,
+                weightTrend: 'same',
+                suggestedReps: targetReps
+            };
         }
         
-        // === CASE 3: Multiple workouts - SMART PROGRESSION ANALYSIS ===
+        // === CASE 3: Multiple workouts - PROGRESSION ANALYSIS ===
         const prevWorkout = workouts[1];
         const prevSets = prevWorkout.sets;
-        const prevAvgRpe = prevWorkout.avgRpe;
+        const prevWeight = this.getReferenceWeight(prevWorkout, slot);
         
-        // Compare first sets specifically (Double Progression Dynamique)
         const prevFirstSet = prevSets[0];
         const prevFirstReps = prevFirstSet?.reps || 0;
-        const prevFirstWeight = prevFirstSet?.weight || 0;
-        const currentFirstWeight = firstSet?.weight || 0;
         
         // Progression indicators
         const firstSetRepsImproved = firstSetReps > prevFirstReps;
-        const firstSetWeightImproved = currentFirstWeight > prevFirstWeight;
+        const firstSetWeightImproved = lastWeight > prevWeight;
         const overallRepsImproved = lastWorkout.totalReps > prevWorkout.totalReps;
         const overallWeightImproved = lastWorkout.maxWeight > prevWorkout.maxWeight;
         
-        // Any form of progression = success
         const hasProgression = firstSetRepsImproved || firstSetWeightImproved || overallRepsImproved || overallWeightImproved;
         
-        // === INTELLIGENT STAGNATION DETECTION ===
+        // === STAGNATION DETECTION WITH EFFORT AWARENESS ===
         let consecutiveStagnation = 0;
         let lowEffortStagnation = 0;
         let highEffortStagnation = 0;
         
         if (!hasProgression) {
             consecutiveStagnation = 1;
-            if (lastAvgRpe < 8) lowEffortStagnation++;
-            else highEffortStagnation++;
+            // Only count effort if we have real RPE data
+            if (hasRealRpe && lastAvgRpe !== null) {
+                if (lastAvgRpe < 8) lowEffortStagnation++;
+                else highEffortStagnation++;
+            }
             
-            // Check further back
+            // Check history
             for (let i = 1; i < Math.min(workouts.length - 1, 5); i++) {
                 const curr = workouts[i];
                 const prev = workouts[i + 1];
@@ -3555,124 +4519,199 @@ class App {
                 
                 if (noProgressHere) {
                     consecutiveStagnation++;
-                    if (curr.avgRpe < 8) lowEffortStagnation++;
-                    else highEffortStagnation++;
+                    if (curr.hasRealRpe && curr.avgRpe !== null) {
+                        if (curr.avgRpe < 8) lowEffortStagnation++;
+                        else highEffortStagnation++;
+                    }
                 } else {
                     break;
                 }
             }
         }
         
-        // === HIERARCHICAL INTERVENTION (Reactive Deload Logic) ===
+        // === HIERARCHIE D'INTERVENTIONS SIMPLIFIÉE ===
         
-        // Step 1: Check if low effort caused stagnation
-        if (consecutiveStagnation >= 1 && lowEffortStagnation > 0 && lastAvgRpe < 8) {
+        // Stagnation 1x : Encouragement + technique
+        if (consecutiveStagnation === 1) {
+            if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF) {
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Tu as de la marge ! 💪',
+                    message: `Pas de progression cette fois, mais ton effort était modéré. La prochaine série, rapproche-toi davantage de l'échec pour maximiser tes gains !`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
+            const msg = hasRealRpe && lastAvgRpe !== null && lastAvgRpe >= 9 
+                ? `Bel effort malgré la stagnation ! C'est normal, le corps ne progresse pas linéairement. Continue avec la même intensité 🔥` 
+                : `Première stagnation, pas de panique ! Concentre-toi sur la qualité de chaque rep et essaie de gratter 1 rep de plus.`;
             return {
                 type: 'maintain',
-                icon: 'warning',
-                title: 'Augmente l\'intensité !',
-                message: `Stagnation avec RPE ${lastAvgRpe.toFixed(1)} (trop facile). Pousse plus proche de l'échec !`,
+                icon: 'target',
+                title: 'Persévère',
+                message: msg,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
                 suggestedReps: targetReps
             };
         }
         
-        // Step 2: After 2 failures with good effort → suggest reactive deload (volume cut)
-        if (consecutiveStagnation >= 2 && consecutiveStagnation < failureThreshold && highEffortStagnation >= 2) {
+        // Stagnation 2x : Suggestion variation tempo/technique
+        if (consecutiveStagnation === 2) {
             return {
                 type: 'maintain',
                 icon: 'warning',
-                title: 'Deload volume suggéré',
-                message: `${consecutiveStagnation} séances sans progrès malgré l'effort. Fais 2 séries au lieu de ${slot.sets} pour récupérer.`,
-                suggestedWeight: lastWeight, // Keep weight!
+                title: '2 séances sans progrès',
+                message: `Essaie de varier le tempo (3s en descente) ou améliore ta technique. Parfois un petit ajustement suffit à débloquer la progression !`,
+                suggestedWeight: lastWeight,
                 weightTrend: 'same',
-                suggestedReps: `${slot.repsMax} / ${slot.repsMax}` // Fewer sets
+                suggestedReps: targetReps
             };
         }
         
-        // Step 3: After threshold failures → suggest switch
-        if (consecutiveStagnation >= failureThreshold) {
+        // Stagnation 3x : Deload volume suggéré
+        if (consecutiveStagnation === 3) {
+            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, 2));
+            return {
+                type: 'maintain',
+                icon: 'warning',
+                title: '3 séances de stagnation',
+                message: `Ton corps a peut-être besoin de récupérer. Fais seulement 2 séries cette fois pour laisser tes muscles se régénérer. La surcompensation fera le reste ! 🔋`,
+                suggestedWeight: lastWeight,
+                weightTrend: 'same',
+                suggestedReps: deloadReps
+            };
+        }
+        
+        // Stagnation 4x : Changement de rep-range suggéré
+        if (consecutiveStagnation === 4) {
+            const alternateReps = slot.repsMin >= 8 
+                ? `5-8 reps (plus lourd)` 
+                : `10-15 reps (plus léger)`;
+            return {
+                type: 'maintain',
+                icon: 'warning',
+                title: '4 séances sans progrès',
+                message: `Essaie de changer ta plage de reps pendant 2-3 séances (${alternateReps}) pour stimuler différemment le muscle. Tu pourras revenir ensuite à ta plage habituelle.`,
+                suggestedWeight: lastWeight,
+                weightTrend: 'same',
+                suggestedReps: targetReps
+            };
+        }
+        
+        // Stagnation 5x+ : SUGGESTION de changement d'exercice (pas obligatoire)
+        if (consecutiveStagnation >= 5) {
             return {
                 type: 'switch',
                 icon: 'switch',
                 title: `Plateau détecté (${consecutiveStagnation} séances)`,
-                message: `Essaie une variante du mouvement pour relancer la progression.`,
+                message: `Malgré plusieurs tentatives, cet exercice stagne. Tu peux essayer une variante de la pool pour relancer la progression avec un nouveau stimulus. Ce n'est qu'une suggestion - si tu préfères continuer, c'est ton choix !`,
                 suggestedWeight: lastWeight,
                 weightTrend: 'same',
-                suggestedReps: targetReps
+                suggestedReps: targetReps,
+                consecutiveStagnation: consecutiveStagnation
             };
         }
         
-        // Step 4: Single failure - just encourage
-        if (consecutiveStagnation === 1) {
-            const encouragement = lastAvgRpe >= 9 
-                ? 'Bel effort ! Parfois ça stagne, persévère.' 
-                : 'Concentre-toi et gratte 1 rep de plus !';
-            return {
-                type: 'maintain',
-                icon: 'target',
-                title: 'Échec 1 - Persévère',
-                message: encouragement,
-                suggestedWeight: lastWeight,
-                weightTrend: 'same',
-                suggestedReps: targetReps
-            };
-        }
+        // === PROGRESSION PATH ===
         
-        // === PROGRESSION ACHIEVED ===
-        if (allSetsHitMax && lastAvgRpe <= 8.5) {
-            // Ready for weight increase
-            const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
+        // All sets hit max → increase weight
+        if (allSetsHitMax) {
+            let increment = weightIncrement;
+            // More aggressive if low effort
+            if (hasRealRpe && effectiveRepsPerSet !== null && effectiveRepsPerSet < LOW_EFF && !isIsolation) {
+                increment = weightIncrement * 1.5;
+            }
+            const newWeight = Math.round((lastWeight + increment) * 2) / 2;
             return {
                 type: 'increase',
                 icon: 'celebrate',
-                title: 'Progression validée ! 🎯',
-                message: `Tu maîtrises ${lastWeight}kg. Passe à ${newWeight}kg !`,
+                title: 'Progression validée ! 🎉',
+                message: `Excellente maîtrise de ${lastWeight}kg sur toutes les séries ! Tu as mérité cette progression → ${newWeight}kg. Garde la même technique solide !`,
                 suggestedWeight: newWeight,
                 weightTrend: 'up',
                 suggestedReps: targetReps
             };
         }
         
-        if (firstSetHitMax && lastAvgRpe <= 9) {
-            // First set ready for increase (Double Progression Dynamique)
+        // First set hit max → can try increase on S1
+        if (firstSetHitMax) {
             const newWeight = Math.round((lastWeight + weightIncrement) * 2) / 2;
             return {
                 type: 'increase',
                 icon: 'increase',
-                title: 'Série 1 prête !',
-                message: `${slot.repsMax} reps sur S1 ! Tu peux tenter ${newWeight}kg sur la première série.`,
+                title: 'Série 1 au top ! 🚀',
+                message: `${slot.repsMax} reps clean sur S1 ! Tente ${newWeight}kg sur la première série. Si c'est trop dur, tu peux redescendre pour les séries suivantes.`,
                 suggestedWeight: newWeight,
                 weightTrend: 'up',
                 suggestedReps: targetReps
             };
         }
         
-        // Below minimum with high effort → decrease
-        if (firstSetBelowMin && firstSetRpe >= 9) {
-            const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
-            return {
-                type: 'decrease',
-                icon: 'decrease',
-                title: 'Ajustement nécessaire',
-                message: `Sous ${slot.repsMin} reps malgré l'effort. Baisse à ${newWeight}kg pour progresser.`,
-                suggestedWeight: newWeight,
-                weightTrend: 'down',
-                suggestedReps: targetReps
-            };
+        // Below minimum → decrease
+        if (firstSetBelowMin) {
+            // Only decrease if effort was high or no RPE data
+            const shouldDecrease = !hasRealRpe || (firstSetRpe != null && firstSetRpe >= 8);
+            if (shouldDecrease) {
+                const newWeight = Math.round(lastWeight * (1 - deloadPercent / 100) * 2) / 2;
+                return {
+                    type: 'decrease',
+                    icon: 'decrease',
+                    title: 'Ajustement nécessaire',
+                    message: `Tu étais sous ${slot.repsMin} reps malgré un effort intense. Baisse à ${newWeight}kg pour travailler dans la bonne plage et progresser durablement.`,
+                    suggestedWeight: newWeight,
+                    weightTrend: 'down',
+                    suggestedReps: targetReps
+                };
+            } else {
+                return {
+                    type: 'maintain',
+                    icon: 'target',
+                    title: 'Engage-toi plus ! 💪',
+                    message: `Tes reps sont basses mais ton effort semblait modéré. Concentre-toi et pousse plus près de l'échec - c'est là que la magie opère !`,
+                    suggestedWeight: lastWeight,
+                    weightTrend: 'same',
+                    suggestedReps: targetReps
+                };
+            }
         }
         
-        // === DEFAULT: Good progress, keep going ===
+        // === DEFAULT: Keep building ===
         return {
             type: 'maintain',
             icon: 'maintain',
-            title: 'Bonne progression',
-            message: `Continue ! Vise ${slot.repsMax} reps sur la 1ère série avant d'augmenter.`,
+            title: 'Continue comme ça 💪',
+            message: `Tu progresses bien ! Vise ${slot.repsMax} reps sur toutes les séries avant d'augmenter la charge. Chaque rep compte !`,
             suggestedWeight: lastWeight,
             weightTrend: 'same',
             suggestedReps: targetReps
         };
+    }
+    
+    // Get coaching suggestion for next sets based on current session performance
+    async getIntraSessionAdvice(currentSetIndex, currentSetData) {
+        if (!this.currentSlot || !this.avgPerformance) return null;
+        
+        // Only after first set
+        if (currentSetIndex !== 0) return null;
+        
+        // Detect hot/cold day
+        const dayStatus = this.getDayStatus(currentSetData, this.avgPerformance);
+        
+        if (dayStatus === 'hot') {
+            return {
+                type: 'hot',
+                message: 'Journée en forme ! Tu peux viser le haut de la plage.'
+            };
+        } else if (dayStatus === 'cold') {
+            return {
+                type: 'cold',
+                message: 'Journée difficile. Vise le bas de la plage, garde la forme.'
+            };
+        }
+        return null;
     }
 }
 

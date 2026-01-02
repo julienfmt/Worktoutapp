@@ -1,4 +1,40 @@
 // ===== Initial Data =====
+
+// Liste des groupes musculaires disponibles
+const MUSCLE_GROUPS = [
+    { id: 'pectoraux', name: 'Pectoraux', icon: '🫁' },
+    { id: 'dos', name: 'Dos', icon: '🔙' },
+    { id: 'epaules', name: 'Épaules', icon: '🎯' },
+    { id: 'biceps', name: 'Biceps', icon: '💪' },
+    { id: 'triceps', name: 'Triceps', icon: '🦾' },
+    { id: 'avant-bras', name: 'Avant-bras', icon: '🤜' },
+    { id: 'quadriceps', name: 'Quadriceps', icon: '🦵' },
+    { id: 'ischio-jambiers', name: 'Ischio-jambiers', icon: '🦿' },
+    { id: 'mollets', name: 'Mollets', icon: '🦶' },
+    { id: 'fessiers', name: 'Fessiers', icon: '🍑' },
+    { id: 'abdominaux', name: 'Abdominaux', icon: '🎽' },
+    { id: 'lombaires', name: 'Lombaires', icon: '⬇️' },
+    { id: 'trapèzes', name: 'Trapèzes', icon: '🔺' },
+    { id: 'coiffe', name: 'Coiffe des rotateurs', icon: '🔄' }
+];
+
+// Paramètres de périodisation par défaut
+const DEFAULT_PERIODIZATION = {
+    cycleLength: 5,           // Semaines par cycle (4 + 1 deload)
+    deloadWeek: 5,            // Semaine de deload dans le cycle
+    autoDeloadEnabled: true,  // Détection automatique du besoin de deload
+    coldDayThreshold: 3,      // Nombre de "journées froides" avant suggestion deload
+    deloadVolumeReduction: 50, // % de réduction du volume en deload
+    deloadIntensityReduction: 10 // % de réduction de l'intensité en deload
+};
+
+// Seuils de volume hebdomadaire par muscle (séries effectives)
+const VOLUME_THRESHOLDS = {
+    minimum: 10,   // Minimum pour progresser
+    optimal: 15,   // Zone optimale
+    maximum: 20    // Maximum récupérable (risque surentraînement au-delà)
+};
+
 const INITIAL_SESSIONS = [
     {
         id: 'bras-a',
@@ -309,8 +345,14 @@ async function initializeData() {
         // Set initial next session
         await db.setSetting('nextSessionIndex', 0);
         await db.setSetting('xp', 0);
-        await db.setSetting('weeklyWorkouts', 0);
         await db.setSetting('lastWorkoutDate', null);
+        
+        // Streak system settings
+        await db.setSetting('streakCount', 0);
+        await db.setSetting('shieldCount', 0);
+        await db.setSetting('weekProtected', false);
+        await db.setSetting('weeklyGoal', 3);
+        await db.setSetting('lastWeekCheck', new Date().toISOString());
         
         console.log('Default data initialized!');
     }
