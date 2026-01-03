@@ -1400,17 +1400,504 @@ class App {
             startTime: this.sessionStartTime,
             slots: {},
             completedSlots: [],
-            isDeload: this.isDeloadMode
+            isDeload: this.isDeloadMode,
+            lmsScores: {} // Store LMS scores per muscle group
         };
         await db.saveCurrentWorkout(this.currentWorkout);
 
         document.getElementById('current-session-name').textContent = session.name + (this.isDeloadMode ? ' 🔋' : '');
+        
+        // Show LMS prompt for muscle groups in this session
+        await this.showLMSPrompt(session);
         
         // Start session timer
         this.startSessionTimer();
         
         await this.renderSlots();
         this.showScreen('session');
+    }
+    
+    // ===== LMS (Local Muscle Soreness) System =====
+    // Determines muscle groups targeted by a session's exercises
+    async getSessionMuscleGroups(session) {
+        const slots = await db.getSlotsBySession(session.id);
+        const muscleGroups = new Set();
+        
+        for (const slot of slots) {
+            const exerciseName = (slot.activeExercise || slot.name || '').toLowerCase();
+            
+            // Match exercise to muscle groups
+            for (const [muscleId, keywords] of Object.entries(this.getMuscleKeywordsMap())) {
+                if (keywords.some(kw => exerciseName.includes(kw))) {
+                    muscleGroups.add(muscleId);
+                }
+            }
+        }
+        
+        return Array.from(muscleGroups);
+    }
+    
+    getMuscleKeywordsMap() {
+        return {
+            'pectoraux': ['pec', 'chest', 'développé', 'écarté', 'dips', 'pompes', 'push'],
+            'dos': ['dos', 'back', 'row', 'tirage', 'pull', 'lat', 'tractions'],
+            'epaules': ['épaule', 'shoulder', 'delto', 'élévation', 'lateral', 'military', 'overhead'],
+            'biceps': ['biceps', 'curl', 'flexion'],
+            'triceps': ['triceps', 'extension', 'pushdown', 'dips', 'skull', 'barre au front', 'kickback'],
+            'quadriceps': ['quad', 'squat', 'leg press', 'extension jambe', 'fente', 'lunge'],
+            'ischio-jambiers': ['ischio', 'hamstring', 'leg curl', 'soulevé de terre', 'deadlift'],
+            'mollets': ['mollet', 'calf', 'calves'],
+            'abdominaux': ['abdo', 'crunch', 'planche', 'core'],
+            'fessiers': ['fessier', 'glute', 'hip thrust'],
+            'avant-bras': ['avant-bras', 'forearm', 'wrist', 'reverse curl']
+        };
+    }
+    
+    getMuscleGroupInfo(muscleId) {
+        const info = {
+            'pectoraux': { name: 'Pectoraux', icon: '🫁' },
+            'dos': { name: 'Dos', icon: '🔙' },
+            'epaules': { name: 'Épaules', icon: '🎯' },
+            'biceps': { name: 'Biceps', icon: '💪' },
+            'triceps': { name: 'Triceps', icon: '🦾' },
+            'quadriceps': { name: 'Quadriceps', icon: '🦵' },
+            'ischio-jambiers': { name: 'Ischio-jambiers', icon: '🦿' },
+            'mollets': { name: 'Mollets', icon: '🦶' },
+            'abdominaux': { name: 'Abdominaux', icon: '🎽' },
+            'fessiers': { name: 'Fessiers', icon: '🍑' },
+            'avant-bras': { name: 'Avant-bras', icon: '✊' }
+        };
+        return info[muscleId] || { name: muscleId, icon: '💪' };
+    }
+    
+    // Show LMS prompt modal
+    async showLMSPrompt(session) {
+        const muscleGroups = await this.getSessionMuscleGroups(session);
+        
+        if (muscleGroups.length === 0) {
+            return; // No identified muscles, skip LMS
+        }
+        
+        // Generate LMS UI for each muscle group
+        const container = document.getElementById('lms-muscle-list');
+        container.innerHTML = '';
+        
+        this.lmsScoresTemp = {}; // Temporary storage before confirm
+        
+        for (const muscleId of muscleGroups) {
+            const info = this.getMuscleGroupInfo(muscleId);
+            this.lmsScoresTemp[muscleId] = 1; // Default to "Ready"
+            
+            const muscleItem = document.createElement('div');
+            muscleItem.className = 'lms-muscle-item';
+            muscleItem.dataset.muscle = muscleId;
+            muscleItem.innerHTML = `
+                <div class="lms-muscle-name">
+                    <span class="lms-muscle-icon">${info.icon}</span>
+                    <span class="lms-muscle-label">${info.name}</span>
+                </div>
+                <div class="lms-slider-container">
+                    <input type="range" class="lms-slider" data-muscle="${muscleId}" 
+                           min="0" max="3" step="1" value="1">
+                    <div class="lms-labels">
+                        <span data-value="0"><small>Frais</small>💪</span>
+                        <span data-value="1" class="active"><small>Prêt</small>👍</span>
+                        <span data-value="2"><small>Courbaturé</small>😬</span>
+                        <span data-value="3"><small>Épuisé</small>🤕</span>
+                    </div>
+                </div>
+                <div class="lms-feedback">
+                    <span class="lms-feedback-label">${LMS_SCALE[1].label}</span>
+                    <span class="lms-feedback-desc">${LMS_SCALE[1].description}</span>
+                </div>
+            `;
+            
+            container.appendChild(muscleItem);
+            
+            // Add slider event listener
+            const slider = muscleItem.querySelector('.lms-slider');
+            slider.addEventListener('input', (e) => this.handleLMSSliderChange(e, muscleId));
+        }
+        
+        // Show the sheet
+        return new Promise((resolve) => {
+            const sheet = document.getElementById('sheet-lms');
+            sheet.classList.add('active');
+            
+            // Confirm button
+            const confirmBtn = document.getElementById('btn-confirm-lms');
+            const handleConfirm = async () => {
+                // Save LMS scores to current workout
+                this.currentWorkout.lmsScores = { ...this.lmsScoresTemp };
+                await db.saveCurrentWorkout(this.currentWorkout);
+                
+                // Save LMS history for tracking
+                await this.saveLMSHistory(this.lmsScoresTemp);
+                
+                sheet.classList.remove('active');
+                confirmBtn.removeEventListener('click', handleConfirm);
+                
+                // Show adaptation modal for worst muscle
+                await this.showAdaptationStatus();
+                
+                resolve();
+            };
+            confirmBtn.addEventListener('click', handleConfirm);
+            
+            // Backdrop close
+            sheet.querySelector('.sheet-backdrop').onclick = () => {
+                // Use default values if closed
+                this.currentWorkout.lmsScores = { ...this.lmsScoresTemp };
+                sheet.classList.remove('active');
+                resolve();
+            };
+        });
+    }
+    
+    handleLMSSliderChange(e, muscleId) {
+        const value = parseInt(e.target.value);
+        this.lmsScoresTemp[muscleId] = value;
+        
+        const muscleItem = e.target.closest('.lms-muscle-item');
+        const labels = muscleItem.querySelectorAll('.lms-labels span');
+        const feedback = muscleItem.querySelector('.lms-feedback');
+        
+        // Update active label
+        labels.forEach(label => {
+            label.classList.toggle('active', parseInt(label.dataset.value) === value);
+        });
+        
+        // Update feedback
+        const lmsData = LMS_SCALE[value];
+        feedback.querySelector('.lms-feedback-label').textContent = lmsData.label;
+        feedback.querySelector('.lms-feedback-desc').textContent = lmsData.description;
+    }
+    
+    // Save LMS history for trend analysis
+    async saveLMSHistory(lmsScores) {
+        const history = await db.getSetting('lmsHistory') || [];
+        
+        history.unshift({
+            date: new Date().toISOString(),
+            scores: lmsScores
+        });
+        
+        // Keep last 30 entries
+        if (history.length > 30) {
+            history.pop();
+        }
+        
+        await db.setSetting('lmsHistory', history);
+    }
+    
+    // Show adaptation status modal based on LMS
+    async showAdaptationStatus() {
+        if (!this.currentWorkout?.lmsScores) return;
+        
+        const scores = this.currentWorkout.lmsScores;
+        const muscleIds = Object.keys(scores);
+        
+        if (muscleIds.length === 0) return;
+        
+        // Find the worst muscle (highest LMS)
+        let worstMuscle = muscleIds[0];
+        let worstScore = scores[worstMuscle];
+        
+        for (const muscleId of muscleIds) {
+            if (scores[muscleId] > worstScore) {
+                worstScore = scores[muscleId];
+                worstMuscle = muscleId;
+            }
+        }
+        
+        // Calculate adaptation percentage (inverse of LMS)
+        // LMS 0 = 100%, LMS 1 = 85%, LMS 2 = 50%, LMS 3 = 20%
+        const adaptationMap = { 0: 100, 1: 85, 2: 50, 3: 20 };
+        const adaptationPercent = adaptationMap[worstScore];
+        
+        // Determine phase
+        let phase, title, icon;
+        if (adaptationPercent >= 85) {
+            phase = 'supercompensation';
+            title = 'Prêt pour progresser !';
+            icon = '🚀';
+        } else if (adaptationPercent >= 50) {
+            phase = 'refuel';
+            title = 'Bientôt prêt';
+            icon = '⚡';
+        } else {
+            phase = 'repair';
+            title = 'En récupération';
+            icon = '🔧';
+        }
+        
+        // Get volume recommendation
+        const volumeRec = this.getVolumeRecommendationFromLMS(worstScore, worstMuscle);
+        
+        // Update modal UI
+        document.getElementById('adaptation-icon').textContent = icon;
+        document.getElementById('adaptation-title').textContent = title;
+        document.getElementById('adaptation-bar-marker').style.left = `${Math.min(95, adaptationPercent)}%`;
+        
+        const muscleInfo = this.getMuscleGroupInfo(worstMuscle);
+        
+        // Simplified message based on recovery status
+        let adaptationMessage;
+        if (adaptationPercent >= 85) {
+            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} sont bien récupérés. C'est le moment idéal pour progresser !`;
+        } else if (adaptationPercent >= 50) {
+            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} récupèrent encore. On adapte le volume pour toi.`;
+        } else {
+            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} ont besoin de repos. Séance allégée aujourd'hui.`;
+        }
+        document.getElementById('adaptation-message').textContent = adaptationMessage;
+        
+        // Volume recommendation - simplified
+        const recContainer = document.getElementById('adaptation-recommendation');
+        let recText;
+        if (volumeRec.setChange > 0) {
+            recText = `+${volumeRec.setChange} série${volumeRec.setChange > 1 ? 's' : ''} par exercice`;
+        } else if (volumeRec.setChange < 0) {
+            recText = `${volumeRec.setChange} série${volumeRec.setChange < -1 ? 's' : ''} par exercice`;
+        } else {
+            recText = 'Volume normal';
+        }
+        recContainer.innerHTML = `
+            <div class="adaptation-recommendation-item">
+                <span class="adaptation-recommendation-icon">${volumeRec.setChange > 0 ? '📈' : volumeRec.setChange < 0 ? '📉' : '✓'}</span>
+                <span class="adaptation-recommendation-text">${recText}</span>
+            </div>
+        `;
+        
+        // Show modal
+        return new Promise((resolve) => {
+            const modal = document.getElementById('modal-adaptation');
+            modal.classList.add('active');
+            
+            const closeBtn = document.getElementById('btn-close-adaptation');
+            const handleClose = () => {
+                modal.classList.remove('active');
+                closeBtn.removeEventListener('click', handleClose);
+                resolve();
+            };
+            closeBtn.addEventListener('click', handleClose);
+            
+            modal.querySelector('.modal-backdrop').onclick = handleClose;
+        });
+    }
+    
+    // Get volume recommendation based on LMS and performance trend
+    getVolumeRecommendationFromLMS(lmsScore, muscleId) {
+        // Default to 'stable' trend - will be enhanced with actual performance data
+        const trend = 'stable';
+        
+        const modifier = LMS_VOLUME_MODIFIERS[lmsScore]?.[trend];
+        if (!modifier) {
+            return { setChange: 0, loadChange: 0, message: 'Continue normalement.' };
+        }
+        
+        return modifier;
+    }
+    
+    // Apply LMS-based volume adjustment to a slot
+    // Uses EXERCISE_MUSCLE_MAP for precise primary muscle targeting
+    async applyLMSVolumeAdjustment(slot) {
+        if (!this.currentWorkout?.lmsScores) return slot;
+        
+        const exerciseName = (slot.activeExercise || slot.name || '').toLowerCase();
+        
+        // Use precise muscle mapping (primary vs secondary)
+        const muscleMapping = this.getExerciseMuscleMapping(exerciseName);
+        if (!muscleMapping) return slot;
+        
+        // Only use PRIMARY muscles for LMS adjustment
+        const primaryMuscles = muscleMapping.primary;
+        let worstPrimaryLMS = 0;
+        let targetMuscle = primaryMuscles[0];
+        
+        for (const muscle of primaryMuscles) {
+            const lmsScore = this.currentWorkout.lmsScores[muscle];
+            if (lmsScore !== undefined && lmsScore > worstPrimaryLMS) {
+                worstPrimaryLMS = lmsScore;
+                targetMuscle = muscle;
+            }
+        }
+        
+        // If primary muscles are fresh (LMS 0), no adjustment
+        if (worstPrimaryLMS === 0) return slot;
+        
+        // Get volume adjustment based on PRIMARY muscle only
+        const rec = this.getVolumeRecommendationFromLMS(worstPrimaryLMS, targetMuscle);
+        
+        // Calculate adjusted sets with MINIMUM 2 sets
+        const originalSets = slot.sets || 3;
+        let adjustedSets = originalSets + rec.setChange;
+        adjustedSets = Math.max(2, Math.min(6, adjustedSets)); // Min 2, Max 6
+        
+        return {
+            ...slot,
+            adjustedSets,
+            originalSets,
+            lmsScore: worstPrimaryLMS,
+            lmsAdjustment: rec,
+            targetMuscle,
+            primaryMuscles,
+            secondaryMuscles: muscleMapping.secondary
+        };
+    }
+    
+    // Get LMS data for a specific slot (used by coaching advice)
+    // Uses EXERCISE_MUSCLE_MAP to only apply LMS based on PRIMARY muscles
+    async getLMSDataForSlot(slot) {
+        if (!this.currentWorkout?.lmsScores) return null;
+        
+        const exerciseName = (slot.activeExercise || slot.name || '').toLowerCase();
+        
+        // Find exercise in EXERCISE_MUSCLE_MAP for precise primary/secondary distinction
+        const muscleMapping = this.getExerciseMuscleMapping(exerciseName);
+        
+        if (!muscleMapping) return null;
+        
+        // Get LMS scores for PRIMARY muscles only (secondary muscles don't reduce volume)
+        const primaryMuscles = muscleMapping.primary;
+        let worstPrimaryLMS = 0;
+        let worstPrimaryMuscle = primaryMuscles[0];
+        
+        for (const muscle of primaryMuscles) {
+            const lmsScore = this.currentWorkout.lmsScores[muscle];
+            if (lmsScore !== undefined && lmsScore > worstPrimaryLMS) {
+                worstPrimaryLMS = lmsScore;
+                worstPrimaryMuscle = muscle;
+            }
+        }
+        
+        // If no LMS data for primary muscles, no adjustment needed
+        if (worstPrimaryLMS === 0 && !this.currentWorkout.lmsScores[worstPrimaryMuscle]) {
+            return null;
+        }
+        
+        // Get volume adjustment based on PRIMARY muscle LMS only
+        const rec = this.getVolumeRecommendationFromLMS(worstPrimaryLMS, worstPrimaryMuscle);
+        
+        // Calculate adjusted sets with MINIMUM 2 sets (scientific minimum for stimulus)
+        const originalSets = slot.sets || 3;
+        let adjustedSets = originalSets + rec.setChange;
+        adjustedSets = Math.max(2, Math.min(6, adjustedSets)); // Min 2, Max 6
+        
+        // Recalculate actual set change after clamping
+        const actualSetChange = adjustedSets - originalSets;
+        
+        const muscleInfo = this.getMuscleGroupInfo(worstPrimaryMuscle);
+        const lmsInfo = LMS_SCALE[worstPrimaryLMS];
+        
+        return {
+            targetMuscle: worstPrimaryMuscle,
+            primaryMuscles,
+            secondaryMuscles: muscleMapping.secondary,
+            muscleName: muscleInfo.name,
+            muscleIcon: muscleInfo.icon,
+            lmsScore: worstPrimaryLMS,
+            lmsLabel: lmsInfo.label,
+            lmsEmoji: lmsInfo.emoji,
+            lmsDescription: lmsInfo.description,
+            mrvStatus: lmsInfo.mrvStatus,
+            originalSets,
+            adjustedSets,
+            setChange: actualSetChange,
+            loadChange: rec.loadChange,
+            message: rec.message
+        };
+    }
+    
+    // Get exercise muscle mapping from EXERCISE_MUSCLE_MAP
+    getExerciseMuscleMapping(exerciseName) {
+        if (!exerciseName) return null;
+        
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        
+        // Match most specific keys first to avoid collisions (e.g., 'overhead')
+        const entries = Object.entries(EXERCISE_MUSCLE_MAP)
+            .map(([k, v]) => [this.normalizeExerciseText(k), v, k])
+            .sort((a, b) => b[0].length - a[0].length);
+        
+        for (const [normKey, mapping] of entries) {
+            if (!normKey) continue;
+            if (normalizedName.includes(normKey)) {
+                return mapping;
+            }
+        }
+        
+        // Fallback: try to infer from keywords
+        const keywordMap = this.getMuscleKeywordsMap();
+        for (const [muscleId, keywords] of Object.entries(keywordMap)) {
+            if (keywords.some(kw => normalizedName.includes(this.normalizeExerciseText(kw)))) {
+                return { primary: [muscleId], secondary: [] };
+            }
+        }
+        
+        return null;
+    }
+
+    normalizeExerciseText(text) {
+        if (!text) return '';
+        return String(text)
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    
+    // Get LMS status class for styling
+    getLMSStatusClass(lmsScore) {
+        const classes = { 0: 'fresh', 1: 'ready', 2: 'sore', 3: 'wrecked' };
+        return classes[lmsScore] || 'ready';
+    }
+    
+    // Get stretch bias cue for an exercise
+    getStretchBiasCue(exerciseName) {
+        if (!exerciseName) return EXERCISE_LENGTH_PROFILES['default'];
+        
+        const nameLower = exerciseName.toLowerCase();
+        
+        // Check for matching exercise patterns
+        for (const [key, profile] of Object.entries(EXERCISE_LENGTH_PROFILES)) {
+            if (key !== 'default' && nameLower.includes(key)) {
+                return profile;
+            }
+        }
+        
+        return EXERCISE_LENGTH_PROFILES['default'];
+    }
+    
+    // Generate accessible coaching message based on context
+    getAccessibleCoachingMessage(type, context = {}) {
+        const { lmsScore, performanceTrend, avgRpe } = context;
+        
+        // Performance message
+        if (type === 'progress') {
+            if (performanceTrend === 'improved') return COACHING_MESSAGES.progress.excellent;
+            if (performanceTrend === 'stable') return COACHING_MESSAGES.progress.stable;
+            if (performanceTrend === 'regressed') return COACHING_MESSAGES.progress.declining;
+            return COACHING_MESSAGES.progress.good;
+        }
+        
+        // Volume message based on LMS
+        if (type === 'volume') {
+            if (lmsScore === 0) return COACHING_MESSAGES.volume.increase;
+            if (lmsScore >= 2) return COACHING_MESSAGES.volume.decrease;
+            return COACHING_MESSAGES.volume.maintain;
+        }
+        
+        // Effort message based on RPE
+        if (type === 'effort') {
+            if (avgRpe === null || avgRpe < 7) return COACHING_MESSAGES.effort.pushMore;
+            if (avgRpe >= 9) return COACHING_MESSAGES.effort.tooHard;
+            return COACHING_MESSAGES.effort.onPoint;
+        }
+        
+        return '';
     }
 
     async renderSlots() {
@@ -1742,7 +2229,19 @@ class App {
 
         document.getElementById('exercise-slot-label').textContent = this.currentSlot.slotId;
         document.getElementById('current-exercise-name').textContent = exerciseName;
-        document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
+        
+        // Check for LMS volume adjustment
+        const lmsData = await this.getLMSDataForSlot(this.currentSlot);
+        this.currentLMSData = lmsData; // Store for later use
+        
+        if (lmsData && lmsData.adjustedSets !== lmsData.originalSets) {
+            const setsEl = document.getElementById('exercise-sets');
+            const changeSign = lmsData.setChange > 0 ? '+' : '';
+            setsEl.innerHTML = `${lmsData.adjustedSets} <small style="opacity:0.7">(${changeSign}${lmsData.setChange})</small>`;
+        } else {
+            document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
+        }
+        
         document.getElementById('exercise-reps').textContent = `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}`;
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
         document.getElementById('exercise-rir').textContent = this.currentSlot.rir;
@@ -1751,7 +2250,16 @@ class App {
         if (this.isUnilateralMode) {
             document.getElementById('exercise-instructions').textContent = 'Exercice unilatéral : fais chaque côté séparément. Les poids et conseils sont indépendants.';
         } else {
-            document.getElementById('exercise-instructions').textContent = this.currentSlot.instructions || '--';
+            // Get stretch bias cue if available
+            const stretchBias = this.getStretchBiasCue(exerciseName);
+            let instructions = this.currentSlot.instructions || '';
+            
+            if (stretchBias && stretchBias.bias !== 'neutral') {
+                const biasIcon = stretchBias.bias === 'lengthened' ? '🎯' : '💪';
+                instructions = `${biasIcon} ${stretchBias.cue}` + (instructions ? `\n${instructions}` : '');
+            }
+            
+            document.getElementById('exercise-instructions').textContent = instructions || 'Amplitude complète et contrôlée.';
         }
 
         // Hide all superset-specific containers and show standard ones
@@ -2835,11 +3343,22 @@ class App {
         const coachingSuggestedSets = advice?.suggestedSets || advice?.deloadSets;
         const isDeloadAdvice = advice?.type === 'deload' || advice?.type === 'reactive_deload' || advice?.type === 'deload_mini' || advice?.isDeload;
         
+        // LMS Integration: Check if LMS suggests volume adjustment
+        const lmsAdjustedSets = this.currentLMSData?.adjustedSets;
+        const hasLMSAdjustment = lmsAdjustedSets !== undefined && lmsAdjustedSets !== programmedSets;
+        
         // Use suggested sets if deload advice AND user hasn't chosen to continue
         const userWantsContinue = this.userOverrideSets === true;
-        const effectiveSets = (isDeloadAdvice && coachingSuggestedSets && !userWantsContinue)
-            ? Math.min(coachingSuggestedSets, programmedSets) 
-            : programmedSets;
+        let effectiveSets;
+        
+        if (isDeloadAdvice && coachingSuggestedSets && !userWantsContinue) {
+            effectiveSets = Math.min(coachingSuggestedSets, programmedSets);
+        } else if (hasLMSAdjustment && !userWantsContinue) {
+            // Apply LMS volume adjustment
+            effectiveSets = lmsAdjustedSets;
+        } else {
+            effectiveSets = programmedSets;
+        }
         
         // Store for use in completion check
         this.currentEffectiveSets = effectiveSets;
@@ -6457,6 +6976,25 @@ class App {
                 backoffContainer.style.display = 'none';
             }
         }
+        
+        // === LMS Integration: Show volume adjustment if LMS data exists ===
+        if (this.currentLMSData) {
+            const lms = this.currentLMSData;
+            
+            // Update sets display with LMS adjustment info
+            if (setsContainer && lms.adjustedSets !== lms.originalSets) {
+                setsContainer.style.display = 'block';
+                const changeText = lms.setChange > 0 ? `+${lms.setChange}` : lms.setChange;
+                document.getElementById('coaching-suggested-sets').innerHTML = 
+                    `${lms.adjustedSets} séries <span class="volume-adjustment-badge ${lms.setChange > 0 ? 'increase' : 'decrease'}">${lms.lmsEmoji} ${changeText}</span>`;
+            }
+            
+            // Add LMS context to message if not already included
+            if (advice.message && !advice.message.includes('courbatur') && lms.lmsScore >= 2) {
+                const lmsContext = ` (${lms.lmsEmoji} ${lms.muscleName}: ${lms.lmsLabel})`;
+                document.getElementById('coaching-advice-message').textContent = advice.message + lmsContext;
+            }
+        }
     }
     
     getTrendArrowSVG(trend) {
@@ -6557,6 +7095,10 @@ class App {
         const isDeloadMode = this.isDeloadMode || (await db.getSetting('isDeloadMode')) || false;
         const deloadIntensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
         
+        // === LMS INTEGRATION: Get local muscle soreness data ===
+        const lmsData = await this.getLMSDataForSlot(slot);
+        this.currentLMSData = lmsData; // Store for UI display
+        
         // === HYPERTROPHY-OPTIMIZED PARAMETERS ===
         // Isolation: micro-loading (+0.5-1kg), Compound: +2.5kg
         const weightIncrement = isIsolation ? Math.min(baseWeightIncrement, 1) : baseWeightIncrement;
@@ -6564,7 +7106,11 @@ class App {
         const maxSafeRpe = isIsolation ? 10 : 9;
         
         // VOLUME MANAGEMENT: Track current slot sets for potential volume ramp
-        const currentProgrammedSets = slot.sets || 3;
+        // Apply LMS adjustment if available
+        let currentProgrammedSets = slot.sets || 3;
+        if (lmsData && lmsData.adjustedSets !== undefined) {
+            currentProgrammedSets = lmsData.adjustedSets;
+        }
         const maxSetsPerExercise = isIsolation ? 6 : 5; // MRV caps (scientific: diminishing returns)
         const minSetsPerExercise = 2; // MEV floor
         
@@ -6729,13 +7275,12 @@ class App {
             return {
                 type: 'reactive_deload',
                 icon: 'warning',
-                title: '🔋 Deload Réactif Recommandé',
-                message: `${activeCount} signaux de fatigue détectés (${signalMessages.join(', ')}). Ton corps demande une récupération. Semaine prochaine : réduis à ${Math.max(2, Math.ceil(slot.sets * 0.5))} séries en gardant la charge.`,
+                title: '🔋 Semaine légère conseillée',
+                message: `Ton corps montre des signes de fatigue. Fais ${Math.max(2, Math.ceil(slot.sets * 0.5))} séries au lieu de ${slot.sets} pour récupérer et revenir plus fort.`,
                 suggestedWeight: workouts[0]?.maxWeight || '?',
                 weightTrend: 'same',
                 suggestedReps: targetReps,
                 suggestedSets: Math.max(2, Math.ceil(slot.sets * 0.5)),
-                scienceNote: 'Deload réactif > deload programmé : laisse ton corps dicter le timing',
                 advancedData: advancedAnalysis
             };
         }
@@ -6750,11 +7295,11 @@ class App {
                 return {
                     type: 'amrap_test',
                     icon: 'lightning',
-                    title: '⚡ Test AMRAP',
-                    message: `Anomalie détectée : ${reasons[0]}. Dernière série = AMRAP (max reps possible) pour calibrer ton vrai niveau. Si tu dépasses largement tes logs, on recalibre à la hausse.`,
+                    title: '⚡ Pousse tes limites !',
+                    message: `Ta dernière série : fais le maximum de reps possible pour voir ton vrai niveau.`,
                     suggestedWeight: workouts[0]?.maxWeight || '?',
                     weightTrend: 'same',
-                    suggestedReps: `${targetReps} puis AMRAP`,
+                    suggestedReps: `${targetReps} puis MAX`,
                     amrapSet: true,
                     advancedData: advancedAnalysis
                 };
@@ -6765,7 +7310,7 @@ class App {
                     type: 'force_increase',
                     icon: 'lightning',
                     title: '⚡ Challenge !',
-                    message: `Les données suggèrent une marge de progression inexploitée. Test : ${forceWeight}kg aujourd'hui. Si tu ne peux pas tenir ${slot.repsMin} reps, on revient en arrière.`,
+                    message: `Tu as de la marge ! Essaie ${forceWeight}kg. Si c'est trop dur, tu peux revenir en arrière.`,
                     suggestedWeight: forceWeight,
                     weightTrend: 'up',
                     suggestedReps: targetReps,

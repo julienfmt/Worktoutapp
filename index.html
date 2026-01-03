@@ -167,7 +167,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v3.0</span>
+                    <span class="app-version">v3.2</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -895,6 +895,63 @@
                 </div>
 
                 <button class="btn btn-primary btn-large" id="btn-save-settings">Enregistrer les paramètres</button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet LMS (Local Muscle Soreness) -->
+        <div class="bottom-sheet" id="sheet-lms">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <div class="lms-header">
+                    <h3>🔬 Check-in Récupération</h3>
+                    <p class="lms-subtitle">Comment se sentent tes muscles aujourd'hui ?</p>
+                </div>
+                
+                <div class="lms-muscle-list" id="lms-muscle-list">
+                    <!-- Generated dynamically based on session's muscle groups -->
+                </div>
+                
+                <div class="lms-info-card">
+                    <div class="lms-info-icon">💡</div>
+                    <div class="lms-info-text">
+                        <strong>À quoi ça sert ?</strong>
+                        <p>L'app adapte le nombre de séries selon ta récupération. Moins de courbatures = plus de volume possible.</p>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary btn-large" id="btn-confirm-lms">
+                    Continuer la séance
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Adaptation Status (Recovery Gamification) -->
+        <div class="modal" id="modal-adaptation">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-adaptation">
+                <div class="adaptation-header">
+                    <span class="adaptation-icon" id="adaptation-icon">🚀</span>
+                    <h3 id="adaptation-title">Prêt pour progresser !</h3>
+                </div>
+                <div class="adaptation-bar-container">
+                    <div class="adaptation-bar">
+                        <div class="adaptation-bar-fill" id="adaptation-bar-fill"></div>
+                        <div class="adaptation-bar-marker" id="adaptation-bar-marker"></div>
+                    </div>
+                    <div class="adaptation-bar-labels">
+                        <span>Repos</span>
+                        <span>Recharge</span>
+                        <span>Prêt</span>
+                    </div>
+                </div>
+                <div class="adaptation-message" id="adaptation-message">
+                    Tes muscles sont bien récupérés. C'est le moment idéal !
+                </div>
+                <div class="adaptation-recommendation" id="adaptation-recommendation">
+                    <!-- Volume recommendation based on LMS -->
+                </div>
+                <button class="btn btn-primary" id="btn-close-adaptation">C'est parti !</button>
             </div>
         </div>
     </div>

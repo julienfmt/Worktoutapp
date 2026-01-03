@@ -158,6 +158,252 @@ const VOLUME_ADJUSTMENT_MATRIX = {
     'regressed_any':    { action: 'deload', setChange: -2, message: 'MRV dépassé → Deload immédiat pour surcompensation' }
 };
 
+// ===== LOCAL MUSCLE SORENESS (LMS) - Reactive Volume System =====
+// Based on: Israetel MRV modulation, tissue recovery markers
+// LMS serves as proxy for local recovery status (distinct from systemic RPE)
+
+const LMS_SCALE = {
+    0: {
+        label: 'Frais',
+        emoji: '💪',
+        description: 'Aucune courbature, muscle prêt',
+        interpretation: 'Récupération complète. Tissu prêt pour stimulus maximal.',
+        mrvStatus: 'below_mrv'
+    },
+    1: {
+        label: 'Prêt',
+        emoji: '👍',
+        description: 'Légère raideur, disparaît à l\'échauffement',
+        interpretation: 'Timing optimal. Remodelage tissulaire probablement terminé.',
+        mrvStatus: 'at_mav'
+    },
+    2: {
+        label: 'Courbaturé',
+        emoji: '😬',
+        description: 'Douleur distincte, persiste à l\'échauffement',
+        interpretation: 'Récupération incomplète. Dommages encore en réparation.',
+        mrvStatus: 'approaching_mrv'
+    },
+    3: {
+        label: 'Épuisé',
+        emoji: '🤕',
+        description: 'Douloureux au toucher ou au mouvement',
+        interpretation: 'Échec de récupération. Dommages excessifs.',
+        mrvStatus: 'exceeded_mrv'
+    }
+};
+
+// Volume modifiers based on LMS score and performance trend
+// Key insight: LMS modulates MRV dynamically, not linearly
+const LMS_VOLUME_MODIFIERS = {
+    // LMS 0 (Fresh): Can push volume aggressively
+    0: {
+        improved: { setChange: 2, loadChange: 2.5, message: 'Récupération excellente. On pousse le volume pour trouver ta limite de croissance.' },
+        stable:   { setChange: 1, loadChange: 0, message: 'Bien récupéré. Ajout standard de volume.' },
+        regressed:{ setChange: 0, loadChange: 0, message: 'Frais mais perf en baisse ? Vérifie ton sommeil/nutrition.' }
+    },
+    // LMS 1 (Ready): Sweet spot - maintain or micro-progress
+    1: {
+        improved: { setChange: 0, loadChange: 2.5, message: 'Zone optimale ! Volume stable, focus sur la charge.' },
+        stable:   { setChange: 0, loadChange: 0, message: 'Sweet spot parfait. Continue comme ça.' },
+        regressed:{ setChange: -1, loadChange: 0, message: 'Légère fatigue détectée. On réduit pour consolider.' }
+    },
+    // LMS 2 (Sore): Reduce volume moderately (still need minimum stimulus)
+    2: {
+        improved: { setChange: -1, loadChange: 0, message: 'Courbaturé mais en forme. -1 série pour bien récupérer.' },
+        stable:   { setChange: -1, loadChange: 0, message: 'Muscle fatigué. On réduit légèrement le volume.' },
+        regressed:{ setChange: -1, loadChange: 0, message: 'Muscle pas prêt. -1 série, même intensité.' }
+    },
+    // LMS 3 (Wrecked): Significant reduction but keep minimum stimulus
+    3: {
+        improved: { setChange: -2, loadChange: -5, message: 'Très courbaturé. Séance allégée pour récupérer.' },
+        stable:   { setChange: -2, loadChange: -5, message: 'Muscle épuisé. Volume réduit, focus qualité.' },
+        regressed:{ setChange: -2, loadChange: -10, message: 'Récupération nécessaire. Moins de volume aujourd\'hui.' }
+    }
+};
+
+// Recovery timeline estimation (hours) based on volume and intensity
+const RECOVERY_ESTIMATES = {
+    low_volume_low_intensity: 24,    // 1-2 sets, RPE < 7
+    low_volume_high_intensity: 36,   // 1-2 sets, RPE >= 8
+    moderate_volume: 48,             // 3-4 sets, RPE 7-9
+    high_volume: 72,                 // 5+ sets or RPE 10
+    exceeded_mrv: 96                 // LMS 3 detected
+};
+
+// Adaptation bar thresholds (percentage of full recovery)
+const ADAPTATION_PHASES = {
+    repair: { min: 0, max: 50, label: 'Réparation', color: '#ef4444', icon: '🔧' },
+    refuel: { min: 50, max: 85, label: 'Rechargement', color: '#f59e0b', icon: '⚡' },
+    supercompensation: { min: 85, max: 110, label: 'Supercompensation', color: '#22c55e', icon: '🚀' },
+    detraining: { min: 110, max: 200, label: 'Perte potentielle', color: '#94a3b8', icon: '📉' }
+};
+
+// ===== EXERCISE MUSCLE MAPPING (Primary vs Secondary) =====
+// For precise LMS application: only PRIMARY muscles affect volume significantly
+// Secondary muscles get reduced LMS weight (50% impact)
+const EXERCISE_MUSCLE_MAP = {
+    // CHEST exercises
+    'développé couché': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé barre plat': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé haltères plat': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé smith plat': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé incliné barre': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé incliné haltères': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'développé incliné smith': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'incline chest press machine': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'incline chest press machine convergente': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'chest press machine': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'chest press machine convergente': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'hammer strength chest press': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'decline machine press': { primary: ['pectoraux'], secondary: ['triceps'] },
+    'press convergent': { primary: ['pectoraux'], secondary: ['epaules', 'triceps'] },
+    'écarté poulie basse': { primary: ['pectoraux'], secondary: [] },
+    'écarté poulie haute': { primary: ['pectoraux'], secondary: [] },
+    'high-to-low cable fly': { primary: ['pectoraux'], secondary: [] },
+    'low-to-high cable fly': { primary: ['pectoraux'], secondary: [] },
+    'incline cable fly': { primary: ['pectoraux'], secondary: [] },
+    'incline db fly': { primary: ['pectoraux'], secondary: [] },
+    'incline pec deck': { primary: ['pectoraux'], secondary: [] },
+    'dips assistés': { primary: ['pectoraux', 'triceps'], secondary: ['epaules'] },
+    'dips poids du corps': { primary: ['pectoraux', 'triceps'], secondary: ['epaules'] },
+    'dips triceps focus': { primary: ['triceps'], secondary: ['pectoraux', 'epaules'] },
+    'machine dips': { primary: ['pectoraux', 'triceps'], secondary: ['epaules'] },
+    'close-grip push-up': { primary: ['triceps'], secondary: ['pectoraux', 'epaules'] },
+    'tractions assistées': { primary: ['dos'], secondary: ['biceps'] },
+    'shoulder press machine': { primary: ['epaules'], secondary: ['triceps'] },
+    'shoulder press machine optionnel': { primary: ['epaules'], secondary: ['triceps'] },
+    'smith shoulder press': { primary: ['epaules'], secondary: ['triceps'] },
+    'db shoulder press': { primary: ['epaules'], secondary: ['triceps'] },
+    'landmine press': { primary: ['epaules'], secondary: ['pectoraux', 'triceps'] },
+    'développé militaire': { primary: ['epaules'], secondary: ['triceps'] },
+    'overhead': { primary: ['epaules'], secondary: ['triceps'] },
+    'élévation latérale': { primary: ['epaules'], secondary: [] },
+    'élévations latérales': { primary: ['epaules'], secondary: [] },
+    'machine lateral raise': { primary: ['epaules'], secondary: [] },
+    'lean-away cable lateral raise': { primary: ['epaules'], secondary: [] },
+    'cable lateral raise': { primary: ['epaules'], secondary: [] },
+    'partial lat raise': { primary: ['epaules'], secondary: [] },
+    'rear delt cable fly': { primary: ['epaules'], secondary: ['dos'] },
+    'reverse pec deck': { primary: ['epaules'], secondary: ['dos'] },
+    'rear delt row': { primary: ['epaules'], secondary: ['dos'] },
+    'incline rear delt raise': { primary: ['epaules'], secondary: ['dos'] },
+    'face pull': { primary: ['epaules'], secondary: ['dos'] },
+    'cuban rotation': { primary: ['epaules'], secondary: [] },
+    'rotation externe': { primary: ['epaules'], secondary: [] },
+    // BACK / ROWS
+    'seated row': { primary: ['dos'], secondary: ['biceps'] },
+    'chest-supported row': { primary: ['dos'], secondary: ['biceps'] },
+    'row machine': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing assis machine': { primary: ['dos'], secondary: ['biceps'] },
+    'seated row machine': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing poitrine appuyée': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing bas machine': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing unilatéral': { primary: ['dos'], secondary: ['biceps'] },
+    'lat pulldown prise large': { primary: ['dos'], secondary: ['biceps'] },
+    'lat pulldown prise neutre': { primary: ['dos'], secondary: ['biceps'] },
+    'lat pulldown unilatéral': { primary: ['dos'], secondary: ['biceps'] },
+    'straight-arm pulldown': { primary: ['dos'], secondary: [] },
+    'pullover à la poulie bras tendus': { primary: ['dos'], secondary: ['pectoraux'] },
+    'back extension': { primary: ['ischio-jambiers', 'fessiers'], secondary: ['dos'] },
+    'extensions lombaires': { primary: ['ischio-jambiers', 'fessiers'], secondary: ['dos'] },
+    'cable pull-through': { primary: ['fessiers', 'ischio-jambiers'], secondary: [] },
+    'romanian deadlift': { primary: ['ischio-jambiers', 'fessiers'], secondary: ['dos'] },
+    'rdl': { primary: ['ischio-jambiers', 'fessiers'], secondary: ['dos'] },
+    // BICEPS
+    'bayesian curl': { primary: ['biceps'], secondary: [] },
+    'single-arm cable curl': { primary: ['biceps'], secondary: [] },
+    'poulie unilatérale': { primary: ['biceps'], secondary: [] },
+    'machine preacher curl': { primary: ['biceps'], secondary: [] },
+    'finisher biceps machine preacher': { primary: ['biceps'], secondary: [] },
+    'curl incliné': { primary: ['biceps'], secondary: [] },
+    'curl marteau': { primary: ['biceps'], secondary: [] },
+    'curl pupitre': { primary: ['biceps'], secondary: [] },
+    'curl concentré': { primary: ['biceps'], secondary: [] },
+    'curl': { primary: ['biceps'], secondary: [] },
+    // TRICEPS (avoid generic 'extension' keyword)
+    'triceps rope pushdown': { primary: ['triceps'], secondary: [] },
+    'v-bar triceps pushdown': { primary: ['triceps'], secondary: [] },
+    'pushdown triceps': { primary: ['triceps'], secondary: [] },
+    'pushdown': { primary: ['triceps'], secondary: [] },
+    'overhead cable triceps extension': { primary: ['triceps'], secondary: [] },
+    'one-arm overhead cable triceps extension': { primary: ['triceps'], secondary: [] },
+    'barre au front': { primary: ['triceps'], secondary: [] },
+    'kickback': { primary: ['triceps'], secondary: [] },
+    'overhead triceps': { primary: ['triceps'], secondary: [] },
+    'extension triceps': { primary: ['triceps'], secondary: [] },
+    
+    // LEGS
+    'hack squat': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'squat': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'presse à cuisses': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'leg press': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'split squat': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'fente': { primary: ['quadriceps'], secondary: ['fessiers'] },
+    'hip thrust': { primary: ['fessiers'], secondary: ['ischio-jambiers'] },
+    'leg extension': { primary: ['quadriceps'], secondary: [] },
+    'leg curl': { primary: ['ischio-jambiers'], secondary: [] },
+    'nordic curl': { primary: ['ischio-jambiers'], secondary: [] },
+    'mollet': { primary: ['mollets'], secondary: [] },
+    
+    // ABS / CORE
+    'abdominal crunch machine': { primary: ['abdominaux'], secondary: [] },
+    'cable crunch': { primary: ['abdominaux'], secondary: [] },
+    'crunch': { primary: ['abdominaux'], secondary: [] },
+    
+    // FOREARMS
+    'wrist curl': { primary: ['avant-bras'], secondary: [] },
+    'reverse curl': { primary: ['avant-bras'], secondary: ['biceps'] }
+};
+
+// ===== STRETCH BIAS - Lengthened Position Training =====
+// Research 2024-2025: Training at long muscle lengths = superior hypertrophy
+// Each exercise tagged with length profile for execution cues
+const EXERCISE_LENGTH_PROFILES = {
+    // Stretch-biased exercises (prioritize bottom position)
+    'curl incliné': { bias: 'lengthened', cue: 'Étirement max en bas, ne remonte pas tout en haut.' },
+    'écarté': { bias: 'lengthened', cue: 'Descends profond, squeeze léger au centre.' },
+    'développé incliné': { bias: 'lengthened', cue: 'Descente profonde, étire les pecs en bas.' },
+    'pullover': { bias: 'lengthened', cue: 'Bras tendus derrière, étirement max.' },
+    'extension nuque': { bias: 'lengthened', cue: 'Descends bien derrière la tête.' },
+    'romanian deadlift': { bias: 'lengthened', cue: 'Étire les ischios en bas, ne remonte pas complètement.' },
+    'rdl': { bias: 'lengthened', cue: 'Étire les ischios en bas, ne remonte pas complètement.' },
+    'leg curl': { bias: 'lengthened', cue: 'Contrôle la phase négative, étirement complet.' },
+    'sissy squat': { bias: 'lengthened', cue: 'Genoux en avant, étirement quad max.' },
+    
+    // Shortened-biased exercises (less optimal for hypertrophy but still useful)
+    'leg extension': { bias: 'shortened', cue: 'Squeeze en haut, contrôle la descente.' },
+    'concentration curl': { bias: 'shortened', cue: 'Contraction max en haut.' },
+    'lateral raise': { bias: 'shortened', cue: 'Petite pause en haut.' },
+    
+    // Neutral (full ROM optimal)
+    'default': { bias: 'neutral', cue: 'Amplitude complète et contrôlée.' }
+};
+
+// ===== COACHING MESSAGES - Accessible for medium-level users =====
+// Clear, motivating messages without jargon
+const COACHING_MESSAGES = {
+    // Performance-based messages
+    progress: {
+        excellent: "Super progression ! Tu as gagné en force. Continue sur cette lancée.",
+        good: "Bonne séance ! Tu es sur la bonne voie.",
+        stable: "Performances stables. C'est normal, la progression n'est pas linéaire.",
+        declining: "Petite baisse aujourd'hui. Pas d'inquiétude, vérifie ton sommeil et ta nutrition."
+    },
+    // Volume adjustment messages (simplified from LMS)
+    volume: {
+        increase: "Tes muscles récupèrent bien → on ajoute du volume pour stimuler plus de croissance.",
+        maintain: "Volume parfait pour toi aujourd'hui.",
+        decrease: "Muscle encore fatigué → moins de séries mais même intensité. Qualité > quantité."
+    },
+    // Effort guidance
+    effort: {
+        pushMore: "Tu peux pousser un peu plus ! Vise 2-3 reps de la limite.",
+        onPoint: "Effort parfait. Garde ce niveau d'intensité.",
+        tooHard: "Effort très élevé. Garde 1-2 reps en réserve pour éviter l'épuisement."
+    }
+};
+
 // e1RM Lookup Table (RPE-based percentage of true 1RM)
 // Row = Reps, Column = RPE (used for prescribing load from e1RM)
 const E1RM_PERCENTAGE_TABLE = {
