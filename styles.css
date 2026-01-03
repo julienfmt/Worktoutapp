@@ -3689,6 +3689,72 @@ body {
     animation: scoreFadeIn 0.4s ease 1.5s both;
 }
 
+/* ===== Modal Resume Session ===== */
+.resume-icon,
+.quit-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+#modal-resume-session .modal-content,
+#modal-quit-session .modal-content {
+    text-align: center;
+    max-width: 360px;
+}
+
+#modal-resume-session h3,
+#modal-quit-session h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+#modal-resume-session p,
+#modal-quit-session p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.resume-progress {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+}
+
+.resume-progress span {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.resume-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.resume-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
 /* ===== Modal Deload ===== */
 .modal-deload {
     max-width: 400px;

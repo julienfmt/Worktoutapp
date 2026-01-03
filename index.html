@@ -641,6 +641,45 @@
             </div>
         </div>
 
+        <!-- Modal Reprendre Séance -->
+        <div class="modal" id="modal-resume-session">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="resume-icon">🏋️</div>
+                <h3>Séance en cours détectée</h3>
+                <p id="resume-session-info">Tu avais une séance en cours. Veux-tu la reprendre ?</p>
+                <div class="resume-progress">
+                    <span id="resume-progress-text">0/0 exercices complétés</span>
+                    <div class="resume-progress-bar">
+                        <div class="resume-progress-fill" id="resume-progress-fill"></div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="btn-discard-session">Abandonner</button>
+                    <button class="btn btn-primary" id="btn-resume-session">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Reprendre
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Quitter Séance -->
+        <div class="modal" id="modal-quit-session">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="quit-icon">⚠️</div>
+                <h3>Quitter la séance ?</h3>
+                <p>Ta progression sera perdue si tu quittes maintenant.</p>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="btn-cancel-quit">Continuer la séance</button>
+                    <button class="btn btn-danger" id="btn-confirm-quit">Quitter</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Modal Suggestion Deload -->
         <div class="modal" id="modal-deload">
             <div class="modal-backdrop"></div>

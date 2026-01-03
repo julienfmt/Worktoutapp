@@ -367,6 +367,108 @@ class App {
         await this.updateStorageInfo();
         setInterval(() => this.updateStorageInfo(), 5000);
         await this.renderHome();
+        
+        // Check for pending session to resume
+        await this.checkPendingSession();
+    }
+    
+    // ===== Session Persistence =====
+    async checkPendingSession() {
+        const savedWorkout = await db.getCurrentWorkout();
+        if (!savedWorkout || !savedWorkout.sessionId) return;
+        
+        // Auto-expire sessions older than 12 hours (storage optimization)
+        const MAX_SESSION_AGE = 12 * 60 * 60 * 1000; // 12 hours
+        if (Date.now() - savedWorkout.startTime > MAX_SESSION_AGE) {
+            console.log('🧹 Séance expirée, nettoyage automatique');
+            await db.clearCurrentWorkout();
+            return;
+        }
+        
+        const session = await db.get('sessions', savedWorkout.sessionId);
+        if (!session) {
+            await db.clearCurrentWorkout();
+            return;
+        }
+        
+        // Calculate progress
+        const slots = await db.getSlotsBySession(session.id);
+        const completedCount = savedWorkout.completedSlots?.length || 0;
+        const totalCount = slots.length;
+        const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+        
+        // Calculate elapsed time with better formatting
+        const elapsed = Date.now() - savedWorkout.startTime;
+        const elapsedMin = Math.floor(elapsed / 60000);
+        const elapsedHours = Math.floor(elapsedMin / 60);
+        const remainingMin = elapsedMin % 60;
+        
+        let timeText;
+        if (elapsedHours > 0) {
+            timeText = `${elapsedHours}h${remainingMin > 0 ? remainingMin : ''}`;
+        } else {
+            timeText = `${elapsedMin} min`;
+        }
+        
+        // Update modal content
+        document.getElementById('resume-session-info').textContent = 
+            `Séance "${session.name}" commencée il y a ${timeText}`;
+        document.getElementById('resume-progress-text').textContent = 
+            `${completedCount}/${totalCount} exercices complétés`;
+        document.getElementById('resume-progress-fill').style.width = `${progress}%`;
+        
+        // Show modal
+        document.getElementById('modal-resume-session').classList.add('active');
+    }
+    
+    async resumeSession() {
+        document.getElementById('modal-resume-session').classList.remove('active');
+        
+        const savedWorkout = await db.getCurrentWorkout();
+        if (!savedWorkout) return;
+        
+        const session = await db.get('sessions', savedWorkout.sessionId);
+        if (!session) return;
+        
+        // Restore session state
+        this.currentSession = session;
+        this.currentWorkout = savedWorkout;
+        this.sessionStartTime = savedWorkout.startTime;
+        this.isDeloadMode = savedWorkout.isDeload || false;
+        
+        // Update UI
+        document.getElementById('current-session-name').textContent = 
+            session.name + (this.isDeloadMode ? ' 🔋' : '');
+        
+        // Start timer from saved time
+        this.startSessionTimer();
+        
+        // Render slots with completed state
+        await this.renderSlots();
+        this.showScreen('session');
+    }
+    
+    async discardSession() {
+        document.getElementById('modal-resume-session').classList.remove('active');
+        await db.clearCurrentWorkout();
+        this.currentWorkout = null;
+        this.currentSession = null;
+    }
+    
+    showQuitSessionModal() {
+        document.getElementById('modal-quit-session').classList.add('active');
+    }
+    
+    hideQuitSessionModal() {
+        document.getElementById('modal-quit-session').classList.remove('active');
+    }
+    
+    async confirmQuitSession() {
+        this.hideQuitSessionModal();
+        this.stopSessionTimer();
+        await db.clearCurrentWorkout();
+        this.currentWorkout = null;
+        await this.renderHome();
     }
     
     async updateStorageInfo() {
@@ -4809,8 +4911,18 @@ class App {
         };
 
         // Session screen
-        document.getElementById('btn-back-home').onclick = () => this.renderHome();
+        document.getElementById('btn-back-home').onclick = () => this.showQuitSessionModal();
         document.getElementById('btn-finish-session').onclick = () => this.showFinishModal();
+        
+        // Modal resume session
+        document.getElementById('btn-resume-session').onclick = () => this.resumeSession();
+        document.getElementById('btn-discard-session').onclick = () => this.discardSession();
+        document.querySelector('#modal-resume-session .modal-backdrop').onclick = () => this.discardSession();
+        
+        // Modal quit session
+        document.getElementById('btn-cancel-quit').onclick = () => this.hideQuitSessionModal();
+        document.getElementById('btn-confirm-quit').onclick = () => this.confirmQuitSession();
+        document.querySelector('#modal-quit-session .modal-backdrop').onclick = () => this.hideQuitSessionModal();
 
         document.getElementById('slots-list').onclick = (e) => {
             const launchBtn = e.target.closest('.btn-launch');
