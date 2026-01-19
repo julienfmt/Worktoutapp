@@ -143,7 +143,8 @@ class StreakEngine {
         
         const results = [];
         
-        for (let i = 1; i <= weeksPassed; i++) {
+        // Check each completed week (starting from lastCheckWeekStart, not the week after)
+        for (let i = 0; i < weeksPassed; i++) {
             const weekToCheck = new Date(lastCheckWeekStart);
             weekToCheck.setDate(weekToCheck.getDate() + (i * 7));
             const { start, end } = this.getWeekBounds(weekToCheck);
@@ -158,18 +159,20 @@ class StreakEngine {
             
             if (goalMet) {
                 streakCount++;
-                // Shields are now earned per session, not per week
+                // Award 0.5 shield for completing a week (max 3 shields)
+                const newShieldCount = Math.min(shieldCount + 0.5, this.MAX_SHIELDS);
+                shieldCount = newShieldCount;
                 weekProtected = false;
-                results.push({ week: i, success: true, streakCount, shieldCount });
+                results.push({ week: i + 1, success: true, streakCount, shieldCount, weeklyGoalMet: true });
             } else {
                 if (shieldCount >= 1) {
                     shieldCount -= 1;
                     weekProtected = true;
-                    results.push({ week: i, success: false, protected: true, streakCount, shieldCount });
+                    results.push({ week: i + 1, success: false, protected: true, streakCount, shieldCount });
                 } else {
                     streakCount = 0;
                     weekProtected = false;
-                    results.push({ week: i, success: false, protected: false, streakCount: 0, shieldCount });
+                    results.push({ week: i + 1, success: false, protected: false, streakCount: 0, shieldCount });
                 }
             }
         }
@@ -545,7 +548,31 @@ class App {
     // ===== Home Screen =====
     async renderHome() {
         // Process any week transitions first
-        await streakEngine.checkAndProcessWeekEnd();
+        const weekTransitionResults = await streakEngine.checkAndProcessWeekEnd();
+        
+        // Show celebration popup if a week was completed successfully
+        if (weekTransitionResults && weekTransitionResults.length > 0) {
+            const successfulWeeks = weekTransitionResults.filter(r => r.success);
+            const shieldUsed = weekTransitionResults.find(r => r.protected);
+            
+            if (successfulWeeks.length > 0) {
+                const lastSuccess = successfulWeeks[successfulWeeks.length - 1];
+                setTimeout(() => {
+                    this.showWeekCompletedPopup(lastSuccess.streakCount, lastSuccess.shieldCount, successfulWeeks.length);
+                }, 500);
+            } else if (shieldUsed) {
+                setTimeout(() => {
+                    this.showShieldUsedPopup(shieldUsed.shieldCount);
+                }, 500);
+            } else {
+                const streakLost = weekTransitionResults.find(r => !r.success && !r.protected);
+                if (streakLost) {
+                    setTimeout(() => {
+                        this.showStreakLostPopup();
+                    }, 500);
+                }
+            }
+        }
         
         const sessions = await db.getSessions();
         const nextIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
@@ -654,9 +681,10 @@ class App {
             ? `<div class="shield-hint">+0.5 par semaine validée</div>`
             : `<div class="shield-hint shield-full">Maximum atteint !</div>`;
         
+        const hasStreak = data.streakCount > 0;
         container.innerHTML = `
             <div class="streak-main">
-                <div class="streak-score ${isComplete ? 'week-complete' : ''}">
+                <div class="streak-score ${isComplete ? 'week-complete' : ''} ${hasStreak ? 'has-streak' : ''}">
                     <div class="streak-emoji">${level.emoji}</div>
                     <div class="streak-number">${data.streakCount}</div>
                     <div class="streak-label">streak</div>
@@ -800,6 +828,109 @@ class App {
             <span class="prediction-icon">${icon}</span>
             <span class="prediction-message">${prediction.message}</span>
         `;
+    }
+
+    // ===== Week Transition Popups =====
+    showWeekCompletedPopup(streakCount, shieldCount, weeksCompleted) {
+        // Check if a full shield was just completed (shieldCount ends in .0 after adding 0.5)
+        const justCompletedFullShield = shieldCount % 1 === 0 && shieldCount > 0;
+        const shieldBonusText = justCompletedFullShield 
+            ? `🛡️ Bouclier complet gagné !` 
+            : `+0.5 bouclier gagné !`;
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'week-popup-overlay';
+        overlay.innerHTML = `
+            <div class="week-popup">
+                <div class="week-popup-confetti"></div>
+                <div class="week-popup-icon">🎉</div>
+                <h2 class="week-popup-title">Félicitations !</h2>
+                <p class="week-popup-message">
+                    Tu as réussi tous tes objectifs de la semaine passée !
+                </p>
+                <div class="week-popup-stats">
+                    <div class="week-popup-stat">
+                        <span class="week-popup-stat-icon">🔥</span>
+                        <span class="week-popup-stat-value">${streakCount}</span>
+                        <span class="week-popup-stat-label">Streak</span>
+                    </div>
+                    <div class="week-popup-stat">
+                        <span class="week-popup-stat-icon">🛡️</span>
+                        <span class="week-popup-stat-value">${shieldCount}</span>
+                        <span class="week-popup-stat-label">Boucliers</span>
+                    </div>
+                </div>
+                <p class="week-popup-bonus ${justCompletedFullShield ? 'shield-complete' : ''}">${shieldBonusText}</p>
+                <button class="week-popup-btn" onclick="this.closest('.week-popup-overlay').remove()">
+                    Continuer 💪
+                </button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        // Trigger confetti
+        gamification.triggerConfetti('heavy');
+        
+        // Celebrate streak milestones
+        gamification.celebrateStreak(streakCount);
+        
+        // Animate in
+        requestAnimationFrame(() => {
+            overlay.classList.add('visible');
+        });
+    }
+    
+    showShieldUsedPopup(remainingShields) {
+        const overlay = document.createElement('div');
+        overlay.className = 'week-popup-overlay';
+        overlay.innerHTML = `
+            <div class="week-popup week-popup-warning">
+                <div class="week-popup-icon">🛡️</div>
+                <h2 class="week-popup-title">Bouclier utilisé !</h2>
+                <p class="week-popup-message">
+                    Tu n'as pas atteint ton objectif la semaine dernière, mais ton bouclier t'a protégé !
+                </p>
+                <div class="week-popup-stats">
+                    <div class="week-popup-stat">
+                        <span class="week-popup-stat-icon">🛡️</span>
+                        <span class="week-popup-stat-value">${remainingShields}</span>
+                        <span class="week-popup-stat-label">Boucliers restants</span>
+                    </div>
+                </div>
+                <p class="week-popup-hint">Ton streak est préservé !</p>
+                <button class="week-popup-btn" onclick="this.closest('.week-popup-overlay').remove()">
+                    Compris !
+                </button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        requestAnimationFrame(() => {
+            overlay.classList.add('visible');
+        });
+    }
+    
+    showStreakLostPopup() {
+        const overlay = document.createElement('div');
+        overlay.className = 'week-popup-overlay';
+        overlay.innerHTML = `
+            <div class="week-popup week-popup-danger">
+                <div class="week-popup-icon">💔</div>
+                <h2 class="week-popup-title">Streak perdu...</h2>
+                <p class="week-popup-message">
+                    Tu n'as pas atteint ton objectif et tu n'avais plus de bouclier. Ton streak repart à zéro.
+                </p>
+                <p class="week-popup-motivate">Mais ce n'est pas grave ! On recommence ! 💪</p>
+                <button class="week-popup-btn" onclick="this.closest('.week-popup-overlay').remove()">
+                    C'est reparti !
+                </button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        requestAnimationFrame(() => {
+            overlay.classList.add('visible');
+        });
     }
 
     // ===== Stats Section =====
@@ -4383,19 +4514,6 @@ class App {
         // Update streak system
         await streakEngine.recordWorkoutForStreak();
         await db.setSetting('lastWorkoutDate', new Date().toISOString());
-        
-        // Award half shield for completing a session (max 3 shields)
-        const currentShields = (await db.getSetting('shieldCount')) ?? 0;
-        const newShieldCount = Math.min(currentShields + 0.5, streakEngine.MAX_SHIELDS);
-        if (newShieldCount > currentShields) {
-            await db.setSetting('shieldCount', newShieldCount);
-            // Celebrate if we just completed a full shield
-            if (Math.floor(newShieldCount) > Math.floor(currentShields)) {
-                setTimeout(() => {
-                    gamification.celebrateShieldEarned(newShieldCount);
-                }, 1500);
-            }
-        }
         
         // Check if we just met the weekly goal
         const streakDataAfter = await streakEngine.getStreakData();
