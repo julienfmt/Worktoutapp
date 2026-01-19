@@ -129,23 +129,6 @@ class StreakEngine {
             if (weeksPassed > 0) {
                 return await this.processWeekTransition(weeksPassed, lastCheckWeekStart);
             }
-        } else {
-            // First time checking - calculate streak from all past completed weeks
-            const history = await db.getAll('workoutHistory');
-            if (history.length > 0) {
-                // Find the earliest workout date
-                const earliestWorkout = history.reduce((earliest, w) => {
-                    const d = new Date(w.date);
-                    return d < earliest ? d : earliest;
-                }, new Date(history[0].date));
-                
-                const { start: earliestWeekStart } = this.getWeekBounds(earliestWorkout);
-                const weeksPassed = Math.floor((currentWeekStart - earliestWeekStart) / (7 * 24 * 60 * 60 * 1000));
-                
-                if (weeksPassed > 0) {
-                    return await this.processWeekTransition(weeksPassed, earliestWeekStart);
-                }
-            }
         }
         
         await db.setSetting('lastWeekCheck', new Date().toISOString());
@@ -204,6 +187,68 @@ class StreakEngine {
 
     async recordWorkoutForStreak() {
         await this.checkAndProcessWeekEnd();
+    }
+    
+    async recalculateStreak() {
+        const history = await db.getAll('workoutHistory');
+        if (history.length === 0) {
+            await db.setSetting('streakCount', 0);
+            await db.setSetting('shieldCount', 0);
+            return { streakCount: 0, shieldCount: 0 };
+        }
+        
+        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
+        
+        // Sort history by date
+        history.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Get the earliest and current week
+        const earliestDate = new Date(history[0].date);
+        const { start: currentWeekStart } = this.getWeekBounds();
+        const { start: earliestWeekStart } = this.getWeekBounds(earliestDate);
+        
+        // Calculate all weeks from earliest to current
+        const weeks = [];
+        let weekStart = new Date(earliestWeekStart);
+        
+        while (weekStart < currentWeekStart) {
+            const { start, end } = this.getWeekBounds(weekStart);
+            const weekSessions = history.filter(w => {
+                const d = new Date(w.date);
+                return d >= start && d <= end;
+            }).length;
+            
+            weeks.push({
+                start,
+                end,
+                sessions: weekSessions,
+                goalMet: weekSessions >= weeklyGoal
+            });
+            
+            weekStart.setDate(weekStart.getDate() + 7);
+        }
+        
+        // Calculate streak from most recent completed weeks going backwards
+        let streakCount = 0;
+        let shieldCount = 0;
+        
+        // Start from the most recent completed week and go backwards
+        for (let i = weeks.length - 1; i >= 0; i--) {
+            if (weeks[i].goalMet) {
+                streakCount++;
+                shieldCount = Math.min(shieldCount + 0.5, this.MAX_SHIELDS);
+            } else {
+                // Streak broken - stop counting
+                break;
+            }
+        }
+        
+        await db.setSetting('streakCount', streakCount);
+        await db.setSetting('shieldCount', shieldCount);
+        await db.setSetting('lastWeekCheck', new Date().toISOString());
+        
+        console.log(`Streak recalculated: ${streakCount} weeks, ${shieldCount} shields`);
+        return { streakCount, shieldCount };
     }
 }
 
@@ -564,6 +609,13 @@ class App {
 
     // ===== Home Screen =====
     async renderHome() {
+        // One-time recalculation of streak from history (for existing users after update)
+        const streakRecalculated = await db.getSetting('streakRecalculatedV2');
+        if (!streakRecalculated) {
+            await streakEngine.recalculateStreak();
+            await db.setSetting('streakRecalculatedV2', true);
+        }
+        
         // Process any week transitions first
         const weekTransitionResults = await streakEngine.checkAndProcessWeekEnd();
         
