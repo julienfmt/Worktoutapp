@@ -129,6 +129,23 @@ class StreakEngine {
             if (weeksPassed > 0) {
                 return await this.processWeekTransition(weeksPassed, lastCheckWeekStart);
             }
+        } else {
+            // First time checking - calculate streak from all past completed weeks
+            const history = await db.getAll('workoutHistory');
+            if (history.length > 0) {
+                // Find the earliest workout date
+                const earliestWorkout = history.reduce((earliest, w) => {
+                    const d = new Date(w.date);
+                    return d < earliest ? d : earliest;
+                }, new Date(history[0].date));
+                
+                const { start: earliestWeekStart } = this.getWeekBounds(earliestWorkout);
+                const weeksPassed = Math.floor((currentWeekStart - earliestWeekStart) / (7 * 24 * 60 * 60 * 1000));
+                
+                if (weeksPassed > 0) {
+                    return await this.processWeekTransition(weeksPassed, earliestWeekStart);
+                }
+            }
         }
         
         await db.setSetting('lastWeekCheck', new Date().toISOString());
