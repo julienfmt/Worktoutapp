@@ -2356,6 +2356,7 @@ class App {
         this.isUnilateralMode = false; // Reset unilateral mode
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.userOverrideSets = false; // Reset deload override when changing exercise
+        this.editingSetIndex = null; // Reset edit mode
         
         if (!this.currentSlot) return;
         
@@ -2470,14 +2471,16 @@ class App {
         
         // Load for left side
         const leftExerciseId = `${baseExerciseId} (Gauche)`;
-        this.lastUnilateralHistoryLeft = await this.loadSideHistory(leftExerciseId);
+        this.lastUnilateralHistoryLeftAll = await this.loadSideHistoryAll(leftExerciseId);
+        this.lastUnilateralHistoryLeft = this.lastUnilateralHistoryLeftAll[0] || null;
         
         // Load for right side
         const rightExerciseId = `${baseExerciseId} (Droite)`;
-        this.lastUnilateralHistoryRight = await this.loadSideHistory(rightExerciseId);
+        this.lastUnilateralHistoryRightAll = await this.loadSideHistoryAll(rightExerciseId);
+        this.lastUnilateralHistoryRight = this.lastUnilateralHistoryRightAll[0] || null;
     }
     
-    async loadSideHistory(exerciseId) {
+    async loadSideHistoryAll(exerciseId) {
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
         
         const workoutGroups = {};
@@ -2491,18 +2494,21 @@ class App {
         }
         
         const workoutIds = Object.keys(workoutGroups);
-        if (workoutIds.length === 0) return null;
+        if (workoutIds.length === 0) return [];
         
         workoutIds.sort((a, b) => new Date(workoutGroups[b].date) - new Date(workoutGroups[a].date));
-        const lastWorkout = workoutGroups[workoutIds[0]];
-        lastWorkout.sets.sort((a, b) => a.setNumber - b.setNumber);
         
-        return {
-            date: lastWorkout.date,
-            sets: lastWorkout.sets,
-            totalReps: lastWorkout.totalReps,
-            maxWeight: lastWorkout.maxWeight
-        };
+        // Return last 3 workouts
+        return workoutIds.slice(0, 3).map(wId => {
+            const workout = workoutGroups[wId];
+            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
+            return {
+                date: workout.date,
+                sets: workout.sets,
+                totalReps: workout.totalReps,
+                maxWeight: workout.maxWeight
+            };
+        });
     }
     
     // ===== Unilateral Coaching Advice =====
@@ -2585,37 +2591,44 @@ class App {
         
         // Left side
         document.getElementById('unilateral-logbook-name-left').textContent = 'Côté Gauche';
-        this.renderUnilateralLogbookContent('left', this.lastUnilateralHistoryLeft);
+        this.renderUnilateralLogbookContent('left', this.lastUnilateralHistoryLeftAll || [this.lastUnilateralHistoryLeft].filter(Boolean));
         
         // Right side
         document.getElementById('unilateral-logbook-name-right').textContent = 'Côté Droit';
-        this.renderUnilateralLogbookContent('right', this.lastUnilateralHistoryRight);
+        this.renderUnilateralLogbookContent('right', this.lastUnilateralHistoryRightAll || [this.lastUnilateralHistoryRight].filter(Boolean));
     }
     
-    renderUnilateralLogbookContent(side, history) {
+    renderUnilateralLogbookContent(side, historyArray) {
         const dateEl = document.getElementById(`unilateral-logbook-date-${side}`);
         const contentEl = document.getElementById(`unilateral-logbook-content-${side}`);
         
-        if (!history || !history.sets || history.sets.length === 0) {
+        // Normalize to array
+        const histories = Array.isArray(historyArray) ? historyArray : (historyArray ? [historyArray] : []);
+        
+        if (histories.length === 0 || !histories[0]?.sets || histories[0].sets.length === 0) {
             dateEl.textContent = '--';
             contentEl.innerHTML = '<div class="logbook-empty">Première fois</div>';
             return;
         }
         
-        const date = new Date(history.date);
-        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
-        let dateText = daysAgo === 0 ? "Aujourd'hui" : 
-                       daysAgo === 1 ? 'Hier' : 
-                       daysAgo < 7 ? `Il y a ${daysAgo}j` : 
-                       date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        dateEl.textContent = this.formatLogbookDate(histories[0].date);
         
-        dateEl.textContent = dateText;
-        
-        let html = '<div class="unilateral-logbook-sets">';
-        for (const set of history.sets) {
-            html += `<span class="unilateral-logbook-set">${set.weight}kg×${set.reps}</span>`;
-        }
-        html += '</div>';
+        let html = '';
+        histories.forEach((history, idx) => {
+            const dateText = this.formatLogbookDate(history.date);
+            const isLatest = idx === 0;
+            
+            html += `<div class="unilateral-logbook-session ${isLatest ? '' : 'unilateral-logbook-session-older'}">`;
+            html += `<div class="unilateral-logbook-session-header">
+                <span class="logbook-session-label">${isLatest ? 'Dernière' : `S-${idx + 1}`}</span>
+                <span class="logbook-session-date">${dateText}</span>
+            </div>`;
+            html += '<div class="unilateral-logbook-sets">';
+            for (const set of history.sets) {
+                html += `<span class="unilateral-logbook-set">${set.weight}kg×${set.reps}</span>`;
+            }
+            html += '</div></div>';
+        });
         
         contentEl.innerHTML = html;
     }
@@ -3003,41 +3016,46 @@ class App {
         // Exercise A
         const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
         document.getElementById('superset-logbook-name-a').textContent = nameA;
-        this.renderSupersetLogbookContent('a', this.lastExerciseHistory);
+        this.renderSupersetLogbookContent('a', this.lastExerciseHistoryAll || [this.lastExerciseHistory].filter(Boolean));
         
         // Exercise B
         const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
         document.getElementById('superset-logbook-name-b').textContent = nameB;
-        this.renderSupersetLogbookContent('b', this.lastSupersetHistory);
+        this.renderSupersetLogbookContent('b', this.lastSupersetHistoryAll || [this.lastSupersetHistory].filter(Boolean));
     }
     
-    // Render logbook content for a specific exercise in superset
-    renderSupersetLogbookContent(exerciseKey, history) {
+    // Render logbook content for a specific exercise in superset (supports array of sessions)
+    renderSupersetLogbookContent(exerciseKey, historyArray) {
         const dateEl = document.getElementById(`superset-logbook-date-${exerciseKey}`);
         const contentEl = document.getElementById(`superset-logbook-content-${exerciseKey}`);
         
-        if (!history || !history.sets || history.sets.length === 0) {
+        // Normalize to array
+        const histories = Array.isArray(historyArray) ? historyArray : (historyArray ? [historyArray] : []);
+        
+        if (histories.length === 0 || !histories[0]?.sets || histories[0].sets.length === 0) {
             dateEl.textContent = '--';
             contentEl.innerHTML = '<div class="logbook-empty">Première fois</div>';
             return;
         }
         
-        // Format date
-        const date = new Date(history.date);
-        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
-        let dateText = daysAgo === 0 ? "Aujourd'hui" : 
-                       daysAgo === 1 ? 'Hier' : 
-                       daysAgo < 7 ? `Il y a ${daysAgo}j` : 
-                       date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        dateEl.textContent = this.formatLogbookDate(histories[0].date);
         
-        dateEl.textContent = dateText;
-        
-        // Render compact sets
-        let html = '<div class="superset-logbook-sets">';
-        for (const set of history.sets) {
-            html += `<span class="superset-logbook-set">${set.weight}kg×${set.reps}</span>`;
-        }
-        html += '</div>';
+        let html = '';
+        histories.forEach((history, idx) => {
+            const dateText = this.formatLogbookDate(history.date);
+            const isLatest = idx === 0;
+            
+            html += `<div class="superset-logbook-session ${isLatest ? '' : 'superset-logbook-session-older'}">`;
+            html += `<div class="superset-logbook-session-header">
+                <span class="logbook-session-label">${isLatest ? 'Dernière' : `S-${idx + 1}`}</span>
+                <span class="logbook-session-date">${dateText}</span>
+            </div>`;
+            html += '<div class="superset-logbook-sets">';
+            for (const set of history.sets) {
+                html += `<span class="superset-logbook-set">${set.weight}kg×${set.reps}</span>`;
+            }
+            html += '</div></div>';
+        });
         
         contentEl.innerHTML = html;
     }
@@ -3059,20 +3077,28 @@ class App {
         const workoutIds = Object.keys(workoutGroups);
         if (workoutIds.length === 0) {
             this.lastSupersetHistory = null;
+            this.lastSupersetHistoryAll = [];
             this.renderSupersetLogbook(null);
             return;
         }
         
         workoutIds.sort((a, b) => new Date(workoutGroups[b].date) - new Date(workoutGroups[a].date));
-        const lastWorkout = workoutGroups[workoutIds[0]];
-        lastWorkout.sets.sort((a, b) => a.setNumber - b.setNumber);
         
-        this.lastSupersetHistory = {
-            date: lastWorkout.date,
-            sets: lastWorkout.sets,
-            totalReps: lastWorkout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
-            maxWeight: Math.max(...lastWorkout.sets.map(s => s.weight || 0))
-        };
+        // Build history for the last 3 workouts
+        const recentWorkouts = workoutIds.slice(0, 3);
+        this.lastSupersetHistoryAll = recentWorkouts.map(wId => {
+            const workout = workoutGroups[wId];
+            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
+            return {
+                date: workout.date,
+                sets: workout.sets,
+                totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
+                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0))
+            };
+        });
+        
+        // Keep backward compatibility
+        this.lastSupersetHistory = this.lastSupersetHistoryAll[0] || null;
         
         this.renderSupersetLogbook(this.lastSupersetHistory);
     }
@@ -3186,15 +3212,29 @@ class App {
             const displayWeightA = setAData.weight || suggestedWeightA || '';
             const displayWeightB = setBData.weight || suggestedWeightB || '';
             
+            // Detect coaching-suggested state for green "coach" label
+            const isSuggestedA = !setAData.weight && suggestedWeightA;
+            const isCoachingSuggestedA = isSuggestedA && coachWeightA && coachWeightA !== '?' && (i === 0 || !lastSetsA[i]);
+            const isSuggestedB = !setBData.weight && suggestedWeightB;
+            const isCoachingSuggestedB = isSuggestedB && coachWeightB && coachWeightB !== '?' && (i === 0 || !lastSetsB[i]);
+            
+            const isEditingSuperset = isCompleted && this.editingSetIndex === i;
+            
             const card = document.createElement('div');
-            card.className = `superset-series-card-new ${isCompleted ? 'completed' : ''}`;
+            card.className = `superset-series-card-new ${isCompleted && !isEditingSuperset ? 'completed' : ''} ${isEditingSuperset ? 'editing' : ''}`;
             card.dataset.setIndex = i;
 
-            if (isCompleted) {
+            if (isCompleted && !isEditingSuperset) {
                 card.innerHTML = `
                     <div class="superset-series-header">
                         <span class="superset-series-number">Série ${i + 1}</span>
                         <div class="superset-series-check">
+                            <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                 <polyline points="20 6 9 17 4 12"/>
                             </svg>
@@ -3228,8 +3268,8 @@ class App {
                             <span class="superset-input-name">${nameA}</span>
                         </div>
                         <div class="superset-input-row">
-                            <div class="superset-input-group">
-                                <label>Poids</label>
+                            <div class="superset-input-group ${isSuggestedA ? 'suggested' : ''} ${isCoachingSuggestedA ? 'coaching-suggested' : ''}">
+                                <label>Poids ${isCoachingSuggestedA ? '<span class="suggested-label">coach</span>' : (isSuggestedA ? '<span class="suggested-label">suggéré</span>' : '')}</label>
                                 <input type="number" inputmode="decimal" class="input-weight-a superset-input" 
                                        value="${displayWeightA}" placeholder="kg" data-set-index="${i}">
                             </div>
@@ -3255,8 +3295,8 @@ class App {
                             <span class="superset-input-name">${nameB}</span>
                         </div>
                         <div class="superset-input-row">
-                            <div class="superset-input-group">
-                                <label>Poids</label>
+                            <div class="superset-input-group ${isSuggestedB ? 'suggested' : ''} ${isCoachingSuggestedB ? 'coaching-suggested' : ''}">
+                                <label>Poids ${isCoachingSuggestedB ? '<span class="suggested-label">coach</span>' : (isSuggestedB ? '<span class="suggested-label">suggéré</span>' : '')}</label>
                                 <input type="number" inputmode="decimal" class="input-weight-b superset-input" 
                                        value="${displayWeightB}" placeholder="kg" data-set-index="${i}">
                             </div>
@@ -3268,11 +3308,11 @@ class App {
                         </div>
                     </div>
                     
-                    <button class="btn btn-superset-validate" data-set-index="${i}">
+                    <button class="btn ${isEditingSuperset ? 'btn-save-edit-superset' : 'btn-superset-validate'}" data-set-index="${i}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
-                        Valider le SuperSet
+                        ${isEditingSuperset ? 'Sauvegarder' : 'Valider le SuperSet'}
                     </button>
                 `;
             }
@@ -3389,10 +3429,11 @@ class App {
             workoutGroups[set.workoutId].sets.push(set);
         }
         
-        // Find the most recent workout
+        // Find the most recent workouts
         const workoutIds = Object.keys(workoutGroups);
         if (workoutIds.length === 0) {
             this.lastExerciseHistory = null;
+            this.lastExerciseHistoryAll = [];
             this.renderLogbook(null);
             return;
         }
@@ -3402,80 +3443,119 @@ class App {
             return new Date(workoutGroups[b].date) - new Date(workoutGroups[a].date);
         });
         
-        const lastWorkoutId = workoutIds[0];
-        const lastWorkout = workoutGroups[lastWorkoutId];
+        // Build history for the last 3 workouts
+        const recentWorkouts = workoutIds.slice(0, 3);
+        this.lastExerciseHistoryAll = recentWorkouts.map(wId => {
+            const workout = workoutGroups[wId];
+            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
+            const totalReps = workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
+            const maxWeight = Math.max(...workout.sets.map(s => s.weight || 0));
+            return { date: workout.date, sets: workout.sets, totalReps, maxWeight };
+        });
         
-        // Sort sets by set number
-        lastWorkout.sets.sort((a, b) => a.setNumber - b.setNumber);
+        // Keep backward compatibility: lastExerciseHistory = most recent
+        this.lastExerciseHistory = this.lastExerciseHistoryAll[0];
         
-        // Calculate totals
-        const totalReps = lastWorkout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-        const maxWeight = Math.max(...lastWorkout.sets.map(s => s.weight || 0));
-        
-        this.lastExerciseHistory = {
-            date: lastWorkout.date,
-            sets: lastWorkout.sets,
-            totalReps,
-            maxWeight
-        };
-        
-        this.renderLogbook(this.lastExerciseHistory);
+        this.renderLogbook(this.lastExerciseHistoryAll);
     }
     
-    renderLogbook(history) {
+    formatLogbookDate(dateStr) {
+        const date = new Date(dateStr);
+        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
+        if (daysAgo === 0) return "Aujourd'hui";
+        if (daysAgo === 1) return 'Hier';
+        if (daysAgo < 7) return `Il y a ${daysAgo}j`;
+        return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    }
+    
+    renderLogbook(historyArray) {
         const logbookCard = document.getElementById('logbook-card');
         const logbookDate = document.getElementById('logbook-date');
         const logbookContent = document.getElementById('logbook-content');
         
-        if (!history) {
+        // Handle null or empty
+        if (!historyArray || (Array.isArray(historyArray) && historyArray.length === 0)) {
             logbookDate.textContent = '--';
             logbookContent.innerHTML = '<div class="logbook-empty">Première fois sur cet exercice</div>';
             return;
         }
         
-        // Format date
-        const date = new Date(history.date);
-        const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
-        let dateText = '';
-        if (daysAgo === 0) {
-            dateText = "Aujourd'hui";
-        } else if (daysAgo === 1) {
-            dateText = 'Hier';
-        } else if (daysAgo < 7) {
-            dateText = `Il y a ${daysAgo} jours`;
-        } else {
-            dateText = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-        }
+        // Backward compat: if single object passed, wrap in array
+        const histories = Array.isArray(historyArray) ? historyArray : [historyArray];
         
-        logbookDate.textContent = dateText;
+        // Header date = most recent session
+        logbookDate.textContent = this.formatLogbookDate(histories[0].date);
         
-        // Render sets
         let html = '';
-        for (const set of history.sets) {
+        
+        histories.forEach((history, idx) => {
+            const dateText = this.formatLogbookDate(history.date);
+            const isLatest = idx === 0;
+            
+            html += `<div class="logbook-session ${isLatest ? 'logbook-session-latest' : 'logbook-session-older'}">`;
+            html += `<div class="logbook-session-header">
+                <span class="logbook-session-label">${isLatest ? 'Dernière séance' : `Séance -${idx + 1}`}</span>
+                <span class="logbook-session-date">${dateText}</span>
+            </div>`;
+            
+            html += '<div class="logbook-session-sets">';
+            for (const set of history.sets) {
+                html += `
+                    <div class="logbook-set">
+                        <span class="logbook-set-number">S${set.setNumber}</span>
+                        <div class="logbook-set-data">
+                            <span class="logbook-value"><strong>${set.weight}</strong>kg</span>
+                            <span class="logbook-value"><strong>${set.reps}</strong>reps</span>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            
             html += `
-                <div class="logbook-set">
-                    <span class="logbook-set-number">Série ${set.setNumber}</span>
-                    <div class="logbook-set-data">
-                        <span class="logbook-value"><strong>${set.weight}</strong> kg</span>
-                        <span class="logbook-value"><strong>${set.reps}</strong> reps</span>
+                <div class="logbook-summary">
+                    <div class="logbook-summary-item">
+                        <div class="logbook-summary-label">Total reps</div>
+                        <div class="logbook-summary-value">${history.totalReps}</div>
+                    </div>
+                    <div class="logbook-summary-item">
+                        <div class="logbook-summary-label">Charge max</div>
+                        <div class="logbook-summary-value">${history.maxWeight} kg</div>
                     </div>
                 </div>
             `;
-        }
+            
+            html += '</div>';
+        });
         
-        // Add summary
-        html += `
-            <div class="logbook-summary">
-                <div class="logbook-summary-item">
-                    <div class="logbook-summary-label">Total reps</div>
-                    <div class="logbook-summary-value">${history.totalReps}</div>
+        // Add trend comparison if multiple sessions
+        if (histories.length >= 2) {
+            const latest = histories[0];
+            const oldest = histories[histories.length - 1];
+            const weightDiff = latest.maxWeight - oldest.maxWeight;
+            const repsDiff = latest.totalReps - oldest.totalReps;
+            
+            let trendIcon = '➡️';
+            let trendClass = 'neutral';
+            let trendText = 'Stable';
+            
+            if (weightDiff > 0 || repsDiff > 0) {
+                trendIcon = '📈';
+                trendClass = 'positive';
+                trendText = `${weightDiff > 0 ? `+${weightDiff}kg` : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? `+${repsDiff} reps` : ''} sur ${histories.length} séances`;
+            } else if (weightDiff < 0 || repsDiff < 0) {
+                trendIcon = '📉';
+                trendClass = 'negative';
+                trendText = `${weightDiff < 0 ? `${weightDiff}kg` : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? `${repsDiff} reps` : ''} sur ${histories.length} séances`;
+            }
+            
+            html += `
+                <div class="logbook-trend logbook-trend-${trendClass}">
+                    <span class="logbook-trend-icon">${trendIcon}</span>
+                    <span class="logbook-trend-text">${trendText}</span>
                 </div>
-                <div class="logbook-summary-item">
-                    <div class="logbook-summary-label">Charge max</div>
-                    <div class="logbook-summary-value">${history.maxWeight} kg</div>
-                </div>
-            </div>
-        `;
+            `;
+        }
         
         logbookContent.innerHTML = html;
     }
@@ -3569,21 +3649,29 @@ class App {
             const isSuggested = !setData.weight && suggestedWeight;
             const isCoachingSuggested = isSuggested && coachingSuggestedWeight && (i === 0 || !lastSets[i]);
             
+            const isEditing = isCompleted && this.editingSetIndex === i;
+            
             const card = document.createElement('div');
-            card.className = `series-card ${isCompleted ? 'completed' : ''}`;
+            card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''}`;
             card.dataset.setIndex = i;
-
+            
             card.innerHTML = `
                 <div class="series-header">
                     <span class="series-number">Série ${i + 1}</span>
-                    ${isCompleted ? `
+                    ${isCompleted && !isEditing ? `
                         <div class="series-check-container">
                             <span class="series-result">${setData.weight}kg × ${setData.reps}</span>
+                            <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
                             <span class="series-check">✓</span>
                         </div>
                     ` : ''}
                 </div>
-                ${!isCompleted ? `
+                ${!isCompleted || isEditing ? `
                     <div class="series-inputs">
                         <div class="input-group ${isSuggested ? 'suggested' : ''} ${isCoachingSuggested ? 'coaching-suggested' : ''}">
                             <label>Charge (kg) ${isCoachingSuggested ? '<span class="suggested-label">coach</span>' : (isSuggested ? '<span class="suggested-label">suggéré</span>' : '')}</label>
@@ -3600,11 +3688,11 @@ class App {
                                    data-set-index="${i}">
                         </div>
                     </div>
-                    <button class="btn btn-series-done" data-set-index="${i}">
+                    <button class="btn ${isEditing ? 'btn-save-edit' : 'btn-series-done'}" data-set-index="${i}">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
-                        Série terminée
+                        ${isEditing ? 'Sauvegarder' : 'Série terminée'}
                     </button>
                 ` : ''}
             `;
@@ -3701,15 +3789,23 @@ class App {
             const displayWeightLeft = setLeftData.weight || suggestedWeightLeft || '';
             const displayWeightRight = setRightData.weight || suggestedWeightRight || '';
             
+            const isEditingUni = isCompleted && this.editingSetIndex === i;
+            
             const card = document.createElement('div');
-            card.className = `unilateral-series-card ${isCompleted ? 'completed' : ''}`;
+            card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isEditingUni ? 'editing' : ''}`;
             card.dataset.setIndex = i;
 
-            if (isCompleted) {
+            if (isCompleted && !isEditingUni) {
                 card.innerHTML = `
                     <div class="unilateral-series-header">
                         <span class="unilateral-series-number">Série ${i + 1}</span>
                         <div class="unilateral-series-check">
+                            <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                 <polyline points="20 6 9 17 4 12"/>
                             </svg>
@@ -3741,9 +3837,9 @@ class App {
                         <div class="unilateral-input-header">
                             <span class="unilateral-input-badge badge-left">G</span>
                             <span class="unilateral-input-name">Côté Gauche</span>
-                            ${setLeftData.completed ? '<span class="unilateral-side-done">✓</span>' : ''}
+                            ${setLeftData.completed && !isEditingUni ? '<span class="unilateral-side-done">✓</span>' : ''}
                         </div>
-                        ${!setLeftData.completed ? `
+                        ${!setLeftData.completed || isEditingUni ? `
                         <div class="unilateral-input-row">
                             <div class="unilateral-input-group">
                                 <label>Poids</label>
@@ -3777,9 +3873,9 @@ class App {
                         <div class="unilateral-input-header">
                             <span class="unilateral-input-badge badge-right">D</span>
                             <span class="unilateral-input-name">Côté Droit</span>
-                            ${setRightData.completed ? '<span class="unilateral-side-done">✓</span>' : ''}
+                            ${setRightData.completed && !isEditingUni ? '<span class="unilateral-side-done">✓</span>' : ''}
                         </div>
-                        ${!setRightData.completed ? `
+                        ${!setRightData.completed || isEditingUni ? `
                         <div class="unilateral-input-row">
                             <div class="unilateral-input-group">
                                 <label>Poids</label>
@@ -3799,11 +3895,11 @@ class App {
                         `}
                     </div>
                     
-                    <button class="btn btn-unilateral-validate" data-set-index="${i}">
+                    <button class="btn ${isEditingUni ? 'btn-save-edit-unilateral' : 'btn-unilateral-validate'}" data-set-index="${i}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
-                        Valider les 2 côtés
+                        ${isEditingUni ? 'Sauvegarder' : 'Valider les 2 côtés'}
                     </button>
                 `;
             }
@@ -3967,6 +4063,88 @@ class App {
             this.resetRpeSlider();
             this.startRestTimer(this.currentSlot.rest);
         }
+    }
+
+    // ===== Edit Validated Sets =====
+    editSet(setIndex) {
+        this.editingSetIndex = setIndex;
+        if (this.isSupersetMode) {
+            this.renderSupersetSeries();
+        } else if (this.isUnilateralMode) {
+            this.renderUnilateralSeries();
+        } else {
+            this.renderSeries();
+        }
+    }
+    
+    async saveEditSet(setIndex) {
+        const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
+        const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
+        
+        const weight = parseFloat(weightInput.value) || 0;
+        const reps = parseInt(repsInput.value) || 0;
+        
+        if (reps === 0) {
+            repsInput.focus();
+            return;
+        }
+        
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        slotData.sets[setIndex].weight = weight;
+        slotData.sets[setIndex].reps = reps;
+        
+        await db.saveCurrentWorkout(this.currentWorkout);
+        
+        this.editingSetIndex = null;
+        this.renderSeries();
+    }
+    
+    async saveEditSupersetSet(setIndex) {
+        const weightA = parseFloat(document.querySelector(`.input-weight-a[data-set-index="${setIndex}"]`).value) || 0;
+        const repsA = parseInt(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`).value) || 0;
+        const weightB = parseFloat(document.querySelector(`.input-weight-b[data-set-index="${setIndex}"]`).value) || 0;
+        const repsB = parseInt(document.querySelector(`.input-reps-b[data-set-index="${setIndex}"]`).value) || 0;
+        
+        if (repsA === 0 || repsB === 0) {
+            alert('Entre les reps pour les deux exercices');
+            return;
+        }
+        
+        const slotAData = this.currentWorkout.slots[this.currentSlot.id];
+        const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
+        
+        slotAData.sets[setIndex].weight = weightA;
+        slotAData.sets[setIndex].reps = repsA;
+        slotBData.sets[setIndex].weight = weightB;
+        slotBData.sets[setIndex].reps = repsB;
+        
+        await db.saveCurrentWorkout(this.currentWorkout);
+        
+        this.editingSetIndex = null;
+        this.renderSupersetSeries();
+    }
+
+    async saveEditUnilateralSet(setIndex) {
+        const weightLeft = parseFloat(document.querySelector(`.input-weight-left[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsLeft = parseInt(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value) || 0;
+        const weightRight = parseFloat(document.querySelector(`.input-weight-right[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsRight = parseInt(document.querySelector(`.input-reps-right[data-set-index="${setIndex}"]`)?.value) || 0;
+        
+        if (repsLeft === 0 || repsRight === 0) {
+            alert('Entre les reps pour les deux côtés');
+            return;
+        }
+        
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        slotData.setsLeft[setIndex].weight = weightLeft;
+        slotData.setsLeft[setIndex].reps = repsLeft;
+        slotData.setsRight[setIndex].weight = weightRight;
+        slotData.setsRight[setIndex].reps = repsRight;
+        
+        await db.saveCurrentWorkout(this.currentWorkout);
+        
+        this.editingSetIndex = null;
+        this.renderUnilateralSeries();
     }
 
     // ===== Rest Timer =====
@@ -5626,6 +5804,34 @@ class App {
         };
 
         document.getElementById('series-list').onclick = (e) => {
+            // Edit set button (standard, superset, unilateral)
+            const editBtn = e.target.closest('.btn-edit-set');
+            if (editBtn) {
+                this.editSet(parseInt(editBtn.dataset.setIndex));
+                return;
+            }
+            
+            // Save edit button (standard)
+            const saveEditBtn = e.target.closest('.btn-save-edit');
+            if (saveEditBtn) {
+                this.saveEditSet(parseInt(saveEditBtn.dataset.setIndex));
+                return;
+            }
+            
+            // Save edit button (superset)
+            const saveEditSupersetBtn = e.target.closest('.btn-save-edit-superset');
+            if (saveEditSupersetBtn) {
+                this.saveEditSupersetSet(parseInt(saveEditSupersetBtn.dataset.setIndex));
+                return;
+            }
+            
+            // Save edit button (unilateral)
+            const saveEditUniBtn = e.target.closest('.btn-save-edit-unilateral');
+            if (saveEditUniBtn) {
+                this.saveEditUnilateralSet(parseInt(saveEditUniBtn.dataset.setIndex));
+                return;
+            }
+            
             // Unilateral validate button
             const unilateralValidateBtn = e.target.closest('.btn-unilateral-validate');
             if (unilateralValidateBtn) {
