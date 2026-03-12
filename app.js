@@ -6289,6 +6289,7 @@ class App {
         const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
         const weightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         const lockWeeks = (await db.getSetting('lockWeeks')) ?? 4;
+        const streakCount = (await db.getSetting('streakCount')) ?? 0;
         
         // Periodization settings
         const cycleLength = (await db.getSetting('cycleLength')) ?? 5;
@@ -6319,6 +6320,11 @@ class App {
         
         document.getElementById('setting-deload-volume').value = deloadVolumeReduction;
         document.getElementById('setting-deload-volume-value').textContent = deloadVolumeReduction;
+
+        const cheatStreakInput = document.getElementById('setting-cheat-streak');
+        cheatStreakInput.value = streakCount;
+        cheatStreakInput.dataset.currentValue = String(streakCount);
+        document.getElementById('setting-cheat-streak-current').textContent = streakCount;
         
         // Display storage information
         await this.updateStorageStats();
@@ -6433,11 +6439,32 @@ class App {
         const deloadPercent = parseInt(document.getElementById('setting-deload-percent').value);
         const weightIncrement = parseFloat(document.getElementById('setting-weight-increment').value);
         const lockWeeks = parseInt(document.getElementById('setting-lock-weeks').value);
+        const cheatStreakInput = document.getElementById('setting-cheat-streak');
+        const currentStreakCount = parseInt(cheatStreakInput.dataset.currentValue ?? '0', 10) || 0;
+        const cheatStreakRaw = cheatStreakInput.value.trim();
+        const parsedCheatStreak = parseInt(cheatStreakRaw, 10);
+        const forcedStreakCount = cheatStreakRaw === ''
+            ? currentStreakCount
+            : (Number.isFinite(parsedCheatStreak) ? Math.max(0, parsedCheatStreak) : currentStreakCount);
         
         // Periodization settings
         const cycleLength = parseInt(document.getElementById('setting-cycle-length').value);
         const autoDeloadEnabled = document.getElementById('setting-auto-deload').checked;
         const deloadVolumeReduction = parseInt(document.getElementById('setting-deload-volume').value);
+
+        cheatStreakInput.value = forcedStreakCount;
+
+        if (forcedStreakCount !== currentStreakCount) {
+            const targetLabel = forcedStreakCount === 0
+                ? '0 (reset du streak)'
+                : `${forcedStreakCount} semaine${forcedStreakCount > 1 ? 's' : ''}`;
+            const confirmCheat = confirm(
+                `Tu es sur de vouloir tricher et fixer le streak a ${targetLabel} ?\n\n` +
+                `Valeur actuelle : ${currentStreakCount}\n` +
+                `Cette action modifie directement le score streak.`
+            );
+            if (!confirmCheat) return;
+        }
         
         await db.setSetting('weeklyGoal', weeklyGoal);
         await db.setSetting('failureCount', failureCount);
@@ -6449,6 +6476,7 @@ class App {
         await db.setSetting('cycleLength', cycleLength);
         await db.setSetting('autoDeloadEnabled', autoDeloadEnabled);
         await db.setSetting('deloadVolumeReduction', deloadVolumeReduction);
+        await db.setSetting('streakCount', forcedStreakCount);
         
         // Initialize cycle start date if not set
         const cycleStartDate = await db.getSetting('cycleStartDate');

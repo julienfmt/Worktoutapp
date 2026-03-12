@@ -167,7 +167,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v3.4</span>
+                    <span class="app-version">v3.5</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -890,6 +890,26 @@
                         <input type="range" id="setting-deload-volume" class="settings-slider" min="30" max="70" step="10" value="50">
                         <div class="settings-slider-value">
                             <span id="setting-deload-volume-value">50</span>% de réduction
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-divider"></div>
+                <h4 class="settings-group-title">Triche</h4>
+
+                <div class="settings-section settings-section-cheat">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2l7 4v6c0 5-3.4 9.7-7 10.9C8.4 21.7 5 17 5 12V6l7-4z"/>
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                        Triche streak
+                    </h4>
+                    <p class="settings-description">Force manuellement le score streak. Mets 0 pour le reset.</p>
+                    <div class="settings-cheat-input-group">
+                        <input type="number" id="setting-cheat-streak" class="settings-number-input" min="0" step="1" inputmode="numeric" value="0">
+                        <div class="settings-number-meta">
+                            Streak actuel : <span id="setting-cheat-streak-current">0</span>
                         </div>
                     </div>
                 </div>
