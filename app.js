@@ -472,6 +472,7 @@ class App {
         this.lastExerciseHistory = null;
         this.poolSlotId = null;
         this.editingSessionId = null;
+        this.isFinishingSession = false;
     }
 
     async init() {
@@ -715,7 +716,11 @@ class App {
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
             const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
             document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSession?.name || 'Inconnue'}, ${daysText}`;
+        } else {
+            document.getElementById('last-session-info').textContent = 'Dernière séance : --';
         }
+
+        this.renderPreviousMonthCalendar(history, sessions);
 
         // Render streak system
         await this.renderStreakSystem();
@@ -724,6 +729,161 @@ class App {
         await this.renderStats();
 
         this.showScreen('home');
+    }
+
+    getLocalDateKey(dateValue) {
+        const date = new Date(dateValue);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    getPreviousMonthRange(baseDate = new Date()) {
+        const start = new Date(baseDate.getFullYear(), baseDate.getMonth() - 1, 1);
+        const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), 0);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+
+    getCalendarAccent(index) {
+        const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#0ea5e9', '#8b5cf6', '#ec4899', '#14b8a6'];
+        return palette[index % palette.length];
+    }
+
+    hexToRgba(hex, alpha) {
+        if (!hex || typeof hex !== 'string') return `rgba(99, 102, 241, ${alpha})`;
+        const normalized = hex.replace('#', '');
+        const safeHex = normalized.length === 3
+            ? normalized.split('').map(char => char + char).join('')
+            : normalized;
+
+        if (safeHex.length !== 6) {
+            return `rgba(99, 102, 241, ${alpha})`;
+        }
+
+        const intValue = Number.parseInt(safeHex, 16);
+        const r = (intValue >> 16) & 255;
+        const g = (intValue >> 8) & 255;
+        const b = intValue & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    abbreviateSessionName(name) {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return '--';
+        if (trimmed.length <= 10) return trimmed;
+
+        const tokens = trimmed.split(/\s+/).filter(Boolean);
+        const acronym = tokens.map(token => token[0]?.toUpperCase() || '').join('');
+        if (acronym.length >= 2 && acronym.length <= 5) {
+            return acronym;
+        }
+
+        return `${trimmed.slice(0, 9).trim()}…`;
+    }
+
+    renderPreviousMonthCalendar(history, sessions) {
+        const titleEl = document.getElementById('history-calendar-title');
+        const summaryEl = document.getElementById('history-calendar-summary');
+        const gridEl = document.getElementById('history-calendar-grid');
+        const emptyEl = document.getElementById('history-calendar-empty');
+
+        if (!titleEl || !summaryEl || !gridEl || !emptyEl) return;
+
+        const { start, end } = this.getPreviousMonthRange();
+        titleEl.textContent = start.toLocaleDateString('fr-FR', {
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const sessionLookup = new Map();
+        const sessionColors = new Map();
+        sessions.forEach((session, index) => {
+            sessionLookup.set(session.id, session);
+            sessionColors.set(session.id, this.getCalendarAccent(index));
+        });
+
+        const monthHistory = history
+            .filter(workout => {
+                const workoutDate = new Date(workout.date);
+                return workoutDate >= start && workoutDate <= end;
+            })
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        summaryEl.textContent = `${monthHistory.length} séance${monthHistory.length > 1 ? 's' : ''}`;
+        emptyEl.style.display = monthHistory.length === 0 ? 'block' : 'none';
+
+        const workoutsByDay = new Map();
+        for (const workout of monthHistory) {
+            const key = this.getLocalDateKey(workout.date);
+            if (!workoutsByDay.has(key)) {
+                workoutsByDay.set(key, []);
+            }
+
+            const session = sessionLookup.get(workout.sessionId);
+            workoutsByDay.get(key).push({
+                sessionId: workout.sessionId,
+                sessionName: session?.name || 'Inconnue'
+            });
+        }
+
+        gridEl.innerHTML = '';
+
+        const leadingEmptyDays = (start.getDay() + 6) % 7;
+        for (let i = 0; i < leadingEmptyDays; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'calendar-day empty';
+            gridEl.appendChild(emptyCell);
+        }
+
+        const daysInMonth = end.getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(start.getFullYear(), start.getMonth(), day);
+            const key = this.getLocalDateKey(date);
+            const workouts = workoutsByDay.get(key) || [];
+            const primaryColor = sessionColors.get(workouts[0]?.sessionId) || '#6366f1';
+
+            const dayEl = document.createElement('div');
+            dayEl.className = `calendar-day${workouts.length ? ' has-workout' : ''}`;
+
+            if (workouts.length) {
+                dayEl.style.setProperty('--calendar-accent-soft', this.hexToRgba(primaryColor, 0.14));
+                dayEl.style.setProperty('--calendar-accent-border', this.hexToRgba(primaryColor, 0.24));
+            }
+
+            const numberEl = document.createElement('span');
+            numberEl.className = 'calendar-day-number';
+            numberEl.textContent = day;
+            dayEl.appendChild(numberEl);
+
+            if (workouts.length) {
+                const badgesEl = document.createElement('div');
+                badgesEl.className = 'calendar-day-badges';
+
+                workouts.slice(0, 2).forEach(workout => {
+                    const badge = document.createElement('span');
+                    const accent = sessionColors.get(workout.sessionId) || primaryColor;
+                    badge.className = 'calendar-session-badge';
+                    badge.style.setProperty('--calendar-badge-bg', this.hexToRgba(accent, 0.14));
+                    badge.style.setProperty('--calendar-badge-text', accent);
+                    badge.textContent = this.abbreviateSessionName(workout.sessionName);
+                    badge.title = workout.sessionName;
+                    badgesEl.appendChild(badge);
+                });
+
+                if (workouts.length > 2) {
+                    const moreBadge = document.createElement('span');
+                    moreBadge.className = 'calendar-more-badge';
+                    moreBadge.textContent = `+${workouts.length - 2}`;
+                    badgesEl.appendChild(moreBadge);
+                }
+
+                dayEl.appendChild(badgesEl);
+            }
+
+            gridEl.appendChild(dayEl);
+        }
     }
     
     // ===== Streak System Rendering =====
@@ -2003,6 +2163,145 @@ class App {
             .replace(/\s+/g, ' ')
             .trim();
     }
+
+    getInputValueOrFallback(savedValue, fallbackValue = '') {
+        if (savedValue === 0) return 0;
+        if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
+            return savedValue;
+        }
+        return fallbackValue ?? '';
+    }
+
+    formatSuggestedWeightDisplay(advice) {
+        if (!advice) return '--';
+        if (advice.suggestedWeightLabel) return advice.suggestedWeightLabel;
+        if (advice.suggestedWeight === '?' || advice.suggestedWeight === null || advice.suggestedWeight === undefined) {
+            return '--';
+        }
+        return `${advice.suggestedWeight} kg`;
+    }
+
+    areSlotsCompleted(slotIds = []) {
+        if (!this.currentWorkout?.completedSlots?.length || slotIds.length === 0) return false;
+        return slotIds.every(slotId => this.currentWorkout.completedSlots.includes(slotId));
+    }
+
+    isCurrentExerciseLocked() {
+        if (!this.currentSlot) return false;
+        if (this.isSupersetMode && this.supersetSlot) {
+            return this.areSlotsCompleted([this.currentSlot.id, this.supersetSlot.id]);
+        }
+        return this.areSlotsCompleted([this.currentSlot.id]);
+    }
+
+    isLikelyBodyweightExercise(exerciseName) {
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        if (!normalizedName) return false;
+
+        const includeKeywords = [
+            'poids du corps',
+            'bodyweight',
+            'pompe',
+            'pompes',
+            'push up',
+            'pushup',
+            'traction',
+            'tractions',
+            'pull up',
+            'pullup',
+            'chin up',
+            'chinup',
+            'dips',
+            'dip',
+            'muscle up',
+            'burpee',
+            'pistol squat'
+        ];
+
+        const excludeKeywords = ['machine', 'assist', 'assiste', 'pulldown', 'tirage', 'poulie', 'smith'];
+
+        return includeKeywords.some(keyword => normalizedName.includes(keyword)) &&
+            !excludeKeywords.some(keyword => normalizedName.includes(keyword));
+    }
+
+    isBodyweightProgressionExercise(exerciseName, workouts = []) {
+        if (!this.isLikelyBodyweightExercise(exerciseName)) return false;
+        if (!workouts.length) return this.normalizeExerciseText(exerciseName).includes('poids du corps');
+
+        const recentWorkouts = workouts.slice(0, 3);
+        return recentWorkouts.every(workout =>
+            workout.sets.every(set => (set.weight || 0) === 0)
+        );
+    }
+
+    getBodyweightTechniqueCue(exerciseName) {
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+
+        if (normalizedName.includes('dips') || normalizedName.includes('dip')) {
+            return 'Si tu bloques sans lest, monte d’abord les reps, puis ajoute une pause de 1-2s en bas ou un tempo controle.';
+        }
+
+        if (normalizedName.includes('traction') || normalizedName.includes('pull up') || normalizedName.includes('chin up')) {
+            return 'Si tu n’as pas de lest, vise plus de reps propres puis ajoute une pause en haut ou un excentrique plus lent.';
+        }
+
+        if (normalizedName.includes('pompe') || normalizedName.includes('push up')) {
+            return 'Quand la plage devient facile, garde le poids du corps et passe sur une variante plus dure ou un tempo plus strict.';
+        }
+
+        return 'Quand tu ne peux pas charger, progresse d’abord via les reps, le tempo et l’amplitude.';
+    }
+
+    getBodyweightCoachingAdvice(slot, data = {}) {
+        const {
+            avgReps = 0,
+            avgRpe = 8,
+            targetReps = `${slot.repsMin}-${slot.repsMax}`,
+            exerciseName
+        } = data;
+
+        const nextRepFloor = Math.max(slot.repsMin, slot.repsMax + 1);
+        const repCeiling = Math.min(Math.max(slot.repsMax + 3, nextRepFloor), 20);
+        const progressionRange = `${nextRepFloor}-${repCeiling}`;
+        const cue = this.getBodyweightTechniqueCue(exerciseName || slot.activeExercise || slot.name);
+
+        if (avgReps >= slot.repsMax && avgRpe <= 9) {
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Progression poids du corps',
+                message: `Au poids du corps, garde la charge externe a zero et gagne 1-2 reps par serie avant de complexifier. ${cue}`,
+                suggestedWeight: 0,
+                suggestedWeightLabel: 'PDC',
+                suggestedReps: progressionRange,
+                weightTrend: 'neutral'
+            };
+        }
+
+        if (avgReps < slot.repsMin) {
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Consolide le mouvement',
+                message: `Reste au poids du corps et verrouille la technique dans la plage ${targetReps}. Si besoin, prends un peu plus de repos ou une assistance legere.`,
+                suggestedWeight: 0,
+                suggestedWeightLabel: 'PDC',
+                suggestedReps: targetReps,
+                weightTrend: 'neutral'
+            };
+        }
+
+        return {
+            type: 'maintain',
+            icon: 'maintain',
+            title: 'Accumule des reps',
+            message: `Bonne base. Continue au poids du corps et cherche a ajouter une rep propre par serie. ${cue}`,
+            suggestedWeight: 0,
+            suggestedWeightLabel: 'PDC',
+            suggestedReps: progressionRange,
+            weightTrend: 'neutral'
+        };
+    }
     
     // Get LMS status class for styling
     getLMSStatusClass(lmsScore) {
@@ -2313,6 +2612,7 @@ class App {
 
     startSessionTimer() {
         const timerEl = document.getElementById('session-timer');
+        this.stopSessionTimer();
         
         this.sessionTimer = setInterval(() => {
             const elapsed = Date.now() - this.sessionStartTime;
@@ -2571,8 +2871,8 @@ class App {
         document.getElementById('unilateral-advice-name-left').textContent = exerciseName;
         if (this.unilateralCoachingAdviceLeft) {
             document.getElementById('unilateral-advice-message-left').textContent = this.unilateralCoachingAdviceLeft.message;
-            document.getElementById('unilateral-advice-weight-left').textContent = 
-                this.unilateralCoachingAdviceLeft.suggestedWeight === '?' ? '?' : `${this.unilateralCoachingAdviceLeft.suggestedWeight} kg`;
+            document.getElementById('unilateral-advice-weight-left').textContent =
+                this.formatSuggestedWeightDisplay(this.unilateralCoachingAdviceLeft);
             document.getElementById('unilateral-advice-reps-left').textContent = this.unilateralCoachingAdviceLeft.suggestedReps;
         }
         
@@ -2580,8 +2880,8 @@ class App {
         document.getElementById('unilateral-advice-name-right').textContent = exerciseName;
         if (this.unilateralCoachingAdviceRight) {
             document.getElementById('unilateral-advice-message-right').textContent = this.unilateralCoachingAdviceRight.message;
-            document.getElementById('unilateral-advice-weight-right').textContent = 
-                this.unilateralCoachingAdviceRight.suggestedWeight === '?' ? '?' : `${this.unilateralCoachingAdviceRight.suggestedWeight} kg`;
+            document.getElementById('unilateral-advice-weight-right').textContent =
+                this.formatSuggestedWeightDisplay(this.unilateralCoachingAdviceRight);
             document.getElementById('unilateral-advice-reps-right').textContent = this.unilateralCoachingAdviceRight.suggestedReps;
         }
     }
@@ -2779,6 +3079,16 @@ class App {
         const lastReps = lastWorkout.sets[0]?.reps || 0;
         const avgReps = lastWorkout.totalReps / lastWorkout.sets.length;
         const avgRpe = lastWorkout.avgRpe || 8;
+        const isBodyweightExercise = this.isBodyweightProgressionExercise(exerciseId, workouts);
+
+        if (isBodyweightExercise) {
+            return this.getBodyweightCoachingAdvice(slot, {
+                avgReps,
+                avgRpe,
+                targetReps,
+                exerciseName: exerciseId
+            });
+        }
         
         // ===== SUPERSET SPECIFIC LOGIC =====
         if (isSuperset) {
@@ -2986,8 +3296,8 @@ class App {
         
         if (this.supersetCoachingAdviceA) {
             document.getElementById('superset-advice-message-a').textContent = this.supersetCoachingAdviceA.message;
-            document.getElementById('superset-advice-weight-a').textContent = 
-                this.supersetCoachingAdviceA.suggestedWeight === '?' ? '?' : `${this.supersetCoachingAdviceA.suggestedWeight} kg`;
+            document.getElementById('superset-advice-weight-a').textContent =
+                this.formatSuggestedWeightDisplay(this.supersetCoachingAdviceA);
             document.getElementById('superset-advice-reps-a').textContent = this.supersetCoachingAdviceA.suggestedReps;
             
             // Add type class
@@ -3001,8 +3311,8 @@ class App {
         
         if (this.supersetCoachingAdviceB) {
             document.getElementById('superset-advice-message-b').textContent = this.supersetCoachingAdviceB.message;
-            document.getElementById('superset-advice-weight-b').textContent = 
-                this.supersetCoachingAdviceB.suggestedWeight === '?' ? '?' : `${this.supersetCoachingAdviceB.suggestedWeight} kg`;
+            document.getElementById('superset-advice-weight-b').textContent =
+                this.formatSuggestedWeightDisplay(this.supersetCoachingAdviceB);
             document.getElementById('superset-advice-reps-b').textContent = this.supersetCoachingAdviceB.suggestedReps;
             
             // Add type class
@@ -3173,6 +3483,7 @@ class App {
         // Get exercise names (full names)
         const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
         const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        const isExerciseLocked = this.isCurrentExerciseLocked();
         
         // Get coaching suggested weights
         const coachWeightA = this.supersetCoachingAdviceA?.suggestedWeight;
@@ -3209,8 +3520,8 @@ class App {
                 suggestedWeightB = coachWeightB;
             }
             
-            const displayWeightA = setAData.weight || suggestedWeightA || '';
-            const displayWeightB = setBData.weight || suggestedWeightB || '';
+            const displayWeightA = this.getInputValueOrFallback(setAData.weight, suggestedWeightA);
+            const displayWeightB = this.getInputValueOrFallback(setBData.weight, suggestedWeightB);
             
             // Detect coaching-suggested state for green "coach" label
             const isSuggestedA = !setAData.weight && suggestedWeightA;
@@ -3219,6 +3530,7 @@ class App {
             const isCoachingSuggestedB = isSuggestedB && coachWeightB && coachWeightB !== '?' && (i === 0 || !lastSetsB[i]);
             
             const isEditingSuperset = isCompleted && this.editingSetIndex === i;
+            const canEditValidatedSet = isCompleted && !isExerciseLocked;
             
             const card = document.createElement('div');
             card.className = `superset-series-card-new ${isCompleted && !isEditingSuperset ? 'completed' : ''} ${isEditingSuperset ? 'editing' : ''}`;
@@ -3229,12 +3541,14 @@ class App {
                     <div class="superset-series-header">
                         <span class="superset-series-number">Série ${i + 1}</span>
                         <div class="superset-series-check">
+                            ${canEditValidatedSet ? `
                             <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                 </svg>
                             </button>
+                            ` : ''}
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                 <polyline points="20 6 9 17 4 12"/>
                             </svg>
@@ -3370,6 +3684,7 @@ class App {
     async showSupersetSummary() {
         const slotAData = this.currentWorkout.slots[this.currentSlot.id];
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
+        this.editingSetIndex = null;
         
         const totalRepsA = slotAData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
         const totalRepsB = slotBData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
@@ -3565,6 +3880,7 @@ class App {
         container.innerHTML = '';
 
         const slotData = this.currentWorkout.slots[this.currentSlot.id] || { sets: [] };
+        const isExerciseLocked = this.isCurrentExerciseLocked();
         
         // Get suggested weights from last session
         const lastSets = this.lastExerciseHistory?.sets || [];
@@ -3644,12 +3960,13 @@ class App {
             const targetReps = getTargetReps(i);
             const suggestedReps = lastSets[i]?.reps || targetReps;
             
-            const displayWeight = setData.weight || suggestedWeight || '';
+            const displayWeight = this.getInputValueOrFallback(setData.weight, suggestedWeight);
             const displayReps = setData.reps || '';
             const isSuggested = !setData.weight && suggestedWeight;
             const isCoachingSuggested = isSuggested && coachingSuggestedWeight && (i === 0 || !lastSets[i]);
             
             const isEditing = isCompleted && this.editingSetIndex === i;
+            const canEditValidatedSet = isCompleted && !isExerciseLocked;
             
             const card = document.createElement('div');
             card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''}`;
@@ -3661,12 +3978,14 @@ class App {
                     ${isCompleted && !isEditing ? `
                         <div class="series-check-container">
                             <span class="series-result">${setData.weight}kg × ${setData.reps}</span>
+                            ${canEditValidatedSet ? `
                             <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                 </svg>
                             </button>
+                            ` : ''}
                             <span class="series-check">✓</span>
                         </div>
                     ` : ''}
@@ -3754,6 +4073,7 @@ class App {
         
         const programmedSets = this.currentSlot.sets;
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+        const isExerciseLocked = this.isCurrentExerciseLocked();
 
         for (let i = 0; i < programmedSets; i++) {
             const setLeftData = setsLeft[i] || {};
@@ -3786,10 +4106,11 @@ class App {
                 suggestedWeightRight = coachWeightRight;
             }
             
-            const displayWeightLeft = setLeftData.weight || suggestedWeightLeft || '';
-            const displayWeightRight = setRightData.weight || suggestedWeightRight || '';
+            const displayWeightLeft = this.getInputValueOrFallback(setLeftData.weight, suggestedWeightLeft);
+            const displayWeightRight = this.getInputValueOrFallback(setRightData.weight, suggestedWeightRight);
             
             const isEditingUni = isCompleted && this.editingSetIndex === i;
+            const canEditValidatedSet = isCompleted && !isExerciseLocked;
             
             const card = document.createElement('div');
             card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isEditingUni ? 'editing' : ''}`;
@@ -3800,12 +4121,14 @@ class App {
                     <div class="unilateral-series-header">
                         <span class="unilateral-series-number">Série ${i + 1}</span>
                         <div class="unilateral-series-check">
+                            ${canEditValidatedSet ? `
                             <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                 </svg>
                             </button>
+                            ` : ''}
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                 <polyline points="20 6 9 17 4 12"/>
                             </svg>
@@ -3961,6 +4284,7 @@ class App {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const setsLeft = slotData.setsLeft || [];
         const setsRight = slotData.setsRight || [];
+        this.editingSetIndex = null;
         
         const totalRepsLeft = setsLeft.reduce((sum, s) => sum + (s?.reps || 0), 0);
         const totalRepsRight = setsRight.reduce((sum, s) => sum + (s?.reps || 0), 0);
@@ -4067,6 +4391,7 @@ class App {
 
     // ===== Edit Validated Sets =====
     editSet(setIndex) {
+        if (this.isCurrentExerciseLocked()) return;
         this.editingSetIndex = setIndex;
         if (this.isSupersetMode) {
             this.renderSupersetSeries();
@@ -4078,6 +4403,8 @@ class App {
     }
     
     async saveEditSet(setIndex) {
+        if (this.isCurrentExerciseLocked()) return;
+
         const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         
@@ -4100,6 +4427,8 @@ class App {
     }
     
     async saveEditSupersetSet(setIndex) {
+        if (this.isCurrentExerciseLocked()) return;
+
         const weightA = parseFloat(document.querySelector(`.input-weight-a[data-set-index="${setIndex}"]`).value) || 0;
         const repsA = parseInt(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`).value) || 0;
         const weightB = parseFloat(document.querySelector(`.input-weight-b[data-set-index="${setIndex}"]`).value) || 0;
@@ -4125,6 +4454,8 @@ class App {
     }
 
     async saveEditUnilateralSet(setIndex) {
+        if (this.isCurrentExerciseLocked()) return;
+
         const weightLeft = parseFloat(document.querySelector(`.input-weight-left[data-set-index="${setIndex}"]`)?.value) || 0;
         const repsLeft = parseInt(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value) || 0;
         const weightRight = parseFloat(document.querySelector(`.input-weight-right[data-set-index="${setIndex}"]`)?.value) || 0;
@@ -4305,6 +4636,29 @@ class App {
     }
     
     async suggestIntraSessionIncrease(rpe, reps, weight) {
+        const exerciseName = this.currentSlot?.activeExercise || this.currentSlot?.name;
+        const isBodyweightExercise = this.isLikelyBodyweightExercise(exerciseName) && weight === 0;
+
+        if (isBodyweightExercise) {
+            const existing = document.querySelector('.coach-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'coach-toast hot';
+            toast.innerHTML = `
+                <span class="coach-toast-icon">🔥</span>
+                <span class="coach-toast-text">PDC facile: garde le poids du corps et ajoute 1 rep propre ou un tempo plus strict sur la prochaine serie</span>
+            `;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('visible'), 50);
+            setTimeout(() => {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+            return;
+        }
+
         const isIsolation = this.currentSlot?.type === 'isolation';
         const baseIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         const increment = isIsolation ? Math.min(baseIncrement, 1) : baseIncrement;
@@ -4321,7 +4675,7 @@ class App {
         }
         
         // Check if previous sets in this session had issues (dropped weight)
-        const currentSets = this.currentWorkout?.sets || [];
+        const currentSets = this.currentWorkout?.slots?.[this.currentSlot.id]?.sets || [];
         const completedSets = currentSets.filter(s => s.completed);
         
         // If this is not the first set, check the pattern
@@ -4500,6 +4854,7 @@ class App {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const totalReps = slotData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
         const maxWeight = Math.max(...slotData.sets.map(s => s.weight || 0));
+        this.editingSetIndex = null;
 
         document.getElementById('summary-total-reps').textContent = totalReps;
         document.getElementById('summary-max-weight').textContent = `${maxWeight} kg`;
@@ -4571,7 +4926,7 @@ class App {
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
-            db.saveCurrentWorkout(this.currentWorkout);
+            await db.saveCurrentWorkout(this.currentWorkout);
         }
     }
 
@@ -4615,39 +4970,65 @@ class App {
         document.getElementById('modal-finish').classList.remove('active');
     }
 
+    setFinishButtonLoading(isLoading) {
+        const confirmBtn = document.getElementById('btn-confirm-finish');
+        if (!confirmBtn) return;
+
+        confirmBtn.disabled = isLoading;
+        confirmBtn.textContent = isLoading ? 'Sauvegarde...' : 'Terminer';
+    }
+
     async confirmFinishSession() {
+        if (this.isFinishingSession || !this.currentWorkout || !this.currentSession) return;
+
+        this.isFinishingSession = true;
+        this.setFinishButtonLoading(true);
         this.stopSessionTimer();
         this.hideFinishModal();
-        
-        // Calculate Stimulus Score before saving
-        const stimulusScore = await this.calculateStimulusScore();
 
-        // Save workout to history
-        const workoutRecord = {
-            sessionId: this.currentSession.id,
-            date: new Date().toISOString(),
-            duration: Date.now() - this.sessionStartTime,
-            slots: this.currentWorkout.slots,
-            completedSlots: this.currentWorkout.completedSlots,
-            stimulusScore: stimulusScore.total
-        };
+        try {
+            const stimulusScore = await this.calculateStimulusScore();
+            const saveKey = `${this.currentSession.id}-${this.sessionStartTime}`;
+            const saveDate = new Date().toISOString();
 
-        const workoutId = await db.add('workoutHistory', workoutRecord);
+            const workoutRecord = {
+                sessionId: this.currentSession.id,
+                date: saveDate,
+                duration: Date.now() - this.sessionStartTime,
+                slots: this.currentWorkout.slots,
+                completedSlots: this.currentWorkout.completedSlots,
+                stimulusScore: stimulusScore.total,
+                saveKey
+            };
 
-        // Save individual sets to history (including RPE)
-        for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
-            const slot = await db.get('slots', slotId);
-            const baseExerciseId = slot.activeExercise || slot.name;
-            
-            // Check if this is a unilateral exercise (has setsLeft/setsRight data)
-            const hasUnilateralData = slotData.setsLeft && slotData.setsRight && 
-                (slotData.setsLeft.some(s => s?.completed) || slotData.setsRight.some(s => s?.completed));
-            
-            if (hasUnilateralData) {
-                // Save left side sets with "(Gauche)" suffix
-                for (let i = 0; i < slotData.setsLeft.length; i++) {
-                    const setData = slotData.setsLeft[i];
-                    if (setData && setData.completed) {
+            const existingWorkout = (await db.getAll('workoutHistory')).find(workout => workout.saveKey === saveKey);
+            let workoutId;
+
+            if (existingWorkout) {
+                workoutId = existingWorkout.id;
+                await db.put('workoutHistory', { ...existingWorkout, ...workoutRecord, id: workoutId });
+
+                const existingSets = await db.getByIndex('setHistory', 'workoutId', workoutId);
+                for (const existingSet of existingSets) {
+                    await db.delete('setHistory', existingSet.id);
+                }
+            } else {
+                workoutId = await db.add('workoutHistory', workoutRecord);
+            }
+
+            for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
+                const slot = await db.get('slots', slotId);
+                if (!slot) continue;
+
+                const baseExerciseId = slot.activeExercise || slot.name;
+                const hasUnilateralData = slotData.setsLeft && slotData.setsRight &&
+                    (slotData.setsLeft.some(set => set?.completed) || slotData.setsRight.some(set => set?.completed));
+
+                if (hasUnilateralData) {
+                    for (let i = 0; i < slotData.setsLeft.length; i++) {
+                        const setData = slotData.setsLeft[i];
+                        if (!setData || !setData.completed) continue;
+
                         await db.add('setHistory', {
                             slotId,
                             exerciseId: `${baseExerciseId} (Gauche)`,
@@ -4656,15 +5037,14 @@ class App {
                             weight: setData.weight,
                             reps: setData.reps,
                             rpe: setData.rpe || 8,
-                            date: new Date().toISOString()
+                            date: saveDate
                         });
                     }
-                }
-                
-                // Save right side sets with "(Droite)" suffix
-                for (let i = 0; i < slotData.setsRight.length; i++) {
-                    const setData = slotData.setsRight[i];
-                    if (setData && setData.completed) {
+
+                    for (let i = 0; i < slotData.setsRight.length; i++) {
+                        const setData = slotData.setsRight[i];
+                        if (!setData || !setData.completed) continue;
+
                         await db.add('setHistory', {
                             slotId,
                             exerciseId: `${baseExerciseId} (Droite)`,
@@ -4673,92 +5053,94 @@ class App {
                             weight: setData.weight,
                             reps: setData.reps,
                             rpe: setData.rpe || 8,
-                            date: new Date().toISOString()
+                            date: saveDate
                         });
                     }
+
+                    continue;
                 }
-            } else {
-                // Standard bilateral exercise - save as before
-                for (let i = 0; i < slotData.sets.length; i++) {
-                    const setData = slotData.sets[i];
-                    if (setData && setData.completed) {
-                        await db.add('setHistory', {
-                            slotId,
-                            exerciseId: baseExerciseId,
-                            workoutId,
-                            setNumber: i + 1,
-                            weight: setData.weight,
-                            reps: setData.reps,
-                            rpe: setData.rpe || 8, // Include RPE data
-                            date: new Date().toISOString()
-                        });
-                    }
+
+                const standardSets = slotData.sets || [];
+                for (let i = 0; i < standardSets.length; i++) {
+                    const setData = standardSets[i];
+                    if (!setData || !setData.completed) continue;
+
+                    await db.add('setHistory', {
+                        slotId,
+                        exerciseId: baseExerciseId,
+                        workoutId,
+                        setNumber: i + 1,
+                        weight: setData.weight,
+                        reps: setData.reps,
+                        rpe: setData.rpe || 8,
+                        date: saveDate
+                    });
                 }
             }
-        }
 
-        // Update next session index
-        const sessions = await db.getSessions();
-        const currentIndex = sessions.findIndex(s => s.id === this.currentSession.id);
-        let nextIndex;
-        if (currentIndex >= 0) {
-            nextIndex = (currentIndex + 1) % sessions.length;
-        } else {
-            const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
-            nextIndex = (storedIndex + 1) % sessions.length;
-        }
-        await db.setSetting('nextSessionIndex', nextIndex);
+            const sessions = await db.getSessions();
+            const currentIndex = sessions.findIndex(session => session.id === this.currentSession.id);
+            let nextIndex;
 
-        // Check weekly goal status BEFORE recording (to detect if we just completed it)
-        const streakDataBefore = await streakEngine.getStreakData();
-        const wasGoalMetBefore = streakDataBefore.currentWeekSessions >= streakDataBefore.weeklyGoal;
-        
-        // Update streak system
-        await streakEngine.recordWorkoutForStreak();
-        await db.setSetting('lastWorkoutDate', new Date().toISOString());
-        
-        // Check if we just met the weekly goal
-        const streakDataAfter = await streakEngine.getStreakData();
-        const isGoalMetNow = streakDataAfter.currentWeekSessions >= streakDataAfter.weeklyGoal;
-        const justMetWeeklyGoal = !wasGoalMetBefore && isGoalMetNow;
-        
-        // Reset deload mode after session (deload is per-session)
-        if (this.isDeloadMode) {
-            await db.setSetting('isDeloadMode', false);
-            this.isDeloadMode = false;
-        }
+            if (currentIndex >= 0) {
+                nextIndex = (currentIndex + 1) % sessions.length;
+            } else {
+                const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+                nextIndex = (storedIndex + 1) % sessions.length;
+            }
+            await db.setSetting('nextSessionIndex', nextIndex);
 
-        // Calculate workout stats for celebration (before clearing)
-        const duration = Math.round((Date.now() - this.sessionStartTime) / 60000);
-        let totalSets = 0;
-        for (const slotData of Object.values(this.currentWorkout.slots)) {
-            // Count standard sets
-            totalSets += slotData.sets.filter(s => s && s.completed).length;
-            // Count unilateral sets (each side counts)
-            if (slotData.setsLeft) totalSets += slotData.setsLeft.filter(s => s && s.completed).length;
-            if (slotData.setsRight) totalSets += slotData.setsRight.filter(s => s && s.completed).length;
-        }
-        const sessionName = this.currentSession.name;
-        
-        // Clear current workout
-        await db.clearCurrentWorkout();
-        this.currentWorkout = null;
+            const streakDataBefore = await streakEngine.getStreakData();
+            const wasGoalMetBefore = streakDataBefore.currentWeekSessions >= streakDataBefore.weeklyGoal;
 
-        // Show Stimulus Score animation before going home
-        await this.showStimulusScoreAnimation(stimulusScore);
-        
-        // Trigger celebrations after stimulus score
-        gamification.celebrateWorkoutComplete(sessionName, {
-            totalSets,
-            duration,
-            xpGain: Math.round(stimulusScore.total * 2)
-        });
-        
-        // Celebrate weekly goal if just achieved
-        if (justMetWeeklyGoal) {
-            setTimeout(() => {
-                gamification.celebrateWeeklyGoal();
-            }, 3000);
+            await streakEngine.recordWorkoutForStreak();
+            await db.setSetting('lastWorkoutDate', saveDate);
+
+            const streakDataAfter = await streakEngine.getStreakData();
+            const isGoalMetNow = streakDataAfter.currentWeekSessions >= streakDataAfter.weeklyGoal;
+            const justMetWeeklyGoal = !wasGoalMetBefore && isGoalMetNow;
+
+            if (this.isDeloadMode) {
+                await db.setSetting('isDeloadMode', false);
+                this.isDeloadMode = false;
+            }
+
+            const duration = Math.round((Date.now() - this.sessionStartTime) / 60000);
+            let totalSets = 0;
+            for (const slotData of Object.values(this.currentWorkout.slots)) {
+                totalSets += (slotData.sets || []).filter(set => set && set.completed).length;
+                if (slotData.setsLeft) totalSets += slotData.setsLeft.filter(set => set && set.completed).length;
+                if (slotData.setsRight) totalSets += slotData.setsRight.filter(set => set && set.completed).length;
+            }
+            const sessionName = this.currentSession.name;
+
+            await db.clearCurrentWorkout();
+            this.currentWorkout = null;
+            this.currentSlot = null;
+            this.supersetSlot = null;
+            this.editingSetIndex = null;
+
+            await this.showStimulusScoreAnimation(stimulusScore);
+
+            gamification.celebrateWorkoutComplete(sessionName, {
+                totalSets,
+                duration,
+                xpGain: Math.round(stimulusScore.total * 2)
+            });
+
+            if (justMetWeeklyGoal) {
+                setTimeout(() => {
+                    gamification.celebrateWeeklyGoal();
+                }, 3000);
+            }
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde de la séance:', error);
+            alert('La séance n’a pas pu être sauvegardée correctement. Rien n’a été effacé, tu peux réessayer.');
+            this.startSessionTimer();
+            this.showScreen('session');
+        } finally {
+            this.isFinishingSession = false;
+            this.setFinishButtonLoading(false);
         }
     }
     
@@ -7322,7 +7704,7 @@ class App {
         document.getElementById('coaching-advice-message').textContent = advice.message;
         
         // Update suggested weight with trend arrow
-        document.getElementById('coaching-suggested-weight').textContent = advice.suggestedWeight + ' kg';
+        document.getElementById('coaching-suggested-weight').textContent = this.formatSuggestedWeightDisplay(advice);
         
         const trendEl = document.getElementById('coaching-weight-trend');
         trendEl.className = 'coaching-weight-trend trend-' + advice.weightTrend;
@@ -7712,6 +8094,16 @@ class App {
         const lastSets = lastWorkout.sets;
         // Use reference weight (top set for ramp, first set otherwise)
         let lastWeight = this.getReferenceWeight(lastWorkout, slot);
+        const isBodyweightExercise = this.isBodyweightProgressionExercise(exerciseId, workouts);
+
+        if (isBodyweightExercise) {
+            return this.getBodyweightCoachingAdvice(slot, {
+                avgReps: lastWorkout.totalReps / Math.max(lastWorkout.sets.length, 1),
+                avgRpe: lastWorkout.avgRpe || 8,
+                targetReps,
+                exerciseName: exerciseId
+            });
+        }
         
         // === SMART PATTERN ANALYSIS ===
         const patternAnalysis = this.analyzeWorkoutPattern(lastSets, slot);
