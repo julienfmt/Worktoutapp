@@ -2539,8 +2539,22 @@ class App {
         
         const isInSuperset = isFirstInSuperset || isSecondInSuperset;
         const reopenBtn = isInSuperset
-            ? `<button class="btn btn-secondary btn-reopen-superset" data-slot-id="${isFirstInSuperset ? slot.id : (firstSlotId || slot.id)}">Modifier</button>`
-            : `<button class="btn btn-secondary btn-reopen-completed" data-slot-id="${slot.id}">Modifier</button>`;
+            ? `
+                <button class="btn-edit-set btn-reopen-superset" data-slot-id="${isFirstInSuperset ? slot.id : (firstSlotId || slot.id)}" title="Modifier">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                </button>
+              `
+            : `
+                <button class="btn-edit-set btn-reopen-completed" data-slot-id="${slot.id}" title="Modifier">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                </button>
+              `;
 
         if (isCompleted) {
             card.innerHTML = `
@@ -2549,15 +2563,15 @@ class App {
                         <span class="slot-id">${slot.slotId}</span>
                         <span class="slot-name">${slot.activeExercise || slot.name}</span>
                     </div>
-                    <div class="completed-badge">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                        Terminé
+                    <div class="slot-completed-actions">
+                        ${reopenBtn}
+                        <div class="completed-badge">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                            Terminé
+                        </div>
                     </div>
-                </div>
-                <div class="slot-actions">
-                    ${reopenBtn}
                 </div>
             `;
         } else {
