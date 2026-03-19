@@ -741,9 +741,10 @@ class App {
     }
 
     getPreviousMonthRange(baseDate = new Date()) {
-        const start = new Date(baseDate.getFullYear(), baseDate.getMonth() - 1, 1);
-        const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), 0);
-        end.setHours(23, 59, 59, 999);
+        const referenceDate = new Date(baseDate);
+        const currentMonthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 12, 0, 0, 0);
+        const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1, 12, 0, 0, 0);
+        const end = new Date(currentMonthStart.getTime() - 1);
         return { start, end };
     }
 
