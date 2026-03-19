@@ -918,6 +918,144 @@ body {
     box-shadow: var(--card-shadow);
 }
 
+.history-calendar-section {
+    margin-top: 24px;
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    padding: 20px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(99, 102, 241, 0.08);
+}
+
+.history-calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.history-calendar-kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: 4px;
+}
+
+.history-calendar-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: capitalize;
+}
+
+.history-calendar-summary {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border-radius: 999px;
+    padding: 8px 12px;
+    white-space: nowrap;
+}
+
+.history-calendar-weekdays,
+.history-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.history-calendar-weekdays {
+    margin-bottom: 10px;
+}
+
+.history-calendar-weekdays span {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.calendar-day {
+    min-height: 78px;
+    padding: 10px 8px 8px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, var(--bg-secondary), rgba(248, 250, 252, 0.7));
+    border: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.calendar-day.empty {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.calendar-day.has-workout {
+    background: linear-gradient(180deg,
+        var(--calendar-accent-soft, rgba(99, 102, 241, 0.14)),
+        rgba(255, 255, 255, 0.92));
+    border-color: var(--calendar-accent-border, rgba(99, 102, 241, 0.22));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.calendar-day-number {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.calendar-day.has-workout .calendar-day-number {
+    color: var(--text-primary);
+}
+
+.calendar-day-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.calendar-session-badge,
+.calendar-more-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    min-height: 20px;
+    padding: 3px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.calendar-session-badge {
+    background: var(--calendar-badge-bg, rgba(99, 102, 241, 0.12));
+    color: var(--calendar-badge-text, var(--primary));
+}
+
+.calendar-more-badge {
+    background: rgba(15, 23, 42, 0.06);
+    color: var(--text-secondary);
+}
+
+.history-calendar-empty {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 .session-label {
     font-size: 12px;
     font-weight: 600;
@@ -1413,6 +1551,14 @@ body {
 .btn-edit-set:active {
     opacity: 1;
     color: var(--primary);
+}
+
+.btn-edit-set.disabled,
+.btn-edit-set:disabled {
+    opacity: 0.22;
+    color: var(--text-muted);
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .series-card.editing,

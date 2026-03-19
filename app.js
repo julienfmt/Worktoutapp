@@ -473,6 +473,7 @@ class App {
         this.poolSlotId = null;
         this.editingSessionId = null;
         this.isFinishingSession = false;
+        this.isReviewMode = false;
     }
 
     async init() {
@@ -2537,6 +2538,9 @@ class App {
             : '';
         
         const isInSuperset = isFirstInSuperset || isSecondInSuperset;
+        const reopenBtn = isInSuperset
+            ? `<button class="btn btn-secondary btn-reopen-superset" data-slot-id="${isFirstInSuperset ? slot.id : (firstSlotId || slot.id)}">Modifier</button>`
+            : `<button class="btn btn-secondary btn-reopen-completed" data-slot-id="${slot.id}">Modifier</button>`;
 
         if (isCompleted) {
             card.innerHTML = `
@@ -2551,6 +2555,9 @@ class App {
                         </svg>
                         Terminé
                     </div>
+                </div>
+                <div class="slot-actions">
+                    ${reopenBtn}
                 </div>
             `;
         } else {
@@ -2654,6 +2661,7 @@ class App {
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
         this.isUnilateralMode = false; // Reset unilateral mode
+        this.isReviewMode = this.areSlotsCompleted([slotId]);
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.userOverrideSets = false; // Reset deload override when changing exercise
         this.editingSetIndex = null; // Reset edit mode
@@ -2945,6 +2953,7 @@ class App {
         }
         
         this.isSupersetMode = true;
+        this.isReviewMode = this.areSlotsCompleted([slotId, this.currentSlot.supersetWith]);
         this.supersetCoachingAdviceA = null;
         this.supersetCoachingAdviceB = null;
 
@@ -3483,7 +3492,6 @@ class App {
         // Get exercise names (full names)
         const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
         const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
-        const isExerciseLocked = this.isCurrentExerciseLocked();
         
         // Get coaching suggested weights
         const coachWeightA = this.supersetCoachingAdviceA?.suggestedWeight;
@@ -3530,7 +3538,7 @@ class App {
             const isCoachingSuggestedB = isSuggestedB && coachWeightB && coachWeightB !== '?' && (i === 0 || !lastSetsB[i]);
             
             const isEditingSuperset = isCompleted && this.editingSetIndex === i;
-            const canEditValidatedSet = isCompleted && !isExerciseLocked;
+            const canEditValidatedSet = isCompleted;
             
             const card = document.createElement('div');
             card.className = `superset-series-card-new ${isCompleted && !isEditingSuperset ? 'completed' : ''} ${isEditingSuperset ? 'editing' : ''}`;
@@ -3637,7 +3645,7 @@ class App {
         // Check if all sets complete
         const completedA = slotAData.sets.filter(s => s.completed).length;
         const completedB = slotBData.sets.filter(s => s.completed).length;
-        if (completedA >= sets && completedB >= sets) {
+        if (completedA >= sets && completedB >= sets && !this.isReviewMode) {
             this.showSupersetSummary();
         }
     }
@@ -3880,7 +3888,6 @@ class App {
         container.innerHTML = '';
 
         const slotData = this.currentWorkout.slots[this.currentSlot.id] || { sets: [] };
-        const isExerciseLocked = this.isCurrentExerciseLocked();
         
         // Get suggested weights from last session
         const lastSets = this.lastExerciseHistory?.sets || [];
@@ -3966,7 +3973,7 @@ class App {
             const isCoachingSuggested = isSuggested && coachingSuggestedWeight && (i === 0 || !lastSets[i]);
             
             const isEditing = isCompleted && this.editingSetIndex === i;
-            const canEditValidatedSet = isCompleted && !isExerciseLocked;
+            const canEditValidatedSet = isCompleted;
             
             const card = document.createElement('div');
             card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''}`;
@@ -4042,7 +4049,7 @@ class App {
 
         // Check if exercise is complete (use effective sets, not programmed sets)
         const targetSets = this.currentEffectiveSets || this.currentSlot.sets;
-        if (completedSets >= targetSets) {
+        if (completedSets >= targetSets && !this.isReviewMode) {
             this.showExerciseSummary();
         }
     }
@@ -4073,7 +4080,6 @@ class App {
         
         const programmedSets = this.currentSlot.sets;
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
-        const isExerciseLocked = this.isCurrentExerciseLocked();
 
         for (let i = 0; i < programmedSets; i++) {
             const setLeftData = setsLeft[i] || {};
@@ -4110,7 +4116,7 @@ class App {
             const displayWeightRight = this.getInputValueOrFallback(setRightData.weight, suggestedWeightRight);
             
             const isEditingUni = isCompleted && this.editingSetIndex === i;
-            const canEditValidatedSet = isCompleted && !isExerciseLocked;
+            const canEditValidatedSet = isCompleted;
             
             const card = document.createElement('div');
             card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isEditingUni ? 'editing' : ''}`;
@@ -4235,7 +4241,7 @@ class App {
             setsLeft.filter(s => s?.completed).length,
             setsRight.filter(s => s?.completed).length
         );
-        if (completedSets >= programmedSets) {
+        if (completedSets >= programmedSets && !this.isReviewMode) {
             this.showUnilateralSummary();
         }
     }
@@ -4391,7 +4397,6 @@ class App {
 
     // ===== Edit Validated Sets =====
     editSet(setIndex) {
-        if (this.isCurrentExerciseLocked()) return;
         this.editingSetIndex = setIndex;
         if (this.isSupersetMode) {
             this.renderSupersetSeries();
@@ -4403,8 +4408,6 @@ class App {
     }
     
     async saveEditSet(setIndex) {
-        if (this.isCurrentExerciseLocked()) return;
-
         const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         
@@ -4427,8 +4430,6 @@ class App {
     }
     
     async saveEditSupersetSet(setIndex) {
-        if (this.isCurrentExerciseLocked()) return;
-
         const weightA = parseFloat(document.querySelector(`.input-weight-a[data-set-index="${setIndex}"]`).value) || 0;
         const repsA = parseInt(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`).value) || 0;
         const weightB = parseFloat(document.querySelector(`.input-weight-b[data-set-index="${setIndex}"]`).value) || 0;
@@ -4454,8 +4455,6 @@ class App {
     }
 
     async saveEditUnilateralSet(setIndex) {
-        if (this.isCurrentExerciseLocked()) return;
-
         const weightLeft = parseFloat(document.querySelector(`.input-weight-left[data-set-index="${setIndex}"]`)?.value) || 0;
         const repsLeft = parseInt(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value) || 0;
         const weightRight = parseFloat(document.querySelector(`.input-weight-right[data-set-index="${setIndex}"]`)?.value) || 0;
@@ -6160,6 +6159,16 @@ class App {
             if (launchIndividualBtn) {
                 this.openExercise(launchIndividualBtn.dataset.slotId);
             }
+
+            const reopenCompletedBtn = e.target.closest('.btn-reopen-completed');
+            if (reopenCompletedBtn) {
+                this.openExercise(reopenCompletedBtn.dataset.slotId);
+            }
+
+            const reopenSupersetBtn = e.target.closest('.btn-reopen-superset');
+            if (reopenSupersetBtn) {
+                this.openSuperset(reopenSupersetBtn.dataset.slotId);
+            }
             
             const poolBtn = e.target.closest('.btn-pool-trigger');
             if (poolBtn) {
@@ -6181,6 +6190,7 @@ class App {
         document.getElementById('btn-back-session').onclick = () => {
             this.stopRestTimer();
             this.hideExerciseSummary();
+            this.isReviewMode = false;
             this.renderSlots();
             this.showScreen('session');
         };
@@ -6360,6 +6370,7 @@ class App {
         // Summary
         document.getElementById('btn-back-to-session').onclick = () => {
             this.hideExerciseSummary();
+            this.isReviewMode = false;
             this.renderSlots();
             this.showScreen('session');
         };
