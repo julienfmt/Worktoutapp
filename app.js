@@ -721,7 +721,7 @@ class App {
             document.getElementById('last-session-info').textContent = 'Dernière séance : --';
         }
 
-        this.renderPreviousMonthCalendar(history, sessions);
+        this.renderCurrentMonthCalendar(history, sessions);
 
         // Render streak system
         await this.renderStreakSystem();
@@ -740,11 +740,10 @@ class App {
         return `${year}-${month}-${day}`;
     }
 
-    getPreviousMonthRange(baseDate = new Date()) {
+    getCurrentMonthRange(baseDate = new Date()) {
         const referenceDate = new Date(baseDate);
-        const currentMonthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 12, 0, 0, 0);
-        const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1, 12, 0, 0, 0);
-        const end = new Date(currentMonthStart.getTime() - 1);
+        const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
         return { start, end };
     }
 
@@ -785,7 +784,7 @@ class App {
         return `${trimmed.slice(0, 9).trim()}…`;
     }
 
-    renderPreviousMonthCalendar(history, sessions) {
+    renderCurrentMonthCalendar(history, sessions) {
         const titleEl = document.getElementById('history-calendar-title');
         const summaryEl = document.getElementById('history-calendar-summary');
         const gridEl = document.getElementById('history-calendar-grid');
@@ -793,7 +792,7 @@ class App {
 
         if (!titleEl || !summaryEl || !gridEl || !emptyEl) return;
 
-        const { start, end } = this.getPreviousMonthRange();
+        const { start, end } = this.getCurrentMonthRange();
         titleEl.textContent = start.toLocaleDateString('fr-FR', {
             month: 'long',
             year: 'numeric'
@@ -806,10 +805,12 @@ class App {
             sessionColors.set(session.id, this.getCalendarAccent(index));
         });
 
+        const targetYear = start.getFullYear();
+        const targetMonth = start.getMonth();
         const monthHistory = history
             .filter(workout => {
                 const workoutDate = new Date(workout.date);
-                return workoutDate >= start && workoutDate <= end;
+                return workoutDate.getFullYear() === targetYear && workoutDate.getMonth() === targetMonth;
             })
             .sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -839,7 +840,7 @@ class App {
             gridEl.appendChild(emptyCell);
         }
 
-        const daysInMonth = end.getDate();
+        const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(start.getFullYear(), start.getMonth(), day);
             const key = this.getLocalDateKey(date);

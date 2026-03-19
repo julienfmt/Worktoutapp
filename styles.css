@@ -1085,7 +1085,7 @@ body {
     }
 
     .calendar-day {
-        min-height: 62px;
+        min-height: 58px;
         padding: 8px 4px 6px;
         border-radius: 10px;
         gap: 4px;
@@ -1098,9 +1098,42 @@ body {
     .calendar-session-badge,
     .calendar-more-badge {
         min-height: 18px;
-        padding: 2px 4px;
+        padding: 2px 3px;
         font-size: 9px;
         letter-spacing: -0.01em;
+    }
+}
+
+@media (max-width: 430px) {
+    .history-calendar-section {
+        padding: 14px 10px;
+    }
+
+    .history-calendar-weekdays,
+    .history-calendar-grid {
+        gap: 3px;
+    }
+
+    .calendar-day {
+        min-height: 50px;
+        padding: 6px 3px 4px;
+        border-radius: 9px;
+        gap: 3px;
+    }
+
+    .calendar-day-number {
+        font-size: 11px;
+    }
+
+    .calendar-day-badges {
+        gap: 2px;
+    }
+
+    .calendar-session-badge,
+    .calendar-more-badge {
+        min-height: 16px;
+        padding: 1px 3px;
+        font-size: 8px;
     }
 }
 
