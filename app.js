@@ -464,6 +464,7 @@ class App {
         this.currentSession = null;
         this.currentSlot = null;
         this.currentWorkout = null;
+        this.currentCalendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         this.sessionTimer = null;
         this.sessionStartTime = null;
         this.restTimer = null;
@@ -672,6 +673,41 @@ class App {
         this.currentScreen = screenId;
     }
 
+    getSuggestedSessionIndex(sessions, history, fallbackIndex = 0) {
+        if (!Array.isArray(sessions) || sessions.length === 0) return 0;
+
+        const lastDoneBySession = new Map();
+
+        for (const workout of Array.isArray(history) ? history : []) {
+            if (!workout?.sessionId || !workout?.date) continue;
+
+            const workoutTime = new Date(workout.date).getTime();
+            if (Number.isNaN(workoutTime)) continue;
+
+            const previousTime = lastDoneBySession.get(workout.sessionId);
+            if (previousTime === undefined || workoutTime > previousTime) {
+                lastDoneBySession.set(workout.sessionId, workoutTime);
+            }
+        }
+
+        const rankedSessions = sessions.map((session, index) => ({
+            index,
+            lastDoneAt: lastDoneBySession.get(session.id) ?? Number.NEGATIVE_INFINITY
+        }));
+
+        rankedSessions.sort((a, b) => {
+            if (a.lastDoneAt !== b.lastDoneAt) {
+                return a.lastDoneAt - b.lastDoneAt;
+            }
+
+            if (a.index === fallbackIndex) return -1;
+            if (b.index === fallbackIndex) return 1;
+            return a.index - b.index;
+        });
+
+        return rankedSessions[0]?.index ?? 0;
+    }
+
     // ===== Home Screen =====
     async renderHome() {
         // Initialize streak system for existing users (retroactive calculation)
@@ -696,7 +732,9 @@ class App {
         }
         
         const sessions = await db.getSessions();
-        const nextIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+        const history = await db.getAll('workoutHistory');
+        const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+        const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex);
         const nextSession = sessions[nextIndex];
         
         if (nextSession) {
@@ -710,7 +748,6 @@ class App {
         }
 
         // Last session info
-        const history = await db.getAll('workoutHistory');
         if (history.length > 0) {
             const lastWorkout = history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
             const lastSession = await db.get('sessions', lastWorkout.sessionId);
@@ -745,6 +782,13 @@ class App {
         const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 0, 0, 0, 0);
         const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
         return { start, end };
+    }
+
+    shiftCalendarMonth(offset) {
+        const baseDate = this.currentCalendarDate instanceof Date
+            ? this.currentCalendarDate
+            : new Date();
+        this.currentCalendarDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + offset, 1);
     }
 
     getCalendarAccent(index) {
@@ -785,18 +829,29 @@ class App {
     }
 
     renderCurrentMonthCalendar(history, sessions) {
+        const kickerEl = document.getElementById('history-calendar-kicker');
         const titleEl = document.getElementById('history-calendar-title');
         const summaryEl = document.getElementById('history-calendar-summary');
         const gridEl = document.getElementById('history-calendar-grid');
         const emptyEl = document.getElementById('history-calendar-empty');
+        const prevBtn = document.getElementById('history-calendar-prev');
+        const nextBtn = document.getElementById('history-calendar-next');
 
-        if (!titleEl || !summaryEl || !gridEl || !emptyEl) return;
+        if (!titleEl || !summaryEl || !gridEl || !emptyEl || !kickerEl || !prevBtn || !nextBtn) return;
 
-        const { start, end } = this.getCurrentMonthRange();
+        const activeMonth = this.currentCalendarDate instanceof Date
+            ? this.currentCalendarDate
+            : new Date();
+        const { start, end } = this.getCurrentMonthRange(activeMonth);
         titleEl.textContent = start.toLocaleDateString('fr-FR', {
             month: 'long',
             year: 'numeric'
         });
+
+        const now = new Date();
+        const isCurrentMonth = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth();
+        kickerEl.textContent = isCurrentMonth ? 'Mois en cours' : 'Historique';
+        nextBtn.disabled = isCurrentMonth;
 
         const sessionLookup = new Map();
         const sessionColors = new Map();
@@ -5094,15 +5149,9 @@ class App {
             }
 
             const sessions = await db.getSessions();
-            const currentIndex = sessions.findIndex(session => session.id === this.currentSession.id);
-            let nextIndex;
-
-            if (currentIndex >= 0) {
-                nextIndex = (currentIndex + 1) % sessions.length;
-            } else {
-                const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
-                nextIndex = (storedIndex + 1) % sessions.length;
-            }
+            const historyForSuggestion = await db.getAll('workoutHistory');
+            const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+            const nextIndex = this.getSuggestedSessionIndex(sessions, historyForSuggestion, storedIndex);
             await db.setSetting('nextSessionIndex', nextIndex);
 
             const streakDataBefore = await streakEngine.getStreakData();
@@ -5331,7 +5380,9 @@ class App {
     // ===== Change Session Sheet =====
     async showChangeSessionSheet() {
         const sessions = await db.getSessions();
-        const nextIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+        const history = await db.getAll('workoutHistory');
+        const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+        const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex);
         const container = document.getElementById('session-options');
         container.innerHTML = '';
 
@@ -6135,6 +6186,21 @@ class App {
         document.getElementById('btn-edit-sessions').onclick = () => this.showEditSessionsSheet();
         document.getElementById('btn-settings').onclick = () => this.showSettingsSheet();
         document.getElementById('btn-export').onclick = () => this.exportData();
+        document.getElementById('history-calendar-prev').onclick = () => {
+            this.shiftCalendarMonth(-1);
+            this.renderHome();
+        };
+        document.getElementById('history-calendar-next').onclick = () => {
+            const now = new Date();
+            const selected = this.currentCalendarDate instanceof Date
+                ? this.currentCalendarDate
+                : new Date();
+            const isCurrentMonth = selected.getFullYear() === now.getFullYear() && selected.getMonth() === now.getMonth();
+            if (isCurrentMonth) return;
+
+            this.shiftCalendarMonth(1);
+            this.renderHome();
+        };
         
         document.getElementById('btn-import').onclick = () => {
             document.getElementById('import-file').click();

@@ -85,8 +85,16 @@
                 <section class="history-calendar-section" id="history-calendar-section">
                     <div class="history-calendar-header">
                         <div>
-                            <div class="history-calendar-kicker">Mois en cours</div>
-                            <h3 id="history-calendar-title">Historique du mois</h3>
+                            <div class="history-calendar-kicker" id="history-calendar-kicker">Mois en cours</div>
+                            <div class="history-calendar-title-row">
+                                <button class="calendar-nav-btn" id="history-calendar-prev" type="button" aria-label="Mois précédent">
+                                    <span aria-hidden="true">&#8249;</span>
+                                </button>
+                                <h3 id="history-calendar-title">Historique du mois</h3>
+                                <button class="calendar-nav-btn" id="history-calendar-next" type="button" aria-label="Mois suivant">
+                                    <span aria-hidden="true">&#8250;</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="history-calendar-summary" id="history-calendar-summary">0 séance</div>
                     </div>
@@ -192,7 +200,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v3.6</span>
+                    <span class="app-version">v3.7</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
