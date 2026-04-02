@@ -74,7 +74,7 @@
                     </div>
                     <div class="session-actions">
                         <button class="btn btn-primary btn-large" id="btn-start-session">
-                            Commencer
+                            Démarrer la séance
                         </button>
                         <button class="btn btn-secondary" id="btn-change-session">
                             Changer de séance
@@ -174,15 +174,23 @@
                         </div>
                     </div>
                     <div class="chart-container">
-                        <div class="chart-title">Évolution du volume (4 dernières semaines)</div>
-                        <div class="chart-wrapper">
-                            <canvas id="volume-chart" width="320" height="160"></canvas>
+                        <div class="chart-title-row">
+                            <div class="chart-title">Évolution du volume</div>
+                            <div class="chart-chip" id="volume-chart-chip">4 semaines</div>
+                        </div>
+                        <div class="chart-subtitle" id="volume-chart-subtitle">Charge totale soulevée par semaine</div>
+                        <div class="chart-wrapper chart-wrapper-volume">
+                            <canvas id="volume-chart" aria-label="Graphique d'évolution du volume"></canvas>
                         </div>
                     </div>
                     <div class="chart-container">
-                        <div class="chart-title">Séances par semaine</div>
-                        <div class="chart-wrapper">
-                            <canvas id="frequency-chart" width="320" height="120"></canvas>
+                        <div class="chart-title-row">
+                            <div class="chart-title">Fréquence d'entraînement</div>
+                            <div class="chart-chip" id="frequency-chart-chip">6 semaines</div>
+                        </div>
+                        <div class="chart-subtitle" id="frequency-chart-subtitle">Nombre de séances par semaine</div>
+                        <div class="chart-wrapper chart-wrapper-frequency">
+                            <canvas id="frequency-chart" aria-label="Graphique de fréquence des séances"></canvas>
                         </div>
                     </div>
                     
@@ -200,7 +208,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v3.7</span>
+                    <span class="app-version">v3.8</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -289,32 +297,76 @@
                     <!-- Coaching Advice Card -->
                     <div class="coaching-advice" id="coaching-advice" style="display: none;">
                         <div class="coaching-advice-header">
-                            <span class="coaching-advice-icon" id="coaching-advice-icon">🎯</span>
-                            <span class="coaching-advice-title" id="coaching-advice-title">Conseil du coach</span>
+                            <div class="coaching-advice-heading">
+                                <span class="coaching-advice-icon" id="coaching-advice-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="8"></circle>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </span>
+                                <div class="coaching-advice-heading-copy">
+                                    <span class="coaching-advice-eyebrow">Coach</span>
+                                    <span class="coaching-advice-title" id="coaching-advice-title">Conseil du coach</span>
+                                </div>
+                            </div>
+                            <span class="coaching-advice-chip" id="coaching-advice-chip">Plan du jour</span>
                         </div>
-                        <div class="coaching-advice-message" id="coaching-advice-message"></div>
-                        <div class="coaching-suggestion-row">
-                            <div class="coaching-suggestion">
-                                <span class="coaching-suggestion-label">Poids suggéré</span>
+                        <div class="coaching-advice-summary" id="coaching-advice-message"></div>
+                        <div class="coaching-status-row" id="coaching-status-row" style="display: none;">
+                            <span class="coaching-status-pill" id="coaching-fatigue-pill">Récupération correcte</span>
+                            <button type="button" class="coaching-info-btn" id="btn-coach-fatigue-info" aria-label="Comprendre le niveau de fatigue">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M12 10v5"></path>
+                                    <path d="M12 7h.01"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="coaching-suggestion-row coaching-suggestion-grid" id="coaching-suggestion-grid">
+                            <div class="coaching-suggestion coaching-suggestion-weight">
+                                <span class="coaching-suggestion-label" id="coaching-suggested-weight-label">Poids suggéré</span>
                                 <div class="coaching-suggestion-value">
                                     <span id="coaching-suggested-weight">--</span>
                                     <span class="coaching-weight-trend" id="coaching-weight-trend"></span>
                                 </div>
                             </div>
-                            <div class="coaching-suggestion">
+                            <div class="coaching-suggestion coaching-suggestion-reps">
                                 <span class="coaching-suggestion-label">Reps cible</span>
                                 <span class="coaching-suggestion-value" id="coaching-suggested-reps">--</span>
                             </div>
-                        </div>
-                        <!-- Volume and Back-off suggestions (shown when applicable) -->
-                        <div class="coaching-suggestion-row" style="margin-top: 8px;">
-                            <div class="coaching-suggestion" id="coaching-suggested-sets-container" style="display: none;">
-                                <span class="coaching-suggestion-label">📈 Volume suggéré</span>
+                            <div class="coaching-suggestion coaching-suggestion-volume" id="coaching-suggested-sets-container" style="display: none;">
+                                <span class="coaching-suggestion-label" id="coaching-suggested-sets-label">Volume du jour</span>
                                 <span class="coaching-suggestion-value" id="coaching-suggested-sets">--</span>
                             </div>
-                            <div class="coaching-suggestion" id="coaching-backoff-container" style="display: none;">
-                                <span class="coaching-suggestion-label">⬇️ Back-off (S2+)</span>
+                            <div class="coaching-suggestion coaching-suggestion-backoff" id="coaching-backoff-container" style="display: none;">
+                                <span class="coaching-suggestion-label">Back-off</span>
                                 <span class="coaching-suggestion-value" id="coaching-backoff-weight">--</span>
+                            </div>
+                        </div>
+                        <div class="coaching-advice-drawer" id="coaching-advice-drawer">
+                            <button type="button" class="coaching-drawer-toggle" id="btn-coach-toggle-drawer" aria-expanded="false">
+                                <span>Réglages coach</span>
+                                <svg class="coaching-drawer-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M6 9l6 6 6-6"></path>
+                                </svg>
+                            </button>
+                            <div class="coaching-advice-drawer-body" id="coaching-advice-drawer-body" style="display: none;">
+                                <div class="coaching-progress-meta" id="coaching-progress-meta" style="display: none;">
+                                    <div class="coaching-progress-copy">
+                                        <span class="coaching-mode-chip" id="coaching-mode-chip">Progression charge</span>
+                                        <span class="coaching-mode-note" id="coaching-mode-note">Passe en mode plafonné dès que la machine ne peut plus monter.</span>
+                                    </div>
+                                    <label class="coaching-progress-toggle" id="coach-cap-toggle-wrap">
+                                        <div class="coaching-progress-toggle-copy">
+                                            <span class="coaching-progress-toggle-title" id="coaching-cap-toggle-title">Machine au max</span>
+                                            <span class="coaching-progress-toggle-status" id="coaching-cap-toggle-status">Off</span>
+                                        </div>
+                                        <span class="toggle-switch coaching-toggle-switch">
+                                            <input type="checkbox" id="btn-coach-toggle-cap" aria-label="Activer le mode charge plafonnée">
+                                            <span class="toggle-slider"></span>
+                                        </span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -323,8 +375,18 @@
                 <!-- Superset Coaching Advice (shown only in superset mode) -->
                 <div class="coaching-advice coaching-advice-superset" id="superset-coaching-container" style="display: none;">
                     <div class="coaching-advice-header">
-                        <span class="coaching-advice-icon">⚡</span>
-                        <span class="coaching-advice-title">Conseils SuperSet</span>
+                        <div class="coaching-advice-heading">
+                            <span class="coaching-advice-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
+                                </svg>
+                            </span>
+                            <div class="coaching-advice-heading-copy">
+                                <span class="coaching-advice-eyebrow">Coach</span>
+                                <span class="coaching-advice-title">Conseils superset</span>
+                            </div>
+                        </div>
+                        <span class="coaching-advice-chip">A / B</span>
                     </div>
                     
                     <!-- Exercise A Advice -->
@@ -333,7 +395,7 @@
                             <span class="coaching-exercise-badge badge-a">A</span>
                             <span class="coaching-exercise-name" id="superset-advice-name-a">Exercice A</span>
                         </div>
-                        <div class="coaching-advice-message" id="superset-advice-message-a">--</div>
+                        <div class="coaching-dual-summary" id="superset-advice-message-a">--</div>
                         <div class="coaching-suggestion-row">
                             <div class="coaching-suggestion">
                                 <span class="coaching-suggestion-label">Poids</span>
@@ -354,7 +416,7 @@
                             <span class="coaching-exercise-badge badge-b">B</span>
                             <span class="coaching-exercise-name" id="superset-advice-name-b">Exercice B</span>
                         </div>
-                        <div class="coaching-advice-message" id="superset-advice-message-b">--</div>
+                        <div class="coaching-dual-summary" id="superset-advice-message-b">--</div>
                         <div class="coaching-suggestion-row">
                             <div class="coaching-suggestion">
                                 <span class="coaching-suggestion-label">Poids</span>
@@ -427,6 +489,20 @@
                 </div>
 
                 <!-- Logbook - Dernière séance -->
+                <div class="exercise-progress-card" id="exercise-progress-card" style="display: none;">
+                    <div class="exercise-progress-header">
+                        <div>
+                            <div class="exercise-progress-kicker">Progression</div>
+                            <div class="exercise-progress-title">Tendance récente</div>
+                        </div>
+                        <div class="exercise-progress-badge" id="exercise-progress-badge">Stable</div>
+                    </div>
+                    <div class="exercise-progress-body">
+                        <canvas id="exercise-progress-sparkline" height="56"></canvas>
+                        <div class="exercise-progress-meta" id="exercise-progress-meta">Pas assez d’historique</div>
+                    </div>
+                </div>
+
                 <div class="logbook-card" id="logbook-card">
                     <div class="logbook-header">
                         <div class="logbook-title">
@@ -533,6 +609,18 @@
                 <div class="exercise-notes" id="exercise-notes">
                     <h4>Consignes d'exécution</h4>
                     <p id="exercise-instructions">--</p>
+                    <div class="exercise-note-editor">
+                        <label for="exercise-note-input">Note de l'exercice</label>
+                        <textarea id="exercise-note-input" class="exercise-note-input" rows="3" placeholder="Machine bizarre, douleur coude, très facile, meilleure amplitude..."></textarea>
+                    </div>
+                </div>
+
+                <div class="coach-decision-card" id="coach-decision-card" style="display: none;">
+                    <div class="coach-decision-header">
+                        <h4>Pourquoi ce conseil</h4>
+                        <span class="coach-decision-confidence" id="coach-decision-confidence">Confiance --</span>
+                    </div>
+                    <div class="coach-decision-grid" id="coach-decision-grid"></div>
                 </div>
             </main>
 
@@ -976,6 +1064,20 @@
                 <button class="btn btn-primary btn-large" id="btn-confirm-lms">
                     Continuer la séance
                 </button>
+            </div>
+        </div>
+
+        <div class="bottom-sheet" id="sheet-coach-fatigue">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content">
+                <div class="sheet-handle"></div>
+                <div class="coach-fatigue-sheet-header">
+                    <h3 id="coach-fatigue-sheet-title">Lecture de récupération</h3>
+                    <p id="coach-fatigue-sheet-subtitle">Pourquoi le coach te considère en forme ou fatigué aujourd'hui.</p>
+                </div>
+                <div class="coach-fatigue-sheet-score" id="coach-fatigue-sheet-score">--</div>
+                <div class="coach-fatigue-sheet-list" id="coach-fatigue-sheet-list"></div>
+                <button class="btn btn-primary btn-large" id="btn-close-coach-fatigue">Compris</button>
             </div>
         </div>
 
