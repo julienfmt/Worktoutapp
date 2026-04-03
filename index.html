@@ -14,6 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="streak-score.css">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -208,7 +209,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v3.8</span>
+                    <span class="app-version">v4.0</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -552,6 +553,44 @@
                             <div class="logbook-empty">Première fois</div>
                         </div>
                     </div>
+                </div>
+
+                <div class="superset-progress-grid" id="superset-progress-container" style="display: none;">
+                    <div class="exercise-progress-card exercise-progress-card-superset" id="superset-progress-card-a" style="display: none;">
+                        <div class="exercise-progress-header">
+                            <div>
+                                <div class="exercise-progress-kicker">Progression A</div>
+                                <div class="exercise-progress-title" id="superset-progress-title-a">Exercice A</div>
+                            </div>
+                            <div class="exercise-progress-badge" id="superset-progress-badge-a">Stable</div>
+                        </div>
+                        <div class="exercise-progress-body">
+                            <canvas id="superset-progress-sparkline-a" height="56"></canvas>
+                            <div class="exercise-progress-meta" id="superset-progress-meta-a">Pas assez d’historique</div>
+                        </div>
+                    </div>
+
+                    <div class="exercise-progress-card exercise-progress-card-superset" id="superset-progress-card-b" style="display: none;">
+                        <div class="exercise-progress-header">
+                            <div>
+                                <div class="exercise-progress-kicker">Progression B</div>
+                                <div class="exercise-progress-title" id="superset-progress-title-b">Exercice B</div>
+                            </div>
+                            <div class="exercise-progress-badge" id="superset-progress-badge-b">Stable</div>
+                        </div>
+                        <div class="exercise-progress-body">
+                            <canvas id="superset-progress-sparkline-b" height="56"></canvas>
+                            <div class="exercise-progress-meta" id="superset-progress-meta-b">Pas assez d’historique</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="coach-decision-card coach-decision-card-superset" id="superset-decision-card" style="display: none;">
+                    <div class="coach-decision-header">
+                        <h4>Pourquoi ces conseils</h4>
+                        <span class="coach-decision-confidence" id="superset-decision-confidence">2 lectures coach</span>
+                    </div>
+                    <div class="superset-decision-grid" id="superset-decision-grid"></div>
                 </div>
                 
                 <!-- Unilateral Logbook (unified view) -->
@@ -1113,6 +1152,7 @@
 
     <script src="db.js"></script>
     <script src="data.js"></script>
+    <script src="fire-score.js"></script>
     <script src="app.js"></script>
     <script>
         // Service Worker registration with auto-update detection

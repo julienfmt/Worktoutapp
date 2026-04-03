@@ -482,6 +482,7 @@ class App {
         this.currentSessionFatigueContext = null;
         this.currentExerciseTrendSummary = null;
         this.exerciseProgressHistory = [];
+        this.supersetProgressHistory = [];
         this.noteSaveTimeout = null;
         this.homeChartData = {
             history: [],
@@ -986,211 +987,146 @@ class App {
         this.renderWeekPrediction(prediction);
     }
 
-    getStreakFlameMarkup(streakCount) {
-        if (streakCount <= 0) return '';
-
-        const cappedScore = Math.min(streakCount, 52);
-        const heat = Math.min(1, cappedScore / 18);
-        const intensity = streakCount >= 20 ? 'intense' : streakCount >= 8 ? 'medium' : streakCount >= 3 ? 'light' : 'ember';
-        const scale = (0.84 + heat * 0.34).toFixed(2);
-        const glow = (0.48 + heat * 0.78).toFixed(2);
-        const sway = (2.2 + heat * 3.2).toFixed(2);
-        const speed = (1.85 - heat * 0.7).toFixed(2);
-        const lift = (18 + heat * 14).toFixed(2);
-        const width = (52 + heat * 16).toFixed(2);
-        const spark = (0.2 + heat * 0.85).toFixed(2);
-        const haze = (0.18 + heat * 0.5).toFixed(2);
-        const depth = (0.3 + heat * 0.7).toFixed(2);
-
-        return `
-            <span
-                class="streak-flame streak-flame-${intensity}"
-                style="--flame-scale: ${scale}; --flame-glow: ${glow}; --flame-sway: ${sway}deg; --flame-speed: ${speed}s; --flame-lift: ${lift}px; --flame-width: ${width}px; --flame-spark: ${spark}; --flame-haze: ${haze}; --flame-depth: ${depth};"
-                aria-hidden="true"
-            >
-                <svg class="streak-flame-svg" viewBox="0 0 64 84" role="presentation" focusable="false">
-                    <defs>
-                        <radialGradient id="streak-flame-aura" cx="50%" cy="60%" r="60%">
-                            <stop offset="0%" stop-color="#ffd56a" stop-opacity="0.95"/>
-                            <stop offset="45%" stop-color="#ff8a36" stop-opacity="0.55"/>
-                            <stop offset="100%" stop-color="#ff5a1f" stop-opacity="0"/>
-                        </radialGradient>
-                        <linearGradient id="streak-flame-outer" x1="0%" y1="0%" x2="50%" y2="100%">
-                            <stop offset="0%" stop-color="#ff8a4c"/>
-                            <stop offset="52%" stop-color="#ff5a36"/>
-                            <stop offset="100%" stop-color="#ff2d20"/>
-                        </linearGradient>
-                        <linearGradient id="streak-flame-mid" x1="50%" y1="8%" x2="50%" y2="100%">
-                            <stop offset="0%" stop-color="#ffd166"/>
-                            <stop offset="50%" stop-color="#ffb347"/>
-                            <stop offset="100%" stop-color="#ff7a1f"/>
-                        </linearGradient>
-                        <radialGradient id="streak-flame-core" cx="50%" cy="40%" r="55%">
-                            <stop offset="0%" stop-color="#fff7c2"/>
-                            <stop offset="60%" stop-color="#ffe27a"/>
-                            <stop offset="100%" stop-color="#ffbf47"/>
-                        </radialGradient>
-                        <linearGradient id="streak-flame-rim" x1="15%" y1="10%" x2="85%" y2="100%">
-                            <stop offset="0%" stop-color="#fff3da" stop-opacity="0.95"/>
-                            <stop offset="25%" stop-color="#ffd79a" stop-opacity="0.55"/>
-                            <stop offset="100%" stop-color="#ff8b3d" stop-opacity="0"/>
-                        </linearGradient>
-                        <radialGradient id="streak-flame-shadow" cx="50%" cy="70%" r="65%">
-                            <stop offset="0%" stop-color="#ff6b1f" stop-opacity="0.65"/>
-                            <stop offset="100%" stop-color="#7c1d12" stop-opacity="0"/>
-                        </radialGradient>
-                        <filter id="streak-flame-blur" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="4"/>
-                        </filter>
-                        <filter id="streak-flame-soft" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="1.4"/>
-                        </filter>
-                    </defs>
-                    <ellipse class="streak-flame-shadow" cx="32" cy="68" rx="20" ry="12" fill="url(#streak-flame-shadow)" filter="url(#streak-flame-soft)"/>
-                    <ellipse class="streak-flame-aura" cx="32" cy="56" rx="22" ry="28" fill="url(#streak-flame-aura)" filter="url(#streak-flame-blur)"/>
-                    <ellipse class="streak-flame-glow" cx="32" cy="52" rx="18" ry="24" fill="#ff7a1f" filter="url(#streak-flame-blur)"/>
-                    <path class="streak-flame-outer" d="M32 4C29 13 22 19 18 25C14 31 12 36 12 43C12 60 24 73 32 80C40 73 52 60 52 43C52 36 50 31 46 25C42 19 35 13 32 4Z"/>
-                    <path class="streak-flame-rim" d="M31 7C27 16 22 22 19 27C15 33 14 39 14 44C14 57 23 68 31 76C31 64 30 48 31 7Z"/>
-                    <path class="streak-flame-mid" d="M32 17C28 25 24 29 22 35C20 40 20 45 20 48C20 59 27 67 32 72C37 67 44 59 44 48C44 45 44 40 42 35C40 29 36 25 32 17Z"/>
-                    <path class="streak-flame-core" d="M32 31C29 36 27 40 27 46C27 53 30 58 32 61C34 58 37 53 37 46C37 40 35 36 32 31Z"/>
-                    <path class="streak-flame-spark streak-flame-spark-left" d="M18 24C17 27 14 29 14 33C14 35 15 37 17 38C17 34 20 31 20 28C20 26 19 24 18 24Z"/>
-                    <path class="streak-flame-spark streak-flame-spark-right" d="M46 20C46 24 49 26 49 30C49 33 48 35 46 36C46 32 43 29 43 25C43 23 44 21 46 20Z"/>
-                </svg>
-            </span>
-        `;
+    getFireScoreIntensity(streakCount) {
+        const clamped = Math.min(Math.max(streakCount, 0), 52);
+        return (0.58 + (clamped / 52) * 1.35).toFixed(2);
     }
-    
+
+    getStreakClockIconSVG() {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3.5 2"></path>
+        </svg>`;
+    }
+
     renderStreakCard(data, prediction, level, nextLevel) {
         const container = document.getElementById('streak-card');
         if (!container) return;
-        
+
         const isComplete = data.currentWeekValidated ?? (data.currentWeekSessions >= data.weeklyGoal);
         const effectiveStreakCount = data.effectiveStreakCount ?? data.displayStreakCount ?? data.streakCount;
-        
-        // Calculate progress to next level
         const progressInLevel = effectiveStreakCount - level.min;
-        const levelRange = (nextLevel.min - level.min) || 1;
-        const levelProgress = Math.min((progressInLevel / levelRange) * 100, 100);
+        const levelRange = nextLevel === level ? 1 : (nextLevel.min - level.min) || 1;
+        const levelProgress = nextLevel === level ? 100 : Math.min((progressInLevel / levelRange) * 100, 100);
         const weeksToNext = nextLevel.min - effectiveStreakCount;
-        
-        // Generate session indicators with animation delay
-        let sessionsHtml = '';
-        for (let i = 0; i < data.weeklyGoal; i++) {
-            const filled = i < data.currentWeekSessions;
-            const animDelay = filled ? `style="animation-delay: ${i * 0.1}s"` : '';
-            sessionsHtml += `<span class="session-indicator ${filled ? 'filled' : ''}" ${animDelay}>
-                ${filled ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        const sessionsRemaining = Math.max(0, data.weeklyGoal - data.currentWeekSessions);
+
+        const sessionsHtml = Array.from({ length: data.weeklyGoal }, (_, index) => {
+            const filled = index < data.currentWeekSessions;
+            return `<span class="streakv4-session-indicator ${filled ? 'is-filled' : ''}" aria-hidden="true">
+                ${filled ? `<svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                 </svg>` : ''}
             </span>`;
-        }
-        
-        // Generate shields with progress animation
-        let shieldsHtml = '';
+        }).join('');
+
         const fullShields = Math.floor(data.shieldCount);
         const hasHalf = data.shieldCount % 1 >= 0.5;
-        const shieldProgress = (data.shieldCount % 1) * 100;
-        
-        for (let i = 0; i < 3; i++) {
-            const animDelay = `style="animation-delay: ${i * 0.15}s"`;
-            if (i < fullShields) {
-                shieldsHtml += `<span class="shield-icon filled" ${animDelay}>${this.getShieldSVG('full')}</span>`;
-            } else if (i === fullShields && hasHalf) {
-                shieldsHtml += `<span class="shield-icon half" ${animDelay}>${this.getShieldSVG('half')}</span>`;
-            } else {
-                shieldsHtml += `<span class="shield-icon empty" ${animDelay}>${this.getShieldSVG('empty')}</span>`;
+        const shieldsHtml = Array.from({ length: 3 }, (_, index) => {
+            if (index < fullShields) {
+                return `<span class="streakv4-shield is-filled" aria-hidden="true">${this.getShieldSVG('full')}</span>`;
             }
-        }
-        
-        const protectedBadge = data.weekProtected ? 
-            `<div class="protected-badge protected-active">
+            if (index === fullShields && hasHalf) {
+                return `<span class="streakv4-shield is-half" aria-hidden="true">${this.getShieldSVG('half')}</span>`;
+            }
+            return `<span class="streakv4-shield is-empty" aria-hidden="true">${this.getShieldSVG('empty')}</span>`;
+        }).join('');
+
+        const protectedBadge = data.weekProtected
+            ? `<div class="streakv4-protected">
                 ${this.getShieldSVG('full')}
-                <span>Protégé !</span>
-            </div>` : '';
-        
-        // Better week status messaging
-        const sessionsRemaining = data.weeklyGoal - data.currentWeekSessions;
-        const weekStatusText = isComplete 
-            ? `<span class="week-status-count success">✓ Objectif validé !</span>`
+                <span>Protégé</span>
+            </div>`
+            : '';
+
+        const weekStatusText = isComplete
+            ? `<div class="streakv4-status streakv4-status--success"><strong>✓ Objectif validé !</strong></div>`
             : sessionsRemaining === 1
-                ? `<span class="week-status-count partial">◔ ${data.currentWeekSessions}/${data.weeklyGoal} <span class="week-hint">· Plus qu'une !</span></span>`
-                : `<span class="week-status-count partial">◔ ${data.currentWeekSessions}/${data.weeklyGoal} <span class="week-hint">· ${sessionsRemaining} restantes</span></span>`;
-        
-        // Shield explanation tooltip
-        const shieldExplanation = data.shieldCount < 3 
-            ? `<div class="shield-hint">+0.5 par semaine validée</div>`
-            : `<div class="shield-hint shield-full">Maximum atteint !</div>`;
-        
-        // Determine flame intensity based on streak count
-        const flameClass = effectiveStreakCount > 0 ? 'has-flame' : '';
-        const flameIntensity = effectiveStreakCount >= 20
-            ? 'flame-intense'
-            : effectiveStreakCount >= 8
-                ? 'flame-medium'
-                : effectiveStreakCount >= 3
-                    ? 'flame-light'
-                    : 'flame-ember';
-        
+                ? `<div class="streakv4-status">
+                    <span class="streakv4-status-icon">${this.getStreakClockIconSVG()}</span>
+                    <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
+                    <span class="streakv4-status-muted">· Plus qu'une !</span>
+                </div>`
+                : `<div class="streakv4-status">
+                    <span class="streakv4-status-icon">${this.getStreakClockIconSVG()}</span>
+                    <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
+                    <span class="streakv4-status-muted">· ${sessionsRemaining} restante${sessionsRemaining > 1 ? 's' : ''}</span>
+                </div>`;
+
+        const shieldExplanation = data.shieldCount < 3
+            ? `<div class="streakv4-shields-hint">+0.5 par semaine validée</div>`
+            : `<div class="streakv4-shields-hint is-full">Maximum atteint !</div>`;
+
+        const levelStyle = [
+            `--streak-level-color:${level.color}`,
+            `--streak-level-soft:${level.color}`,
+            `--streak-level-glow:${this.hexToRgba(level.color, 0.24)}`
+        ].join(';');
+
+        const nextLevelText = weeksToNext > 0
+            ? `${nextLevel.emoji} <strong>${nextLevel.name}</strong> dans ${weeksToNext} sem.`
+            : `<strong>Niveau max !</strong>`;
+
         container.innerHTML = `
-            <div class="streak-main">
-                <div class="streak-score ${isComplete ? 'week-complete' : ''} ${flameClass} ${flameIntensity}">
-                    <div class="streak-number-container">
-                        ${this.getStreakFlameMarkup(effectiveStreakCount)}
-                        <span class="streak-number">${effectiveStreakCount}</span>
+            <div class="streakv4-shell">
+                <div class="streakv4-hero">
+                    <div class="streakv4-score">
+                        <fire-score
+                            class="streakv4-fire"
+                            value="${effectiveStreakCount}"
+                            intensity="${this.getFireScoreIntensity(effectiveStreakCount)}"
+                            label="Score streak ${effectiveStreakCount}"
+                        ></fire-score>
+                      
                     </div>
-                    <div class="streak-label">streak</div>
+
+                    <div class="streakv4-meta">
+                        <div class="streakv4-level-row">
+                            <span class="streakv4-level-emoji">${level.emoji}</span>
+                            <div class="streakv4-level-pill" style="${levelStyle}">
+                                <span>${level.name}</span>
+                            </div>
+                        </div>
+                        <div class="streakv4-level-description">${level.description}</div>
+                        <div class="streakv4-progress">
+                            <div class="streakv4-progress-track">
+                                <div class="streakv4-progress-fill" style="width:${levelProgress}%; background:linear-gradient(90deg, ${level.color}, ${nextLevel.color});"></div>
+                            </div>
+                            <div class="streakv4-next-level">${nextLevelText}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="streak-info">
-                    <div class="streak-level-header">
-                        <span class="streak-emoji">${level.emoji}</span>
-                        <div class="streak-level-badge" style="--level-color: ${level.color}">
-                            <span class="level-name">${level.name}</span>
-                        </div>
+
+                <div class="streakv4-divider"></div>
+
+                <div class="streakv4-week">
+                    <div class="streakv4-week-header">
+                        <div class="streakv4-week-title">Cette semaine</div>
+                        ${protectedBadge}
                     </div>
-                    <div class="streak-level-desc">${level.description}</div>
-                    <div class="streak-progress-section">
-                        <div class="streak-progress-bar">
-                            <div class="streak-progress-fill" style="width: ${levelProgress}%; background: linear-gradient(90deg, ${level.color}, ${nextLevel.color})"></div>
+
+                    <div class="streakv4-week-body">
+                        <div class="streakv4-week-left">
+                            ${weekStatusText}
+                            <div class="streakv4-session-row">${sessionsHtml}</div>
                         </div>
-                        <div class="streak-next-level">
-                            ${weeksToNext > 0 
-                                ? `${nextLevel.emoji} <strong>${nextLevel.name}</strong> dans ${weeksToNext} sem.` 
-                                : `<span class="max-level">🎖️ Niveau max !</span>`}
+
+                        <div class="streakv4-week-right">
+                            <div class="streakv4-shields-header">
+                                <span class="streakv4-shields-label">🛡️ Boucliers</span>
+                                <span class="streakv4-shields-count">${data.shieldCount}/3</span>
+                            </div>
+                            <div class="streakv4-shields-row">${shieldsHtml}</div>
+                            ${shieldExplanation}
                         </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="streak-divider"></div>
-            
-            <div class="streak-week">
-                <div class="week-header">
-                    <span class="week-title">CETTE SEMAINE</span>
-                    ${protectedBadge}
-                </div>
-                <div class="week-content">
-                    <div class="week-sessions">
-                        ${weekStatusText}
-                        <div class="sessions-row">${sessionsHtml}</div>
-                    </div>
-                    <div class="week-shields">
-                        <div class="shields-header">
-                            <span class="shields-label">🛡️ Boucliers</span>
-                            <span class="shields-count">${data.shieldCount}/3</span>
-                        </div>
-                        <div class="shields-row">${shieldsHtml}</div>
-                        ${shieldExplanation}
                     </div>
                 </div>
             </div>
         `;
-        
-        // Add celebration class if week complete
-        if (isComplete) {
-            container.classList.add('week-validated');
-        } else {
-            container.classList.remove('week-validated');
-        }
+
+        container.classList.add('streak-card-v4');
+        container.classList.toggle('is-week-complete', isComplete);
+        container.classList.remove('week-validated');
     }
     
     getLevelIconSVG(levelName) {
@@ -1237,6 +1173,14 @@ class App {
         return `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/>
         </svg>`;
+    }
+
+    getSupersetBoltIconSVG() {
+        return `
+            <svg viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
+            </svg>
+        `;
     }
     
     renderWeekPrediction(prediction) {
@@ -2688,15 +2632,17 @@ class App {
 
         let primary = '';
         if (advice.topSetProgression && advice.backOffWeight) {
-            primary = `Fais un <strong>top set</strong>, puis passe à <strong>${advice.backOffWeight} kg</strong> pour garder des séries propres.`;
+            primary = `Aujourd'hui, on joue un <strong>top set propre</strong> puis un <strong>back-off maîtrisé</strong> pour pousser sans cramer la suite.`;
         } else if (advice.suggestedAssistanceKg != null) {
-            primary = `Vise <strong>${advice.suggestedAssistanceKg} kg d'assistance</strong> pour rester autour de <strong>${advice.suggestedReps}</strong>.`;
+            primary = `Le focus du jour est une version <strong>assistée, fluide et propre</strong>, avec priorité à l'amplitude et au contrôle.`;
         } else if (advice.suggestedWeightLabel?.includes('PDC') || advice.suggestedWeight === 0) {
-            primary = `Reste au <strong>poids du corps</strong> et vise <strong>${advice.suggestedReps}</strong>.`;
-        } else if (advice.suggestedWeight !== '?' && advice.suggestedWeight != null) {
-            primary = `Vise <strong>${this.formatSuggestedWeightDisplay(advice)}</strong> pour environ <strong>${advice.suggestedReps}</strong>.`;
+            primary = `Le coach veut une séance <strong>poids du corps ultra propre</strong>, sans chercher à forcer la charge aujourd'hui.`;
+        } else if (advice.weightTrend === 'up') {
+            primary = `Il y a de la marge: <strong>tu peux appuyer un peu plus fort</strong> si la technique reste solide du début à la fin.`;
+        } else if (advice.weightTrend === 'down') {
+            primary = `Le but est de <strong>protéger la qualité</strong> et d'éviter une série sale ou trop coûteuse.`;
         } else {
-            primary = `Vise environ <strong>${advice.suggestedReps}</strong> avec une exécution propre.`;
+            primary = `Le coach veut une série <strong>maîtrisée, régulière et propre</strong>, sans gaspiller d'énergie inutile.`;
         }
 
         if (setPlan.hasAutoReduction) {
@@ -3260,7 +3206,10 @@ class App {
             
             const launchBtns = isInSuperset 
                 ? `
-                    <button class="btn btn-primary btn-launch-superset" data-slot-id="${supersetStartId}">⚡ Lancer SuperSet</button>
+                    <button class="btn btn-primary btn-launch-superset" data-slot-id="${supersetStartId}">
+                        ${this.getSupersetBoltIconSVG()}
+                        Lancer le SuperSet
+                    </button>
                     <button class="btn btn-secondary btn-launch-individual" data-slot-id="${slot.id}" title="Lancer cet exercice seul">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2v20M2 12h20"/>
@@ -3428,6 +3377,8 @@ class App {
         document.getElementById('logbook-card-superset').style.display = 'none';
         document.getElementById('superset-coaching-container').style.display = 'none';
         document.getElementById('superset-logbook-container').style.display = 'none';
+        document.getElementById('superset-progress-container').style.display = 'none';
+        document.getElementById('superset-decision-card').style.display = 'none';
         document.getElementById('exercise-progress-card').style.display = 'none';
         document.getElementById('coach-decision-card').style.display = 'none';
         document.getElementById('exercise-notes').style.display = 'block';
@@ -3693,6 +3644,8 @@ class App {
         document.getElementById('logbook-card-superset').style.display = 'none';
         document.getElementById('superset-coaching-container').style.display = 'block';
         document.getElementById('superset-logbook-container').style.display = 'block';
+        document.getElementById('superset-progress-container').style.display = 'grid';
+        document.getElementById('superset-decision-card').style.display = 'block';
         document.getElementById('exercise-progress-card').style.display = 'none';
         document.getElementById('coach-decision-card').style.display = 'none';
         document.getElementById('exercise-notes').style.display = 'none';
@@ -3704,12 +3657,12 @@ class App {
         // Calculate coaching advice for BOTH exercises
         await this.calculateSupersetCoachingAdvice();
         this.showSupersetCoachingAdvice();
-        
-        // Render the unified superset logbook
-        this.renderUnifiedSupersetLogbook();
-        
-        this.renderSupersetSeries();
         this.showScreen('exercise');
+
+        // Render after the screen is visible so the progress canvases can measure correctly.
+        this.renderUnifiedSupersetLogbook();
+        this.renderSupersetSeries();
+        window.requestAnimationFrame(() => this.renderSupersetInsights());
         
         // Check if there's an active timer from before
         this.onAppResume();
@@ -4529,6 +4482,7 @@ class App {
     renderSupersetLogbookContent(exerciseKey, historyArray) {
         const dateEl = document.getElementById(`superset-logbook-date-${exerciseKey}`);
         const contentEl = document.getElementById(`superset-logbook-content-${exerciseKey}`);
+        const slotRef = exerciseKey === 'a' ? this.currentSlot : this.supersetSlot;
         
         // Normalize to array
         const histories = Array.isArray(historyArray) ? historyArray : (historyArray ? [historyArray] : []);
@@ -4546,17 +4500,66 @@ class App {
             const dateText = this.formatLogbookDate(history.date);
             const isLatest = idx === 0;
             
-            html += `<div class="superset-logbook-session ${isLatest ? '' : 'superset-logbook-session-older'}">`;
+            html += `<div class="logbook-session ${isLatest ? 'logbook-session-latest' : 'logbook-session-older'} superset-logbook-session ${isLatest ? '' : 'superset-logbook-session-older'}">`;
             html += `<div class="superset-logbook-session-header">
-                <span class="logbook-session-label">${isLatest ? 'Dernière' : `S-${idx + 1}`}</span>
+                <span class="logbook-session-label">${isLatest ? 'Dernière séance' : `Séance -${idx + 1}`}</span>
                 <span class="logbook-session-date">${dateText}</span>
             </div>`;
-            html += '<div class="superset-logbook-sets">';
+            html += '<div class="logbook-session-sets">';
             for (const set of history.sets) {
-                html += `<span class="superset-logbook-set">${this.formatSetWeight(set.weight, set.exerciseId || (exerciseKey === 'a' ? this.currentSlot : this.supersetSlot))}×${set.reps}</span>`;
+                html += `
+                    <div class="logbook-set">
+                        <span class="logbook-set-number">S${set.setNumber}</span>
+                        <div class="logbook-set-data">
+                            <span class="logbook-value"><strong>${this.formatSetWeight(set.weight, set.exerciseId || slotRef)}</strong></span>
+                            <span class="logbook-value"><strong>${set.reps}</strong>reps</span>
+                        </div>
+                    </div>
+                `;
             }
-            html += '</div></div>';
+            html += '</div>';
+            html += `
+                <div class="logbook-summary">
+                    <div class="logbook-summary-item">
+                        <div class="logbook-summary-label">Total reps</div>
+                        <div class="logbook-summary-value">${history.totalReps}</div>
+                    </div>
+                    <div class="logbook-summary-item">
+                        <div class="logbook-summary-label">Charge max</div>
+                        <div class="logbook-summary-value">${this.isPureBodyweightSlot(slotRef) && history.maxWeight === 0 ? 'PDC' : `${history.maxWeight} kg`}</div>
+                    </div>
+                </div>
+            `;
+            html += '</div>';
         });
+
+        if (histories.length >= 2) {
+            const latest = histories[0];
+            const oldest = histories[histories.length - 1];
+            const weightDiff = latest.maxWeight - oldest.maxWeight;
+            const repsDiff = latest.totalReps - oldest.totalReps;
+
+            let trendIcon = this.getLogbookTrendIconSVG('neutral');
+            let trendClass = 'neutral';
+            let trendText = 'Stable';
+
+            if (weightDiff > 0 || repsDiff > 0) {
+                trendIcon = this.getLogbookTrendIconSVG('positive');
+                trendClass = 'positive';
+                trendText = `${weightDiff > 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+            } else if (weightDiff < 0 || repsDiff < 0) {
+                trendIcon = this.getLogbookTrendIconSVG('negative');
+                trendClass = 'negative';
+                trendText = `${weightDiff < 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+            }
+
+            html += `
+                <div class="logbook-trend logbook-trend-${trendClass}">
+                    <span class="logbook-trend-icon">${trendIcon}</span>
+                    <span class="logbook-trend-text">${trendText}</span>
+                </div>
+            `;
+        }
         
         contentEl.innerHTML = html;
     }
@@ -4579,15 +4582,27 @@ class App {
         if (workoutIds.length === 0) {
             this.lastSupersetHistory = null;
             this.lastSupersetHistoryAll = [];
+            this.supersetProgressHistory = [];
             this.renderSupersetLogbook(null);
             return;
         }
         
         workoutIds.sort((a, b) => new Date(workoutGroups[b].date) - new Date(workoutGroups[a].date));
         
-        // Build history for the last 3 workouts
+        // Build history for the last 3 workouts and the last 6 for the sparkline
         const recentWorkouts = workoutIds.slice(0, 3);
+        const trendWorkouts = workoutIds.slice(0, 6);
         this.lastSupersetHistoryAll = recentWorkouts.map(wId => {
+            const workout = workoutGroups[wId];
+            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
+            return {
+                date: workout.date,
+                sets: workout.sets,
+                totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
+                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0))
+            };
+        });
+        this.supersetProgressHistory = trendWorkouts.map(wId => {
             const workout = workoutGroups[wId];
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
             return {
@@ -5189,29 +5204,36 @@ class App {
         return bestE1RM + (totalReps * 0.35);
     }
 
-    renderExerciseProgressSparkline(historyArray = []) {
-        const card = document.getElementById('exercise-progress-card');
-        const badge = document.getElementById('exercise-progress-badge');
-        const meta = document.getElementById('exercise-progress-meta');
-        const canvas = document.getElementById('exercise-progress-sparkline');
-
-        if (!card || !badge || !meta || !canvas || this.isSupersetMode || this.isUnilateralMode) return;
-
+    getProgressInsight(historyArray = []) {
         const histories = (historyArray || []).filter(history => history?.sets?.length);
-        if (histories.length < 2) {
-            card.style.display = 'none';
-            return;
-        }
+        if (histories.length < 2) return null;
 
         const ordered = [...histories].slice(0, 8).reverse();
         const values = ordered.map(history => this.calculateWorkoutQualityScore(history.sets));
         const latest = values[values.length - 1];
         const baseline = values[0] || latest || 0;
         const pct = baseline > 0 ? ((latest - baseline) / baseline) * 100 : 0;
+        const tone = pct >= 1 ? 'positive' : pct <= -1 ? 'negative' : 'neutral';
+
+        return {
+            ordered,
+            values,
+            pct,
+            tone,
+            badgeText: tone === 'positive' ? 'En hausse' : tone === 'negative' ? 'À surveiller' : 'Stable',
+            metaText: `${pct >= 0 ? '+' : ''}${Math.round(pct * 10) / 10}% sur ${ordered.length} séances`
+        };
+    }
+
+    drawProgressSparkline(canvas, values = [], tone = 'neutral') {
+        if (!canvas || values.length < 2) return;
 
         const ctx = canvas.getContext('2d');
-        const width = canvas.clientWidth || canvas.width || 300;
-        const height = canvas.height || 56;
+        const rect = canvas.getBoundingClientRect();
+        const fallbackHeight = parseInt(canvas.getAttribute('height') || '', 10) || 56;
+        const width = Math.round(rect.width || canvas.clientWidth || 0);
+        const height = Math.round(rect.height || canvas.clientHeight || fallbackHeight);
+        if (!ctx || width <= 0 || height <= 0) return;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -5224,6 +5246,12 @@ class App {
         const padX = 6;
         const padY = 8;
         const stepX = values.length > 1 ? (width - padX * 2) / (values.length - 1) : 0;
+        const strokeColor = tone === 'positive' ? '#22c55e' : tone === 'negative' ? '#f59e0b' : '#6366f1';
+        const fillTop = tone === 'positive'
+            ? 'rgba(34, 197, 94, 0.22)'
+            : tone === 'negative'
+                ? 'rgba(245, 158, 11, 0.22)'
+                : 'rgba(99, 102, 241, 0.22)';
 
         const points = values.map((value, index) => ({
             x: padX + (stepX * index),
@@ -5238,7 +5266,7 @@ class App {
         ctx.lineWidth = 3;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.strokeStyle = pct >= 1 ? '#22c55e' : pct <= -1 ? '#f59e0b' : '#6366f1';
+        ctx.strokeStyle = strokeColor;
         ctx.stroke();
 
         ctx.beginPath();
@@ -5250,25 +5278,56 @@ class App {
         ctx.lineTo(points[0].x, height - padY);
         ctx.closePath();
         const gradient = ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.22)');
-        gradient.addColorStop(1, 'rgba(99, 102, 241, 0.02)');
+        gradient.addColorStop(0, fillTop);
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.02)');
         ctx.fillStyle = gradient;
         ctx.fill();
 
         const latestPoint = points[points.length - 1];
         ctx.beginPath();
         ctx.arc(latestPoint.x, latestPoint.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = pct >= 1 ? '#22c55e' : pct <= -1 ? '#f59e0b' : '#6366f1';
+        ctx.fillStyle = strokeColor;
         ctx.fill();
+    }
 
-        badge.textContent = pct >= 1
-            ? 'En hausse'
-            : pct <= -1
-                ? 'À surveiller'
-                : 'Stable';
-        badge.className = `exercise-progress-badge ${pct >= 1 ? 'positive' : pct <= -1 ? 'negative' : 'neutral'}`;
-        meta.textContent = `${pct >= 0 ? '+' : ''}${Math.round(pct * 10) / 10}% sur ${ordered.length} séances`;
+    renderProgressCard(cardId, badgeId, metaId, canvasId, historyArray = [], attempt = 0) {
+        const card = document.getElementById(cardId);
+        const badge = document.getElementById(badgeId);
+        const meta = document.getElementById(metaId);
+        const canvas = document.getElementById(canvasId);
+        if (!card || !badge || !meta || !canvas) return;
+
+        const insight = this.getProgressInsight(historyArray);
+        if (!insight) {
+            card.style.display = 'none';
+            return;
+        }
+
         card.style.display = 'block';
+        const width = canvas.clientWidth || card.clientWidth || 0;
+        if (width < 40 && attempt < 3) {
+            window.requestAnimationFrame(() => {
+                this.renderProgressCard(cardId, badgeId, metaId, canvasId, historyArray, attempt + 1);
+            });
+            return;
+        }
+
+        this.drawProgressSparkline(canvas, insight.values, insight.tone);
+        badge.textContent = insight.badgeText;
+        badge.className = `exercise-progress-badge ${insight.tone}`;
+        meta.textContent = insight.metaText;
+        card.style.display = 'block';
+    }
+
+    renderExerciseProgressSparkline(historyArray = []) {
+        if (this.isSupersetMode || this.isUnilateralMode) return;
+        this.renderProgressCard(
+            'exercise-progress-card',
+            'exercise-progress-badge',
+            'exercise-progress-meta',
+            'exercise-progress-sparkline',
+            historyArray
+        );
     }
 
     getReadableProgressionAxis(axis) {
@@ -5287,16 +5346,8 @@ class App {
         return labels[axis] || axis || '—';
     }
 
-    renderCoachDecisionHistory(advice, slot = this.currentSlot) {
-        const card = document.getElementById('coach-decision-card');
-        const grid = document.getElementById('coach-decision-grid');
-        const confidenceEl = document.getElementById('coach-decision-confidence');
-
-        if (!card || !grid || !confidenceEl || !advice || !slot || this.isSupersetMode || this.isUnilateralMode) {
-            if (card) card.style.display = 'none';
-            return;
-        }
-
+    buildCoachDecisionItems(advice, slot = this.currentSlot) {
+        if (!advice || !slot) return [];
         const items = [];
         const setPlan = this.buildCoachSetPlan(slot, advice);
         if (slot.progressionMode === 'capped_load') {
@@ -5370,7 +5421,22 @@ class App {
             });
         }
 
-        grid.innerHTML = items.slice(0, 6).map(item => `
+        return items.slice(0, 6);
+    }
+
+    renderCoachDecisionHistory(advice, slot = this.currentSlot) {
+        const card = document.getElementById('coach-decision-card');
+        const grid = document.getElementById('coach-decision-grid');
+        const confidenceEl = document.getElementById('coach-decision-confidence');
+
+        if (!card || !grid || !confidenceEl || !advice || !slot || this.isSupersetMode || this.isUnilateralMode) {
+            if (card) card.style.display = 'none';
+            return;
+        }
+
+        const items = this.buildCoachDecisionItems(advice, slot);
+
+        grid.innerHTML = items.map(item => `
             <div class="coach-decision-item">
                 <span class="coach-decision-item-label">${item.label}</span>
                 <span class="coach-decision-item-value">${item.value}</span>
@@ -5379,6 +5445,90 @@ class App {
 
         confidenceEl.textContent = `Confiance ${Math.round((advice.contextConfidence || 0.6) * 100)}%`;
         card.style.display = items.length ? 'block' : 'none';
+    }
+
+    renderSupersetInsights() {
+        const progressContainer = document.getElementById('superset-progress-container');
+        const decisionCard = document.getElementById('superset-decision-card');
+        const decisionGrid = document.getElementById('superset-decision-grid');
+        const confidenceEl = document.getElementById('superset-decision-confidence');
+        if (!progressContainer || !decisionCard || !decisionGrid || !confidenceEl || !this.isSupersetMode) return;
+
+        const nameA = this.currentSlot?.activeExercise || this.currentSlot?.name || 'Exercice A';
+        const nameB = this.supersetSlot?.activeExercise || this.supersetSlot?.name || 'Exercice B';
+        const titleA = document.getElementById('superset-progress-title-a');
+        const titleB = document.getElementById('superset-progress-title-b');
+        if (titleA) titleA.textContent = nameA;
+        if (titleB) titleB.textContent = nameB;
+
+        this.renderProgressCard(
+            'superset-progress-card-a',
+            'superset-progress-badge-a',
+            'superset-progress-meta-a',
+            'superset-progress-sparkline-a',
+            this.exerciseProgressHistory
+        );
+        this.renderProgressCard(
+            'superset-progress-card-b',
+            'superset-progress-badge-b',
+            'superset-progress-meta-b',
+            'superset-progress-sparkline-b',
+            this.supersetProgressHistory
+        );
+
+        const hasProgressA = !!this.getProgressInsight(this.exerciseProgressHistory);
+        const hasProgressB = !!this.getProgressInsight(this.supersetProgressHistory);
+        progressContainer.style.display = hasProgressA || hasProgressB ? 'grid' : 'none';
+
+        const sections = [
+            {
+                badge: 'A',
+                slot: this.currentSlot,
+                advice: this.supersetCoachingAdviceA,
+                name: nameA,
+                toneClass: 'badge-a'
+            },
+            {
+                badge: 'B',
+                slot: this.supersetSlot,
+                advice: this.supersetCoachingAdviceB,
+                name: nameB,
+                toneClass: 'badge-b'
+            }
+        ].filter(section => section.slot && section.advice);
+
+        if (!sections.length) {
+            decisionCard.style.display = 'none';
+            return;
+        }
+
+        decisionGrid.innerHTML = sections.map(section => {
+            const items = this.buildCoachDecisionItems(section.advice, section.slot);
+            if (!items.length) return '';
+
+            return `
+                <div class="superset-decision-panel">
+                    <div class="superset-decision-panel-header">
+                        <div class="superset-decision-panel-title">
+                            <span class="superset-input-badge ${section.toneClass}">${section.badge}</span>
+                            <span>${section.name}</span>
+                        </div>
+                        <span class="coach-decision-confidence">Confiance ${Math.round((section.advice.contextConfidence || 0.6) * 100)}%</span>
+                    </div>
+                    <div class="coach-decision-grid">
+                        ${items.map(item => `
+                            <div class="coach-decision-item">
+                                <span class="coach-decision-item-label">${item.label}</span>
+                                <span class="coach-decision-item-value">${item.value}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        confidenceEl.textContent = `${sections.length} lectures coach`;
+        decisionCard.style.display = decisionGrid.innerHTML.trim() ? 'block' : 'none';
     }
 
     renderExerciseNotes() {
