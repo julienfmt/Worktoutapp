@@ -987,16 +987,228 @@ class App {
         this.renderWeekPrediction(prediction);
     }
 
-    getFireScoreIntensity(streakCount) {
-        const clamped = Math.min(Math.max(streakCount, 0), 52);
-        return (0.58 + (clamped / 52) * 1.35).toFixed(2);
-    }
-
     getStreakClockIconSVG() {
         return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9"></circle>
             <path d="M12 7v5l3.5 2"></path>
         </svg>`;
+    }
+
+    hexToRgbObject(hex) {
+        const safe = String(hex || '').trim().replace('#', '');
+        const full = safe.length === 3
+            ? safe.split('').map((char) => char + char).join('')
+            : safe.padEnd(6, '0').slice(0, 6);
+
+        return {
+            r: Number.parseInt(full.slice(0, 2), 16),
+            g: Number.parseInt(full.slice(2, 4), 16),
+            b: Number.parseInt(full.slice(4, 6), 16)
+        };
+    }
+
+    mixHexColors(hexA, hexB, amount = 0.5) {
+        const t = Math.min(1, Math.max(0, amount));
+        const a = this.hexToRgbObject(hexA);
+        const b = this.hexToRgbObject(hexB);
+
+        const r = Math.round(a.r + (b.r - a.r) * t);
+        const g = Math.round(a.g + (b.g - a.g) * t);
+        const bValue = Math.round(a.b + (b.b - a.b) * t);
+
+        return `rgb(${r}, ${g}, ${bValue})`;
+    }
+
+    rgbaFromHex(hex, alpha) {
+        const { r, g, b } = this.hexToRgbObject(hex);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    getStreakVisualConfig(streakCount) {
+        const clamped = Math.min(Math.max(Number(streakCount) || 0, 0), 52);
+
+        const stages = [
+            {
+                score: 0,
+                colors: ['#ffe35a', '#ffbf1f', '#ff9200', '#ff5f0f'],
+                glow: '#ff9d14',
+                halo: '#ffcb47',
+                shadow: '#8f3a00',
+                sparkOpacity: 0.12,
+                flameOpacity: 0.3,
+                motionClass: 'is-calm'
+            },
+            {
+                score: 4,
+                colors: ['#ffd93f', '#ffab14', '#ff7b00', '#ff4d0a'],
+                glow: '#ff8a12',
+                halo: '#ffc43f',
+                shadow: '#8d2f00',
+                sparkOpacity: 0.18,
+                flameOpacity: 0.38,
+                motionClass: 'is-warm'
+            },
+            {
+                score: 8,
+                colors: ['#ffc926', '#ff8d00', '#ff5a00', '#f23800'],
+                glow: '#ff7108',
+                halo: '#ffb22a',
+                shadow: '#851f00',
+                sparkOpacity: 0.34,
+                flameOpacity: 0.46,
+                motionClass: 'is-warm'
+            },
+            {
+                score: 12,
+                colors: ['#ffb01f', '#ff6200', '#ff2b00', '#d40000'],
+                glow: '#ff4d0d',
+                halo: '#ff9631',
+                shadow: '#7f1200',
+                sparkOpacity: 0.44,
+                flameOpacity: 0.56,
+                motionClass: 'is-hot'
+            },
+            {
+                score: 16,
+                colors: ['#ffad22', '#ff4f0e', '#ff1720', '#a40010'],
+                glow: '#ff3520',
+                halo: '#ff7a40',
+                shadow: '#710813',
+                sparkOpacity: 0.52,
+                flameOpacity: 0.62,
+                motionClass: 'is-hot'
+            },
+            {
+                score: 24,
+                colors: ['#ff9a3a', '#ff4d5f', '#ff117c', '#bb005f'],
+                glow: '#ff2d75',
+                halo: '#ff7db2',
+                shadow: '#700038',
+                sparkOpacity: 0.58,
+                flameOpacity: 0.68,
+                motionClass: 'is-pink'
+            },
+            {
+                score: 32,
+                colors: ['#ff8fd0', '#ff3ea7', '#ff007f', '#b30066'],
+                glow: '#ff2395',
+                halo: '#ff7fcc',
+                shadow: '#650038',
+                sparkOpacity: 0.64,
+                flameOpacity: 0.74,
+                motionClass: 'is-pink'
+            },
+            {
+                score: 40,
+                colors: ['#d48cff', '#a33cff', '#6e1fff', '#4215cf'],
+                glow: '#7d36ff',
+                halo: '#bc78ff',
+                shadow: '#2f116f',
+                sparkOpacity: 0.72,
+                flameOpacity: 0.8,
+                motionClass: 'is-purple'
+            },
+            {
+                score: 52,
+                colors: ['#e2a5ff', '#b24cff', '#6e20ff', '#2e0fc9'],
+                glow: '#8141ff',
+                halo: '#c58cff',
+                shadow: '#240c72',
+                sparkOpacity: 0.78,
+                flameOpacity: 0.88,
+                motionClass: 'is-purple-max'
+            }
+        ];
+
+        let start = stages[0];
+        let end = stages[stages.length - 1];
+
+        for (let index = 0; index < stages.length - 1; index += 1) {
+            const current = stages[index];
+            const next = stages[index + 1];
+
+            if (clamped <= next.score) {
+                start = current;
+                end = next;
+                break;
+            }
+        }
+
+        const span = Math.max(1, end.score - start.score);
+        const t = Math.min(1, Math.max(0, (clamped - start.score) / span));
+
+        const gradient = start.colors.map((color, index) => this.mixHexColors(color, end.colors[index], t));
+        const glow = this.mixHexColors(start.glow, end.glow, t);
+        const halo = this.mixHexColors(start.halo, end.halo, t);
+        const shadow = this.mixHexColors(start.shadow, end.shadow, t);
+        const sparkOpacity = (start.sparkOpacity + (end.sparkOpacity - start.sparkOpacity) * t).toFixed(2);
+        const flameOpacity = (start.flameOpacity + (end.flameOpacity - start.flameOpacity) * t).toFixed(2);
+
+        const scale = (1 + clamped * 0.0026).toFixed(3);
+        const floatDistance = `${Math.min(10, 5 + clamped * 0.08).toFixed(2)}px`;
+        const animationSeconds = `${Math.max(5.2, 7.2 - clamped * 0.03).toFixed(2)}s`;
+
+        return {
+            c1: gradient[0],
+            c2: gradient[1],
+            c3: gradient[2],
+            c4: gradient[3],
+            glow,
+            glowSoft: this.rgbaFromHex(glow, 0.18),
+            glowMid: this.rgbaFromHex(glow, 0.32),
+            halo,
+            haloSoft: this.rgbaFromHex(halo, 0.32),
+            shadow,
+            shadowSoft: this.rgbaFromHex(shadow, 0.28),
+            shadowDeep: this.rgbaFromHex(shadow, 0.38),
+            sparkOpacity,
+            flameOpacity,
+            scale,
+            floatDistance,
+            animationSeconds,
+            motionClass: end.motionClass
+        };
+    }
+
+    renderStreakScoreVisual(score) {
+        const theme = this.getStreakVisualConfig(score);
+
+        return `
+            <div
+                class="streakv4-score-visual ${theme.motionClass}"
+                style="
+                    --streak-core-1:${theme.c1};
+                    --streak-core-2:${theme.c2};
+                    --streak-core-3:${theme.c3};
+                    --streak-core-4:${theme.c4};
+                    --streak-glow:${theme.glow};
+                    --streak-glow-soft:${theme.glowSoft};
+                    --streak-glow-mid:${theme.glowMid};
+                    --streak-halo:${theme.halo};
+                    --streak-halo-soft:${theme.haloSoft};
+                    --streak-shadow:${theme.shadow};
+                    --streak-shadow-soft:${theme.shadowSoft};
+                    --streak-shadow-deep:${theme.shadowDeep};
+                    --streak-spark-opacity:${theme.sparkOpacity};
+                    --streak-flame-opacity:${theme.flameOpacity};
+                    --streak-score-scale:${theme.scale};
+                    --streak-float-distance:${theme.floatDistance};
+                    --streak-flow-duration:${theme.animationSeconds};
+                "
+                aria-label="Score streak ${score}"
+            >
+                <span class="streakv4-score-flame flame-back" aria-hidden="true"></span>
+                <span class="streakv4-score-flame flame-front" aria-hidden="true"></span>
+                <span class="streakv4-score-number" data-score="${score}">${score}</span>
+                <span class="streakv4-score-spark spark-a" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-b" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-c" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-d" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-e" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-f" aria-hidden="true"></span>
+                <span class="streakv4-score-spark spark-g" aria-hidden="true"></span>
+            </div>
+        `;
     }
 
     renderStreakCard(data, prediction, level, nextLevel) {
@@ -1071,13 +1283,8 @@ class App {
             <div class="streakv4-shell">
                 <div class="streakv4-hero">
                     <div class="streakv4-score">
-                        <fire-score
-                            class="streakv4-fire"
-                            value="${effectiveStreakCount}"
-                            intensity="${this.getFireScoreIntensity(effectiveStreakCount)}"
-                            label="Score streak ${effectiveStreakCount}"
-                        ></fire-score>
-                      
+                        ${this.renderStreakScoreVisual(effectiveStreakCount)}
+                        <div class="streakv4-score-label">STREAK</div>
                     </div>
 
                     <div class="streakv4-meta">
@@ -1124,9 +1331,7 @@ class App {
             </div>
         `;
 
-        container.classList.add('streak-card-v4');
-        container.classList.toggle('is-week-complete', isComplete);
-        container.classList.remove('week-validated');
+        container.className = `streak-card streak-card-v4${isComplete ? ' is-week-complete' : ''}`;
     }
     
     getLevelIconSVG(levelName) {
@@ -2003,11 +2208,11 @@ class App {
         const container = document.getElementById('lms-muscle-list');
         container.innerHTML = '';
         
-        this.lmsScoresTemp = {}; // Temporary storage before confirm
+        this.lmsScoresTemp = {}; // Only persist answers the user actually touched
+        this.lmsScoresTouched = {};
         
         for (const muscleId of muscleGroups) {
             const info = this.getMuscleGroupInfo(muscleId);
-            this.lmsScoresTemp[muscleId] = 1; // Default to "Ready"
             
             const muscleItem = document.createElement('div');
             muscleItem.className = 'lms-muscle-item';
@@ -2048,12 +2253,21 @@ class App {
             // Confirm button
             const confirmBtn = document.getElementById('btn-confirm-lms');
             const handleConfirm = async () => {
-                // Save LMS scores to current workout
-                this.currentWorkout.lmsScores = { ...this.lmsScoresTemp };
+                const confirmedScores = Object.entries(this.lmsScoresTemp)
+                    .filter(([muscleId]) => this.lmsScoresTouched?.[muscleId])
+                    .reduce((acc, [muscleId, value]) => {
+                        acc[muscleId] = value;
+                        return acc;
+                    }, {});
+
+                // Save only explicit LMS answers to current workout
+                this.currentWorkout.lmsScores = confirmedScores;
                 await db.saveCurrentWorkout(this.currentWorkout);
                 
-                // Save LMS history for tracking
-                await this.saveLMSHistory(this.lmsScoresTemp);
+                // Save LMS history for tracking only if the user answered something
+                if (Object.keys(confirmedScores).length > 0) {
+                    await this.saveLMSHistory(confirmedScores);
+                }
                 
                 sheet.classList.remove('active');
                 confirmBtn.removeEventListener('click', handleConfirm);
@@ -2067,9 +2281,8 @@ class App {
             
             // Backdrop close
             sheet.querySelector('.sheet-backdrop').onclick = () => {
-                // Use default values if closed
-                this.currentWorkout.lmsScores = { ...this.lmsScoresTemp };
                 sheet.classList.remove('active');
+                confirmBtn.removeEventListener('click', handleConfirm);
                 resolve();
             };
         });
@@ -2078,6 +2291,7 @@ class App {
     handleLMSSliderChange(e, muscleId) {
         const value = parseInt(e.target.value);
         this.lmsScoresTemp[muscleId] = value;
+        this.lmsScoresTouched[muscleId] = true;
         
         const muscleItem = e.target.closest('.lms-muscle-item');
         const labels = muscleItem.querySelectorAll('.lms-labels span');
@@ -2167,9 +2381,9 @@ class App {
         if (adaptationPercent >= 85) {
             adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} sont bien récupérés. C'est le moment idéal pour progresser !`;
         } else if (adaptationPercent >= 50) {
-            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} récupèrent encore. On adapte le volume pour toi.`;
+            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} récupèrent encore. Le coach ajuste surtout ses suggestions.`;
         } else {
-            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} ont besoin de repos. Séance allégée aujourd'hui.`;
+            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} ont besoin de repos. Le coach te proposera une version plus prudente si besoin.`;
         }
         document.getElementById('adaptation-message').textContent = adaptationMessage;
         
@@ -2220,13 +2434,11 @@ class App {
         const sessionContext = options.sessionContext || null;
         const adjusted = { ...modifier };
 
+        // LMS is a readiness input, not a second punishment layer on top of session fatigue.
         if (sessionContext?.fatigueLevel === 'high') {
-            adjusted.setChange = Math.min(adjusted.setChange, -1);
-            adjusted.loadChange = Math.min(adjusted.loadChange, -2.5);
-            adjusted.message = `${adjusted.message} Fatigue intra-séance élevée, on reste conservateur.`;
+            adjusted.message = `${adjusted.message} La séance sera lue de façon prudente, sans cumuler les sanctions de volume.`;
         } else if (sessionContext?.fatigueLevel === 'moderate' && sessionContext.maxPrimaryFatigue >= 3) {
-            adjusted.setChange = Math.min(adjusted.setChange, 0);
-            adjusted.message = `${adjusted.message} Le muscle a déjà travaillé aujourd'hui, on évite de forcer le volume.`;
+            adjusted.message = `${adjusted.message} Le muscle a déjà travaillé aujourd'hui, donc le coach restera surtout prudent sur les suggestions.`;
         }
 
         return adjusted;
@@ -2295,9 +2507,13 @@ class App {
         const primaryMuscles = muscleMapping.primary;
         let worstPrimaryLMS = 0;
         let worstPrimaryMuscle = primaryMuscles[0];
+        let hasPrimaryLMSData = false;
         
         for (const muscle of primaryMuscles) {
             const lmsScore = this.currentWorkout.lmsScores[muscle];
+            if (Object.prototype.hasOwnProperty.call(this.currentWorkout.lmsScores, muscle)) {
+                hasPrimaryLMSData = true;
+            }
             if (lmsScore !== undefined && lmsScore > worstPrimaryLMS) {
                 worstPrimaryLMS = lmsScore;
                 worstPrimaryMuscle = muscle;
@@ -2305,7 +2521,7 @@ class App {
         }
         
         // If no LMS data for primary muscles, no adjustment needed
-        if (worstPrimaryLMS === 0 && !this.currentWorkout.lmsScores[worstPrimaryMuscle]) {
+        if (!hasPrimaryLMSData) {
             return null;
         }
         
@@ -2471,7 +2687,9 @@ class App {
 
     buildCoachSetPlan(slot = this.currentSlot, advice = this.currentCoachingAdvice) {
         const programmedSets = Math.max(0, Number(slot?.sets) || 0);
-        const userOverride = this.userOverrideSets === true;
+        const slotData = slot?.id ? this.currentWorkout?.slots?.[slot.id] : null;
+        const targetState = this.getSlotTargetState(slot, slotData);
+        const volumeDecision = targetState.decision || null;
         const lmsAdjustedSets = Number(this.currentLMSData?.adjustedSets);
         const lmsOriginalSets = Number(this.currentLMSData?.originalSets || programmedSets);
         const directSuggestedSets = Number.isFinite(Number(advice?.suggestedSets))
@@ -2507,10 +2725,13 @@ class App {
         const increaseCandidate = candidates
             .filter(candidate => candidate.sets > programmedSets)
             .sort((a, b) => b.sets - a.sets)[0] || null;
-
-        const effectiveSets = (!userOverride && reductionCandidate)
-            ? reductionCandidate.sets
-            : programmedSets;
+        const suggestedReductionSets = reductionCandidate?.sets || null;
+        const completedSets = (slotData?.sets || []).filter(set => set?.completed).length;
+        const dismissedSuggestedSets = Number.isFinite(Number(volumeDecision?.dismissedSuggestedSets))
+            ? Number(volumeDecision.dismissedSuggestedSets)
+            : null;
+        const reductionAccepted = targetState.activeTargetSets < programmedSets;
+        const activeTargetSets = targetState.activeTargetSets;
 
         const reasonMap = {
             deload: 'deload',
@@ -2521,22 +2742,28 @@ class App {
 
         return {
             programmedSets,
-            effectiveSets,
+            activeTargetSets,
             directSuggestedSets,
+            suggestedReductionSets,
             reductionCandidate,
             increaseCandidate,
-            userOverride,
-            hasAutoReduction: Boolean(reductionCandidate) && !userOverride,
+            reductionAccepted,
+            acceptedDecision: volumeDecision,
+            hasSuggestedReduction: Boolean(reductionCandidate),
             hasOptionalIncrease: Boolean(increaseCandidate),
-            continueAvailable: Boolean(reductionCandidate) && !userOverride,
+            showReductionPrompt: Boolean(reductionCandidate)
+                && !reductionAccepted
+                && completedSets >= (suggestedReductionSets || programmedSets + 1)
+                && dismissedSuggestedSets !== suggestedReductionSets,
             reductionReason: reductionCandidate ? (reasonMap[reductionCandidate.source] || 'gestion du volume') : '',
-            displayDelta: effectiveSets - programmedSets,
+            displayDelta: (reductionAccepted ? activeTargetSets : suggestedReductionSets || programmedSets) - programmedSets,
             optionalDelta: increaseCandidate ? increaseCandidate.sets - programmedSets : 0
         };
     }
 
     getCoachCardChipText(advice, slot = this.currentSlot, setPlan = this.buildCoachSetPlan(slot, advice)) {
-        if (setPlan.hasAutoReduction) return 'Volume réduit';
+        if (setPlan.reductionAccepted) return 'Volume validé';
+        if (setPlan.showReductionPrompt) return 'Suggestion volume';
         if (advice?.topSetProgression) return 'Top set';
         if (slot?.progressionMode === 'capped_load') return 'Charge plafonnée';
         if (slot?.progressionMode === 'bodyweight') return 'Poids du corps';
@@ -2645,8 +2872,10 @@ class App {
             primary = `Le coach veut une série <strong>maîtrisée, régulière et propre</strong>, sans gaspiller d'énergie inutile.`;
         }
 
-        if (setPlan.hasAutoReduction) {
-            primary += ` Aujourd'hui, le coach borne le volume à <strong>${setPlan.effectiveSets} série${setPlan.effectiveSets > 1 ? 's' : ''}</strong>.`;
+        if (setPlan.reductionAccepted) {
+            primary += ` Tu as validé un arrêt à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong> aujourd'hui.`;
+        } else if (setPlan.showReductionPrompt) {
+            primary += ` Le coach <strong>propose</strong> de s'arrêter à <strong>${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</strong>, sans l'imposer.`;
         } else if (setPlan.hasOptionalIncrease) {
             primary += ` Une <strong>${setPlan.increaseCandidate.sets}e série</strong> reste possible si la qualité tient.`;
         }
@@ -3344,14 +3573,7 @@ class App {
         // Check for LMS volume adjustment
         const lmsData = await this.getLMSDataForSlot(this.currentSlot);
         this.currentLMSData = lmsData; // Store for later use
-        
-        if (lmsData && lmsData.adjustedSets !== lmsData.originalSets) {
-            const setsEl = document.getElementById('exercise-sets');
-            const changeSign = lmsData.setChange > 0 ? '+' : '';
-            setsEl.innerHTML = `${lmsData.adjustedSets} <small style="opacity:0.7">(${changeSign}${lmsData.setChange})</small>`;
-        } else {
-            document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
-        }
+        document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
         
         document.getElementById('exercise-reps').textContent = `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}`;
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
@@ -3696,12 +3918,13 @@ class App {
         }
 
         const repCeiling = options.repCeiling || slot.repsMax;
-        const targetArray = this.genTargetReps(slot.repsMin, repCeiling, workout.sets.length);
+        const targetSetCount = Math.max(workout.targetSetCount || workout.sets.length, 1);
+        const targetArray = this.genTargetReps(slot.repsMin, repCeiling, targetSetCount);
         const threshold = options.threshold ?? (slot.type === 'isolation' ? 1 : 0.75);
         const hits = workout.sets.reduce((count, set, index) => {
             return count + ((set.reps || 0) >= (targetArray[index] || repCeiling) ? 1 : 0);
         }, 0);
-        const successRate = hits / Math.max(workout.sets.length, 1);
+        const successRate = hits / targetSetCount;
         const avgRpe = workout.avgRpe ?? null;
         const inEffortZone = avgRpe == null || (avgRpe >= 7 && avgRpe <= 9.5);
 
@@ -5409,10 +5632,15 @@ class App {
                 value: `Le déclencheur principal est <strong>${slot.capDetection.reasons.map(reason => reasonMap[reason] || reason).join(' • ')}</strong>.`
             });
         }
-        if (setPlan.hasAutoReduction) {
+        if (setPlan.reductionAccepted) {
             items.push({
                 label: 'Volume',
-                value: `Le coach retient <strong>${setPlan.effectiveSets} série${setPlan.effectiveSets > 1 ? 's' : ''}</strong> au lieu de ${slot.sets} aujourd'hui.`
+                value: `Tu as accepté <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong> au lieu de ${slot.sets} aujourd'hui.`
+            });
+        } else if (setPlan.showReductionPrompt) {
+            items.push({
+                label: 'Volume',
+                value: `Le coach suggère <strong>${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</strong> aujourd'hui, mais le plan de base reste ${slot.sets}.`
             });
         } else if (setPlan.hasOptionalIncrease) {
             items.push({
@@ -5580,19 +5808,20 @@ class App {
         const programmedSets = setPlan.programmedSets;
         const coachingSuggestedSets = setPlan.directSuggestedSets;
         const isDeloadAdvice = advice?.type === 'deload' || advice?.type === 'reactive_deload' || advice?.type === 'deload_mini' || advice?.isDeload;
-        const effectiveSets = setPlan.effectiveSets;
+        const activeTargetSets = setPlan.activeTargetSets;
+        const displayedSets = setPlan.reductionAccepted ? activeTargetSets : programmedSets;
         
         // Store for use in completion check
-        this.currentEffectiveSets = effectiveSets;
+        this.currentActiveTargetSets = activeTargetSets;
         this.coachingSuggestedSets = coachingSuggestedSets;
         this.isDeloadAdvice = isDeloadAdvice;
 
         const setsLabelEl = document.getElementById('exercise-sets');
         if (setsLabelEl) {
-            if (effectiveSets !== programmedSets) {
-                const delta = effectiveSets - programmedSets;
+            if (setPlan.reductionAccepted && activeTargetSets !== programmedSets) {
+                const delta = activeTargetSets - programmedSets;
                 const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
-                setsLabelEl.innerHTML = `${effectiveSets} <small style="opacity:0.7">(${deltaLabel})</small>`;
+                setsLabelEl.innerHTML = `${activeTargetSets} <small style="opacity:0.7">(${deltaLabel})</small>`;
             } else {
                 setsLabelEl.textContent = programmedSets;
             }
@@ -5600,11 +5829,11 @@ class App {
         
         // Use dynamic target reps from genTargetReps
         const { repsMin, repsMax } = this.currentSlot;
-        const targetRepsArray = this.genTargetReps(repsMin, repsMax, effectiveSets);
+        const targetRepsArray = this.genTargetReps(repsMin, repsMax, displayedSets);
         const advisedTargetRepsArray = this.getAdviceTargetRepsArray(advice, targetRepsArray);
         const getTargetReps = (setIndex) => targetRepsArray[setIndex] || repsMax;
 
-        for (let i = 0; i < effectiveSets; i++) {
+        for (let i = 0; i < displayedSets; i++) {
             const setData = slotData.sets[i] || {};
             const isCompleted = setData.completed;
             
@@ -5748,48 +5977,89 @@ class App {
         }
 
         const completedSets = slotData.sets.filter(s => s.completed).length;
-        if (setPlan.continueAvailable) {
-            const hiddenStart = effectiveSets + 1;
-            const hiddenEnd = programmedSets;
-            const hiddenLabel = hiddenStart === hiddenEnd
-                ? `Série ${hiddenStart}`
-                : `Séries ${hiddenStart}-${hiddenEnd}`;
+        const shouldShowReductionPrompt = setPlan.showReductionPrompt
+            && setPlan.suggestedReductionSets
+            && completedSets >= setPlan.suggestedReductionSets
+            && completedSets < programmedSets;
+        if (shouldShowReductionPrompt) {
+            const nextProgrammedSet = Math.min(programmedSets, completedSets + 1);
+            const nextProgrammedLabel = `Série ${nextProgrammedSet}`;
             const ghostCard = document.createElement('div');
             ghostCard.className = 'series-card series-card-ghost';
             ghostCard.innerHTML = `
                 <div class="series-header">
-                    <span class="series-number">${hiddenLabel}</span>
-                    <span class="series-ghost-badge">En réserve</span>
+                    <span class="series-number">Suggestion coach</span>
+                    <span class="series-ghost-badge">Optionnelle</span>
                 </div>
                 <div class="series-ghost-copy">
-                    <span class="series-ghost-title">Le coach préfère s'arrêter à ${effectiveSets} série${effectiveSets > 1 ? 's' : ''}</span>
-                    <span class="series-ghost-note">${effectiveSets}/${programmedSets} retenues aujourd'hui • ${setPlan.reductionReason}</span>
+                    <span class="series-ghost-title">Le coach propose de s'arrêter à ${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</span>
+                    <span class="series-ghost-note">${completedSets}/${programmedSets} faites • ${setPlan.reductionReason} • le plan reste à ${programmedSets} tant que tu n'acceptes pas.</span>
                 </div>
-                <button class="btn btn-continue-sets" id="btn-continue-sets">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    Continuer sur ${hiddenLabel.toLowerCase()}
-                </button>
+                <div class="series-ghost-actions">
+                    <button class="btn btn-secondary btn-ghost-continue" id="btn-continue-sets">
+                        Continuer ${nextProgrammedLabel.toLowerCase()}
+                    </button>
+                    <button class="btn btn-primary btn-ghost-accept" id="btn-accept-set-reduction">
+                        Accepter ${setPlan.suggestedReductionSets}/${programmedSets} aujourd'hui
+                    </button>
+                </div>
             `;
             container.appendChild(ghostCard);
         }
-
-        // Check if exercise is complete (use effective sets, not programmed sets)
-        const targetSets = this.currentEffectiveSets || this.currentSlot.sets;
-        if (completedSets >= targetSets && !this.isReviewMode) {
-            this.showExerciseSummary();
-        }
     }
     
-    continueSetsOverride() {
+    async continueSetsOverride() {
+        const slotData = this.currentWorkout?.slots?.[this.currentSlot?.id];
+        const setPlan = this.buildCoachSetPlan(this.currentSlot, this.currentCoachingAdvice);
+        if (!slotData || !setPlan.suggestedReductionSets) return;
+
         this.userOverrideSets = true;
+        slotData.coachVolumeDecision = {
+            ...(slotData.coachVolumeDecision || {}),
+            status: 'continue_programmed',
+            dismissedSuggestedSets: setPlan.suggestedReductionSets,
+            programmedSets: setPlan.programmedSets,
+            suggestedSets: setPlan.suggestedReductionSets,
+            source: setPlan.reductionCandidate?.source || null,
+            reason: setPlan.reductionReason,
+            decidedAt: Date.now()
+        };
+
+        await db.saveCurrentWorkout(this.currentWorkout);
+
         if (this.isUnilateralMode) {
             this.renderUnilateralSeries();
         } else {
             this.renderSeries();
         }
+    }
+
+    async acceptSuggestedSetReduction() {
+        const slotData = this.currentWorkout?.slots?.[this.currentSlot?.id];
+        const setPlan = this.buildCoachSetPlan(this.currentSlot, this.currentCoachingAdvice);
+        if (!slotData || !setPlan.suggestedReductionSets) return;
+
+        slotData.coachVolumeDecision = {
+            ...(slotData.coachVolumeDecision || {}),
+            status: 'accepted_reduction',
+            acceptedTargetSets: setPlan.suggestedReductionSets,
+            programmedSets: setPlan.programmedSets,
+            suggestedSets: setPlan.suggestedReductionSets,
+            source: setPlan.reductionCandidate?.source || null,
+            reason: setPlan.reductionReason,
+            decidedAt: Date.now(),
+            protectedFromTrend: true
+        };
+
+        await db.saveCurrentWorkout(this.currentWorkout);
+
+        const completedSets = slotData.sets.filter(s => s?.completed).length;
+        if (completedSets >= setPlan.suggestedReductionSets && !this.isReviewMode) {
+            setTimeout(() => this.showExerciseSummary(), 150);
+            return;
+        }
+
+        this.renderSeries();
     }
     
     // ===== Unilateral Series Rendering =====
@@ -6090,7 +6360,8 @@ class App {
             reps,
             completed: true,
             timestamp: Date.now(),
-            rpe: null // Will be set during rest timer if user provides it
+            rpe: null, // Will be set during rest timer if user provides it
+            rpeSource: null
         };
         
         // Track last completed set for RPE capture
@@ -6115,9 +6386,9 @@ class App {
 
         this.renderSeries();
 
-        // Check if all sets are complete (use effective sets for deload flexibility)
+        // Check if all sets are complete against the accepted target only
         const completedSets = slotData.sets.filter(s => s.completed).length;
-        const targetSets = this.currentEffectiveSets || this.currentSlot.sets;
+        const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
         if (completedSets >= targetSets) {
             // Show summary after a brief delay
             setTimeout(() => this.showExerciseSummary(), 300);
@@ -6318,7 +6589,7 @@ class App {
         const rpeDescriptions = {
             6: { text: 'Facile • ~4 reps en réserve', emoji: '😎' },
             7: { text: 'Modéré • ~3 reps en réserve', emoji: '🙂' },
-            8: { text: 'Effort sérieux • ~2 reps en réserve', emoji: '😤' },
+            8: { text: 'Série normale • tu es allé au bout proprement', emoji: '😤' },
             9: { text: 'Très dur • ~1 rep en réserve', emoji: '🥵' },
             10: { text: 'Échec musculaire • 0 rep en réserve', emoji: '💀' }
         };
@@ -6341,24 +6612,34 @@ class App {
     resetRpeSlider() {
         const slider = document.getElementById('rpe-slider');
         slider.value = 8;
+        slider.dataset.touched = 'false';
+        const rpeSection = document.getElementById('rpe-section');
+        if (rpeSection) {
+            rpeSection.dataset.touched = 'false';
+        }
         this.updateRpeDisplay(8);
     }
     
     async saveRpeToLastSet() {
         if (this.lastCompletedSetIndex === undefined || !this.currentSlot) return;
         
-        const rpe = parseInt(document.getElementById('rpe-slider').value);
+        const slider = document.getElementById('rpe-slider');
+        const rpe = parseInt(slider.value);
+        const rpeTouched = slider.dataset.touched === 'true';
+        const rpeSource = rpeTouched ? 'user' : 'default';
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const reps = this.lastCompletedSetReps;
         const weight = this.lastCompletedSetWeight;
-        const isLastSet = this.lastCompletedSetIndex >= this.currentSlot.sets - 1;
+        const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
+        const isLastSet = this.lastCompletedSetIndex >= targetSets - 1;
         
         if (slotData && slotData.sets[this.lastCompletedSetIndex]) {
             slotData.sets[this.lastCompletedSetIndex].rpe = rpe;
+            slotData.sets[this.lastCompletedSetIndex].rpeSource = rpeSource;
             await db.saveCurrentWorkout(this.currentWorkout);
             
             // === INTRA-SESSION WEIGHT ADJUSTMENTS ===
-            if (!isLastSet) {
+            if (!isLastSet && rpeTouched) {
                 // HIGH RPE (>= 9): Suggest weight reduction for next sets
                 if (rpe >= 9) {
                     await this.checkAutoBackoff(rpe);
@@ -6370,7 +6651,7 @@ class App {
             }
             
             // === HOT/COLD DAY DETECTION after set 1 ===
-            if (this.lastCompletedSetIndex === 0 && this.avgPerformance) {
+            if (this.lastCompletedSetIndex === 0 && this.avgPerformance && rpeTouched) {
                 this.detectDayStatus(rpe);
             }
 
@@ -6834,6 +7115,12 @@ class App {
                 if (!slot) continue;
 
                 const baseExerciseId = slot.activeExercise || slot.name;
+                const targetState = this.getSlotTargetState(slot, slotData);
+                const volumeDecision = slotData.coachVolumeDecision || null;
+                const targetSetCount = targetState.activeTargetSets || slot.sets || 0;
+                const programmedSetCount = targetState.programmedSets || slot.sets || 0;
+                const volumeDecisionType = volumeDecision?.status || 'programmed';
+                const volumeProtected = volumeDecision?.protectedFromTrend === true;
                 const hasUnilateralData = slotData.setsLeft && slotData.setsRight &&
                     (slotData.setsLeft.some(set => set?.completed) || slotData.setsRight.some(set => set?.completed));
 
@@ -6849,7 +7136,12 @@ class App {
                             setNumber: i + 1,
                             weight: setData.weight,
                             reps: setData.reps,
-                            rpe: setData.rpe || 8,
+                            rpe: setData.rpe ?? 8,
+                            rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
+                            targetSetCount,
+                            programmedSetCount,
+                            volumeDecisionType,
+                            volumeProtected,
                             exerciseNote: slotData.exerciseNote || '',
                             sessionNote: this.currentWorkout.sessionNote || '',
                             date: saveDate
@@ -6867,7 +7159,12 @@ class App {
                             setNumber: i + 1,
                             weight: setData.weight,
                             reps: setData.reps,
-                            rpe: setData.rpe || 8,
+                            rpe: setData.rpe ?? 8,
+                            rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
+                            targetSetCount,
+                            programmedSetCount,
+                            volumeDecisionType,
+                            volumeProtected,
                             exerciseNote: slotData.exerciseNote || '',
                             sessionNote: this.currentWorkout.sessionNote || '',
                             date: saveDate
@@ -6889,7 +7186,12 @@ class App {
                         setNumber: i + 1,
                         weight: setData.weight,
                         reps: setData.reps,
-                        rpe: setData.rpe || 8,
+                        rpe: setData.rpe ?? 8,
+                        rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
+                        targetSetCount,
+                        programmedSetCount,
+                        volumeDecisionType,
+                        volumeProtected,
                         exerciseNote: slotData.exerciseNote || '',
                         sessionNote: this.currentWorkout.sessionNote || '',
                         date: saveDate
@@ -8406,6 +8708,12 @@ class App {
                 this.continueSetsOverride();
                 return;
             }
+
+            const acceptReductionBtn = e.target.closest('#btn-accept-set-reduction');
+            if (acceptReductionBtn) {
+                this.acceptSuggestedSetReduction();
+                return;
+            }
         };
 
         // Auto-save on input change (including superset inputs)
@@ -8507,13 +8815,25 @@ class App {
         
         // RPE Slider
         const rpeSlider = document.getElementById('rpe-slider');
-        rpeSlider.oninput = () => this.updateRpeDisplay(parseInt(rpeSlider.value));
+        rpeSlider.oninput = () => {
+            rpeSlider.dataset.touched = 'true';
+            const rpeSection = document.getElementById('rpe-section');
+            if (rpeSection) {
+                rpeSection.dataset.touched = 'true';
+            }
+            this.updateRpeDisplay(parseInt(rpeSlider.value));
+        };
         
         // RPE emoji clicks
         document.querySelectorAll('.rpe-labels span').forEach(span => {
             span.onclick = () => {
                 const rpe = parseInt(span.dataset.rpe);
                 rpeSlider.value = rpe;
+                rpeSlider.dataset.touched = 'true';
+                const rpeSection = document.getElementById('rpe-section');
+                if (rpeSection) {
+                    rpeSection.dataset.touched = 'true';
+                }
                 this.updateRpeDisplay(rpe);
             };
         });
@@ -10052,6 +10372,67 @@ class App {
         return Math.round((value || 0) * 2) / 2;
     }
 
+    getSetRpeSource(set) {
+        if (!set) return 'estimated';
+        if (set.rpe != null) {
+            return set.rpeSource || 'legacy';
+        }
+        return 'estimated';
+    }
+
+    hasExplicitRpe(set) {
+        if (!set || set.rpe == null) return false;
+        const source = this.getSetRpeSource(set);
+        return source !== 'default' && source !== 'estimated';
+    }
+
+    getFatigueSignalWeight(set) {
+        switch (this.getSetRpeSource(set)) {
+            case 'user':
+                return 1;
+            case 'legacy':
+                return 0.8;
+            case 'default':
+                return 0.5;
+            case 'estimated':
+            default:
+                return 0.4;
+        }
+    }
+
+    getSetRpeForFatigue(set, slotMeta = null) {
+        return {
+            rpe: set?.rpe != null ? set.rpe : this.estimateSetRpe(set, slotMeta),
+            source: this.getSetRpeSource(set),
+            fatigueWeight: this.getFatigueSignalWeight(set)
+        };
+    }
+
+    getSlotCoachVolumeDecision(slotId = this.currentSlot?.id) {
+        if (!slotId || !this.currentWorkout?.slots) return null;
+        return this.currentWorkout.slots[slotId]?.coachVolumeDecision || null;
+    }
+
+    getSlotTargetState(slot = this.currentSlot, slotData = null) {
+        const programmedSets = Math.max(0, Number(slot?.sets) || 0);
+        const resolvedSlotData = slotData || (slot?.id ? this.currentWorkout?.slots?.[slot.id] : null) || null;
+        const decision = resolvedSlotData?.coachVolumeDecision || null;
+        const acceptedTargetSets = Number.isFinite(Number(decision?.acceptedTargetSets))
+            && Number(decision.acceptedTargetSets) > 0
+            ? Number(decision.acceptedTargetSets)
+            : null;
+
+        return {
+            programmedSets,
+            activeTargetSets: acceptedTargetSets || programmedSets,
+            decision
+        };
+    }
+
+    getActiveTargetSets(slot = this.currentSlot, slotData = null) {
+        return this.getSlotTargetState(slot, slotData).activeTargetSets;
+    }
+
     async getExerciseWorkoutHistory(exerciseId) {
         const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
         const workoutGroups = {};
@@ -10064,21 +10445,41 @@ class App {
                     totalReps: 0,
                     maxWeight: 0,
                     avgRpe: null,
-                    hasRealRpe: false
+                    hasRealRpe: false,
+                    targetSetCount: 0,
+                    programmedSetCount: 0,
+                    volumeDecisionType: null,
+                    volumeProtected: false
                 };
             }
 
             workoutGroups[set.workoutId].sets.push(set);
             workoutGroups[set.workoutId].totalReps += set.reps || 0;
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
+            workoutGroups[set.workoutId].targetSetCount = Math.max(
+                workoutGroups[set.workoutId].targetSetCount,
+                Number(set.targetSetCount) || 0
+            );
+            workoutGroups[set.workoutId].programmedSetCount = Math.max(
+                workoutGroups[set.workoutId].programmedSetCount,
+                Number(set.programmedSetCount) || 0
+            );
+            if (!workoutGroups[set.workoutId].volumeDecisionType && set.volumeDecisionType) {
+                workoutGroups[set.workoutId].volumeDecisionType = set.volumeDecisionType;
+            }
+            if (set.volumeProtected) {
+                workoutGroups[set.workoutId].volumeProtected = true;
+            }
         }
 
         for (const workout of Object.values(workoutGroups)) {
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
-            const setsWithRpe = workout.sets.filter(set => set.rpe != null);
-            workout.hasRealRpe = setsWithRpe.length > 0;
-            workout.avgRpe = setsWithRpe.length > 0
-                ? setsWithRpe.reduce((sum, set) => sum + set.rpe, 0) / setsWithRpe.length
+            workout.targetSetCount = Math.max(workout.targetSetCount || 0, workout.sets.length);
+            workout.programmedSetCount = Math.max(workout.programmedSetCount || 0, workout.targetSetCount);
+            const setsWithExplicitRpe = workout.sets.filter(set => this.hasExplicitRpe(set));
+            workout.hasRealRpe = setsWithExplicitRpe.length > 0;
+            workout.avgRpe = setsWithExplicitRpe.length > 0
+                ? setsWithExplicitRpe.reduce((sum, set) => sum + set.rpe, 0) / setsWithExplicitRpe.length
                 : null;
         }
 
@@ -10097,16 +10498,18 @@ class App {
         }
 
         const recent = workouts.slice(0, 5).map(workout => {
-            const targetArray = this.genTargetReps(slot.repsMin, slot.repsMax, Math.max(workout.sets.length, 1));
+            const targetSetCount = Math.max(workout.targetSetCount || workout.sets.length, 1);
+            const targetArray = this.genTargetReps(slot.repsMin, slot.repsMax, targetSetCount);
             const targetHits = workout.sets.reduce((count, set, index) => {
                 return count + ((set.reps || 0) >= (targetArray[index] || slot.repsMax) ? 1 : 0);
             }, 0);
 
             return {
                 topE1RM: Math.max(...workout.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0),
-                targetHitRate: workout.sets.length ? targetHits / workout.sets.length : 0,
+                targetHitRate: targetSetCount ? targetHits / targetSetCount : 0,
                 avgRpe: workout.avgRpe,
-                hasRealRpe: workout.hasRealRpe
+                hasRealRpe: workout.hasRealRpe,
+                volumeProtected: workout.volumeProtected
             };
         });
 
@@ -10280,36 +10683,40 @@ class App {
         completedSets.forEach(entry => {
             const slotMeta = entry.meta || {};
             const exerciseName = slotMeta.exerciseName || '';
-            const rpe = this.estimateSetRpe(entry.set, slotMeta);
-            const effectiveScore = this.calculateEffectiveVolumeScore(entry.set.reps, rpe, entry.set.weight, null);
-            const effortScore = Math.max(0.35, (rpe - 5) / 5);
-            const failureProximity = Math.max(0, 1 - ((10 - rpe) / 4));
+            const { rpe, fatigueWeight } = this.getSetRpeForFatigue(entry.set, slotMeta);
+            const effectiveScore = this.calculateEffectiveVolumeScore(entry.set.reps, rpe, entry.set.weight, null) * fatigueWeight;
+            const effortScore = Math.max(0.25, ((rpe - 5) / 5) * fatigueWeight);
+            const failureProximity = Math.max(0, (1 - ((10 - rpe) / 4)) * fatigueWeight);
             const ageMinutes = Math.max(0, (now - (entry.set.timestamp || now)) / 60000);
             const localDecay = Math.max(0.45, Math.exp(-ageMinutes / 80));
             const systemicDecay = Math.max(0.4, Math.exp(-ageMinutes / 110));
             const axialCoeff = this.getExerciseAxialLoadCoefficient(exerciseName, slotMeta);
-            const localBase = 0.55 + (effectiveScore * 0.85) + (effortScore * 0.35) + (failureProximity * 0.25);
-            const systemicBase = 0.3 + (effortScore * 0.45) + (axialCoeff * 0.55) + ((entry.set.reps || 0) >= 12 ? 0.1 : 0);
+            const localBase = 0.35 + (effectiveScore * 0.6) + (effortScore * 0.22) + (failureProximity * 0.16);
+            const systemicBase = 0.16 + (effortScore * 0.28) + (axialCoeff * 0.35) + (((entry.set.reps || 0) >= 12 ? 0.06 : 0) * fatigueWeight);
             const contributions = this.getExerciseMuscleContributions(exerciseName);
 
             state.systemicFatigue += systemicBase * systemicDecay;
             state.axialFatigue += axialCoeff * systemicDecay;
             if (rpe >= 8) {
-                state.hardSetsTotal += 1;
+                state.hardSetsTotal += fatigueWeight;
             }
 
             state.slotState[entry.slotId] = state.slotState[entry.slotId] || {
                 setCount: 0,
                 axialFatigue: 0,
-                fatigue: 0
+                fatigue: 0,
+                hardSets: 0
             };
             state.slotState[entry.slotId].setCount += 1;
             state.slotState[entry.slotId].axialFatigue += axialCoeff * systemicDecay;
+            if (rpe >= 8) {
+                state.slotState[entry.slotId].hardSets += fatigueWeight;
+            }
 
             contributions.forEach(({ muscleId, weight }) => {
                 const localCost = localBase * weight * localDecay;
                 const stimulus = Math.max(0.15, effectiveScore) * weight;
-                const hardSetValue = (rpe >= 8 ? 1 : rpe >= 7 ? 0.5 : 0) * weight;
+                const hardSetValue = (rpe >= 8 ? 1 : rpe >= 7 ? 0.5 : 0) * weight * fatigueWeight;
 
                 state.localFatigue[muscleId] = (state.localFatigue[muscleId] || 0) + localCost;
                 state.stimulusByMuscle[muscleId] = (state.stimulusByMuscle[muscleId] || 0) + stimulus;
@@ -10362,6 +10769,11 @@ class App {
         const secondaryFatigue = secondaryMuscles.map(muscleId => state.localFatigue[muscleId] || 0);
         const primaryHardSets = primaryMuscles.reduce((sum, muscleId) => sum + (state.hardSetsByMuscle[muscleId] || 0), 0);
         const secondaryHardSets = secondaryMuscles.reduce((sum, muscleId) => sum + (state.hardSetsByMuscle[muscleId] || 0), 0);
+        const currentSlotState = state.slotState?.[slot.id] || { setCount: 0, hardSets: 0 };
+        const completedOtherSlots = Object.entries(state.slotState || {})
+            .filter(([slotId, slotState]) => String(slotId) !== String(slot.id) && (slotState?.setCount || 0) > 0)
+            .length;
+        const isFirstExerciseWindow = completedOtherSlots === 0;
 
         let avgPrimaryFatigue = primaryFatigue.length
             ? primaryFatigue.reduce((sum, value) => sum + value, 0) / primaryFatigue.length
@@ -10391,33 +10803,44 @@ class App {
         let repsDelta = 0;
         let restAddSeconds = 0;
 
-        if (overlapScore >= 4.2 || systemicFatigue >= 6.2 || state.axialFatigue >= 4.5) {
+        if (overlapScore >= 5.4 || systemicFatigue >= 7.2 || state.axialFatigue >= 5.2) {
             fatigueLevel = 'high';
-            loadAdjustPercent = maxPrimaryFatigue >= 4.8 ? -7.5 : -5;
-            setChange = primaryHardSets >= 4 ? -1 : 0;
+            loadAdjustPercent = maxPrimaryFatigue >= 5.2 ? -5 : -2.5;
+            setChange = primaryHardSets >= 5 ? -1 : 0;
             repsDelta = -1;
-            restAddSeconds = state.axialFatigue >= 3.5 ? 30 : 20;
-        } else if (overlapScore >= 2.4 || systemicFatigue >= 4) {
+            restAddSeconds = state.axialFatigue >= 4 ? 20 : 15;
+        } else if (overlapScore >= 3.4 || systemicFatigue >= 5.2) {
             fatigueLevel = 'moderate';
-            loadAdjustPercent = (avgPrimaryFatigue >= 2.8 || primaryHardSets >= 3.5) ? -2.5 : 0;
-            setChange = primaryHardSets >= 6 ? -1 : 0;
-            repsDelta = maxPrimaryFatigue >= 3.5 ? -1 : 0;
-            restAddSeconds = state.axialFatigue >= 3 ? 20 : 10;
+            loadAdjustPercent = (avgPrimaryFatigue >= 3.6 || primaryHardSets >= 4.5) ? -2.5 : 0;
+            setChange = primaryHardSets >= 7 ? -1 : 0;
+            repsDelta = maxPrimaryFatigue >= 4.2 ? -1 : 0;
+            restAddSeconds = state.axialFatigue >= 3.6 ? 15 : 10;
         }
 
-        if (maxPrimaryFatigue >= 2.8) {
+        if (isFirstExerciseWindow) {
+            // Guardrail: the first exercise should not be auto-cut after 1-2 normal sets.
+            setChange = 0;
+            if (currentSlotState.setCount <= 2) {
+                fatigueLevel = 'low';
+                loadAdjustPercent = 0;
+                repsDelta = 0;
+                restAddSeconds = currentSlotState.setCount >= 2 ? Math.max(restAddSeconds, 10) : 0;
+            }
+        }
+
+        if (maxPrimaryFatigue >= 3.6) {
             reasonParts.push(`fatigue locale ${Math.round(maxPrimaryFatigue * 10) / 10}`);
         }
-        if (primaryHardSets >= 3) {
+        if (primaryHardSets >= 4) {
             reasonParts.push(`${Math.round(primaryHardSets * 10) / 10} séries dures déjà faites`);
         }
-        if (systemicFatigue >= 4.5) {
+        if (systemicFatigue >= 5.5) {
             reasonParts.push('fatigue systémique en hausse');
         }
 
         const readinessScore = Math.max(
-            35,
-            Math.min(100, Math.round(100 - (overlapScore * 10) - (systemicFatigue * 4) - (state.axialFatigue * 2)))
+            45,
+            Math.min(100, Math.round(100 - (overlapScore * 7) - (systemicFatigue * 3) - (state.axialFatigue * 1.5)))
         );
 
         return {
@@ -10479,6 +10902,11 @@ class App {
         const adjusted = { ...advice };
         const { trendSummary, sessionContext, lmsData } = context;
         const reasons = [];
+        const isDeloadAdvice = adjusted.type === 'deload'
+            || adjusted.type === 'reactive_deload'
+            || adjusted.type === 'deload_mini'
+            || adjusted.isDeload;
+        let volumeSuggestionSource = isDeloadAdvice ? 'deload' : null;
 
         if (lmsData) {
             this.currentLMSData = lmsData;
@@ -10487,7 +10915,7 @@ class App {
                     adjusted.suggestedSets || lmsData.adjustedSets,
                     lmsData.adjustedSets
                 );
-                adjusted.autoAdjustSets = lmsData.adjustedSets < lmsData.originalSets;
+                volumeSuggestionSource = volumeSuggestionSource || 'lms';
             }
         }
 
@@ -10512,12 +10940,12 @@ class App {
                 }
             }
 
-            if (sessionContext.setChange < 0) {
+            if (sessionContext.setChange < 0 && !volumeSuggestionSource) {
                 const baseSets = adjusted.suggestedSets || adjusted.deloadSets || slot.sets;
                 const nextSets = Math.max(2, Math.min(6, baseSets + sessionContext.setChange));
                 if (nextSets < baseSets) {
                     adjusted.suggestedSets = nextSets;
-                    adjusted.autoAdjustSets = true;
+                    volumeSuggestionSource = 'fatigue';
                 }
             }
 
@@ -10538,6 +10966,9 @@ class App {
         }
 
         adjusted.decisionReasons = reasons.slice(0, 3);
+        adjusted.autoAdjustSets = false;
+        adjusted.volumeSuggestionSource = volumeSuggestionSource;
+        adjusted.volumeSuggestionOnly = Boolean(volumeSuggestionSource);
 
         adjusted.contextConfidence = Math.round((((trendSummary?.confidence || 0.35) + ((sessionContext?.readinessScore || 70) / 100)) / 2) * 100) / 100;
         adjusted.sessionContext = sessionContext || null;
@@ -10672,12 +11103,18 @@ class App {
         const setsContainer = document.getElementById('coaching-suggested-sets-container');
         const setsLabel = document.getElementById('coaching-suggested-sets-label');
         if (setsContainer) {
-            if (setPlan.hasAutoReduction) {
+            if (setPlan.reductionAccepted) {
                 setsContainer.style.display = 'block';
-                if (setsLabel) setsLabel.textContent = 'Volume du jour';
+                if (setsLabel) setsLabel.textContent = 'Volume validé';
                 const deltaLabel = `${setPlan.displayDelta}`;
                 document.getElementById('coaching-suggested-sets').innerHTML =
-                    `${setPlan.effectiveSets} séries <span class="volume-adjustment-badge decrease">${deltaLabel}</span>`;
+                    `${setPlan.activeTargetSets} séries <span class="volume-adjustment-badge decrease">${deltaLabel}</span>`;
+            } else if (setPlan.showReductionPrompt) {
+                setsContainer.style.display = 'block';
+                if (setsLabel) setsLabel.textContent = 'Suggestion coach';
+                const deltaLabel = `${setPlan.displayDelta}`;
+                document.getElementById('coaching-suggested-sets').innerHTML =
+                    `${setPlan.suggestedReductionSets} séries suggérées <span class="volume-adjustment-badge decrease">${deltaLabel}</span>`;
             } else if (setPlan.hasOptionalIncrease) {
                 setsContainer.style.display = 'block';
                 if (setsLabel) setsLabel.textContent = 'Volume possible';

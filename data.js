@@ -196,29 +196,29 @@ const LMS_SCALE = {
 // Volume modifiers based on LMS score and performance trend
 // Key insight: LMS modulates MRV dynamically, not linearly
 const LMS_VOLUME_MODIFIERS = {
-    // LMS 0 (Fresh): Can push volume aggressively
+    // LMS 0 (Fresh): Stay optimistic, but keep the plan stable by default
     0: {
-        improved: { setChange: 2, loadChange: 2.5, message: 'Récupération excellente. On pousse le volume pour trouver ta limite de croissance.' },
-        stable:   { setChange: 1, loadChange: 0, message: 'Bien récupéré. Ajout standard de volume.' },
-        regressed:{ setChange: 0, loadChange: 0, message: 'Frais mais perf en baisse ? Vérifie ton sommeil/nutrition.' }
+        improved: { setChange: 0, loadChange: 2.5, message: 'Très bonne récupération. Le coach peut proposer un petit cran de charge.' },
+        stable:   { setChange: 0, loadChange: 0, message: 'Bonne récupération. On garde le plan prévu.' },
+        regressed:{ setChange: 0, loadChange: 0, message: 'Tu sembles frais, mais on reste prudent vu la tendance récente.' }
     },
-    // LMS 1 (Ready): Sweet spot - maintain or micro-progress
+    // LMS 1 (Ready): True neutral baseline
     1: {
-        improved: { setChange: 0, loadChange: 2.5, message: 'Zone optimale ! Volume stable, focus sur la charge.' },
-        stable:   { setChange: 0, loadChange: 0, message: 'Sweet spot parfait. Continue comme ça.' },
-        regressed:{ setChange: -1, loadChange: 0, message: 'Légère fatigue détectée. On réduit pour consolider.' }
+        improved: { setChange: 0, loadChange: 0, message: 'Prêt. Le plan du jour reste la référence.' },
+        stable:   { setChange: 0, loadChange: 0, message: 'Prêt. Continue normalement.' },
+        regressed:{ setChange: 0, loadChange: 0, message: 'Prêt malgré une tendance plus moyenne. On ne coupe pas le volume pour autant.' }
     },
-    // LMS 2 (Sore): Reduce volume moderately (still need minimum stimulus)
+    // LMS 2 (Sore): Prefer rest / quality adjustments over volume cuts
     2: {
-        improved: { setChange: -1, loadChange: 0, message: 'Courbaturé mais en forme. -1 série pour bien récupérer.' },
-        stable:   { setChange: -1, loadChange: 0, message: 'Muscle fatigué. On réduit légèrement le volume.' },
-        regressed:{ setChange: -1, loadChange: 0, message: 'Muscle pas prêt. -1 série, même intensité.' }
+        improved: { setChange: 0, loadChange: 0, message: 'Courbaturé mais fonctionnel. Le coach privilégie surtout la qualité et le repos.' },
+        stable:   { setChange: 0, loadChange: 0, message: 'Courbatures présentes. Le plan reste disponible, avec une lecture plus prudente.' },
+        regressed:{ setChange: 0, loadChange: -2.5, message: 'Courbatures + tendance moyenne. Le coach peut suggérer un léger allègement.' }
     },
-    // LMS 3 (Wrecked): Significant reduction but keep minimum stimulus
+    // LMS 3 (Wrecked): Only clear readiness warning should suggest less volume
     3: {
-        improved: { setChange: -2, loadChange: -5, message: 'Très courbaturé. Séance allégée pour récupérer.' },
-        stable:   { setChange: -2, loadChange: -5, message: 'Muscle épuisé. Volume réduit, focus qualité.' },
-        regressed:{ setChange: -2, loadChange: -10, message: 'Récupération nécessaire. Moins de volume aujourd\'hui.' }
+        improved: { setChange: -1, loadChange: -2.5, message: 'Très courbaturé. Le coach peut suggérer une série de moins.' },
+        stable:   { setChange: -1, loadChange: -5, message: 'Muscle épuisé. Priorité à la qualité, pas au volume.' },
+        regressed:{ setChange: -1, loadChange: -5, message: 'Récupération nécessaire. Le coach peut proposer une séance allégée.' }
     }
 };
 
