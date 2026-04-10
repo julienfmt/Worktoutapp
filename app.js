@@ -522,6 +522,7 @@ class App {
             setHistory: []
         };
         this.homeChartsFrame = null;
+        this.challengeRevealTimeout = null;
     }
 
     async init() {
@@ -640,6 +641,7 @@ class App {
         // Render slots with completed state
         await this.renderSlots();
         this.showScreen('session');
+        this.scheduleSessionChallengeReveal(900);
     }
     
     async discardSession() {
@@ -1432,37 +1434,447 @@ class App {
     async renderStats() {
         const history = await db.getAll('workoutHistory');
         const setHistory = await db.getAll('setHistory');
+        const slots = await db.getAll('slots');
         this.homeChartData = {
             history,
-            setHistory
+            setHistory,
+            slots
         };
-        
-        // Total workouts
-        document.getElementById('stat-total-workouts').textContent = history.length;
-        
-        // This month workouts
-        const now = new Date();
-        const thisMonthWorkouts = history.filter(w => {
-            const d = new Date(w.date);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        }).length;
-        document.getElementById('stat-this-month').textContent = thisMonthWorkouts;
-        
-        // Total volume
-        let totalVolume = 0;
-        for (const set of setHistory) {
-            totalVolume += (set.weight || 0) * (set.reps || 0);
-        }
-        document.getElementById('stat-total-volume').textContent = this.formatVolume(totalVolume);
-        
-        // Motivation message
-        this.renderMotivationMessage(history, thisMonthWorkouts, totalVolume);
-        
-        // Charts
+
+        const snapshot = await this.buildStatsSnapshot(history, setHistory, slots);
+
+        document.getElementById('stat-total-workouts').textContent = snapshot.totalWorkouts;
+        document.getElementById('stat-this-month').textContent = snapshot.thisMonthWorkouts;
+        document.getElementById('stat-total-volume').textContent = this.formatVolume(snapshot.totalLoadedVolume);
+
+        this.renderMotivationMessage(history, snapshot.thisMonthWorkouts, snapshot.totalLoadedVolume);
+        this.renderAdvancedStats(snapshot);
         this.scheduleHomeChartsRender();
-        
-        // Muscle group stats
         await this.renderMuscleStats();
+    }
+
+    getStatsRangeStart(days, now = new Date()) {
+        const start = new Date(now);
+        start.setDate(start.getDate() - days);
+        start.setHours(0, 0, 0, 0);
+        return start;
+    }
+
+    getSafeDate(value) {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    getSetLoadedVolume(set, slot = null) {
+        if (!set) return 0;
+        if (slot && this.isCardioSlot(slot)) return 0;
+
+        const weight = Number(set.weight || 0);
+        const reps = Number(set.reps || 0);
+        if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) return 0;
+
+        return weight * reps;
+    }
+
+    getStatsRpe(set, slot = null) {
+        if (!set) return null;
+        if (set.rpe != null && Number.isFinite(Number(set.rpe))) {
+            return Number(set.rpe);
+        }
+
+        if (slot && !this.isCardioSlot(slot)) {
+            return this.estimateSetRpe(set, this.buildSlotCoachMeta(slot));
+        }
+
+        return null;
+    }
+
+    percentChange(current, previous) {
+        if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+        if (previous <= 0) return current > 0 ? 100 : 0;
+        return ((current - previous) / previous) * 100;
+    }
+
+    formatPercentDelta(value) {
+        if (value == null || !Number.isFinite(value)) return 'stable';
+        const rounded = Math.round(value);
+        if (rounded === 0) return 'stable';
+        return `${rounded > 0 ? '+' : ''}${rounded}%`;
+    }
+
+    formatOneDecimal(value, fallback = '--') {
+        if (!Number.isFinite(Number(value))) return fallback;
+        const rounded = Math.round(Number(value) * 10) / 10;
+        return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+    }
+
+    buildExerciseStats(setHistory, slotMap, now = new Date()) {
+        const start30 = this.getStatsRangeStart(30, now);
+        const exerciseWorkouts = new Map();
+        const bestByExercise = new Map();
+        let prCount30 = 0;
+        let bestLift = null;
+
+        const sortedSets = [...setHistory]
+            .filter(set => set?.date && set?.exerciseId)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        for (const set of sortedSets) {
+            const slot = slotMap.get(set.slotId);
+            if (slot && this.isCardioSlot(slot)) continue;
+
+            const weight = Number(set.weight || 0);
+            const reps = Number(set.reps || 0);
+            if (weight <= 0 || reps <= 0) continue;
+
+            const rpe = this.getStatsRpe(set, slot) || 8;
+            const e1rm = this.calculateE1RM(weight, reps, rpe);
+            if (e1rm <= 0) continue;
+
+            const setDate = this.getSafeDate(set.date);
+            const exerciseId = set.exerciseId;
+            const workoutId = set.workoutId || `${exerciseId}-${set.date}`;
+            if (!exerciseWorkouts.has(exerciseId)) {
+                exerciseWorkouts.set(exerciseId, new Map());
+            }
+            const workouts = exerciseWorkouts.get(exerciseId);
+            if (!workouts.has(workoutId)) {
+                workouts.set(workoutId, {
+                    exerciseId,
+                    date: set.date,
+                    bestE1RM: 0,
+                    volume: 0,
+                    sets: 0,
+                    reps: 0
+                });
+            }
+
+            const workout = workouts.get(workoutId);
+            workout.bestE1RM = Math.max(workout.bestE1RM, e1rm);
+            workout.volume += this.getSetLoadedVolume(set, slot);
+            workout.sets += 1;
+            workout.reps += reps;
+
+            const previousBest = bestByExercise.get(exerciseId) || 0;
+            if (previousBest > 0 && e1rm > previousBest * 1.002 && setDate && setDate >= start30) {
+                prCount30 += 1;
+            }
+            bestByExercise.set(exerciseId, Math.max(previousBest, e1rm));
+
+            if (!bestLift || e1rm > bestLift.e1rm) {
+                bestLift = {
+                    exerciseId,
+                    e1rm,
+                    weight,
+                    reps,
+                    date: set.date
+                };
+            }
+        }
+
+        const progressRows = [];
+        const watchRows = [];
+
+        for (const [exerciseId, workoutsMap] of exerciseWorkouts.entries()) {
+            const workouts = Array.from(workoutsMap.values())
+                .filter(workout => workout.bestE1RM > 0)
+                .sort((a, b) => new Date(a.date) - new Date(b.date));
+            if (workouts.length < 2) continue;
+
+            const latest = workouts[workouts.length - 1];
+            const previous = workouts[workouts.length - 2];
+            const previousPeak = Math.max(...workouts.slice(0, -1).map(workout => workout.bestE1RM), 0);
+            const deltaKg = latest.bestE1RM - previous.bestE1RM;
+            const deltaPct = previous.bestE1RM > 0 ? (deltaKg / previous.bestE1RM) * 100 : 0;
+            const peakDeltaKg = latest.bestE1RM - previousPeak;
+
+            const row = {
+                exerciseId,
+                latest,
+                previous,
+                deltaKg,
+                deltaPct,
+                peakDeltaKg,
+                sessions: workouts.length
+            };
+
+            if (deltaKg > 0.25 || peakDeltaKg > 0.25) {
+                progressRows.push(row);
+            } else if (deltaPct < -2 && workouts.length >= 3) {
+                watchRows.push(row);
+            }
+        }
+
+        progressRows.sort((a, b) => b.deltaPct - a.deltaPct);
+        watchRows.sort((a, b) => a.deltaPct - b.deltaPct);
+
+        return {
+            prCount30,
+            bestLift,
+            progressRows: progressRows.slice(0, 8),
+            watchRows: watchRows.slice(0, 6)
+        };
+    }
+
+    async buildStatsSnapshot(history, setHistory, slots) {
+        const now = new Date();
+        const slotMap = new Map((slots || []).map(slot => [slot.id, slot]));
+        const sortedHistory = [...(history || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const start7 = this.getStatsRangeStart(7, now);
+        const start14 = this.getStatsRangeStart(14, now);
+        const start30 = this.getStatsRangeStart(30, now);
+        const start60 = this.getStatsRangeStart(60, now);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const weekBounds = streakEngine.getWeekBounds(now);
+
+        const inRange = (dateValue, start, end = now) => {
+            const date = this.getSafeDate(dateValue);
+            return Boolean(date && date >= start && date <= end);
+        };
+
+        const workouts7 = sortedHistory.filter(workout => inRange(workout.date, start7));
+        const workouts30 = sortedHistory.filter(workout => inRange(workout.date, start30));
+        const workoutsPrevious30 = sortedHistory.filter(workout => {
+            const date = this.getSafeDate(workout.date);
+            return Boolean(date && date >= start60 && date < start30);
+        });
+        const thisMonthWorkouts = sortedHistory.filter(workout => inRange(workout.date, monthStart)).length;
+        const thisWeekWorkouts = sortedHistory.filter(workout => inRange(workout.date, weekBounds.start, weekBounds.end));
+        let totalLoadedVolume = 0;
+        let volume7 = 0;
+        let volumePrevious7 = 0;
+        let volume30 = 0;
+        let volumePrevious30 = 0;
+        let hardSets30 = 0;
+        let hardSets7 = 0;
+        let effectiveSets30 = 0;
+        let totalSets30 = 0;
+        let totalSetsAll = 0;
+        const rpeValues30 = [];
+        const estimatedRpeValues30 = [];
+
+        for (const set of setHistory || []) {
+            const slot = slotMap.get(set.slotId);
+            const setDate = this.getSafeDate(set.date);
+            const loadedVolume = this.getSetLoadedVolume(set, slot);
+            const rpe = this.getStatsRpe(set, slot);
+            const isStrengthSet = !(slot && this.isCardioSlot(slot));
+
+            totalLoadedVolume += loadedVolume;
+            if (set?.reps > 0) totalSetsAll += 1;
+
+            if (setDate && setDate >= start7) {
+                volume7 += loadedVolume;
+            } else if (setDate && setDate >= start14 && setDate < start7) {
+                volumePrevious7 += loadedVolume;
+            }
+
+            if (setDate && setDate >= start30) {
+                volume30 += loadedVolume;
+                if (set?.reps > 0) totalSets30 += 1;
+
+                if (isStrengthSet && rpe != null) {
+                    const effectiveScore = this.calculateEffectiveVolumeScore(set.reps, rpe, set.weight, null);
+                    effectiveSets30 += effectiveScore;
+                    if (rpe >= 7 || effectiveScore >= 0.6) {
+                        hardSets30 += 1;
+                    }
+                    if (setDate >= start7 && (rpe >= 7 || effectiveScore >= 0.6)) {
+                        hardSets7 += 1;
+                    }
+
+                    if (this.hasExplicitRpe(set)) {
+                        rpeValues30.push(rpe);
+                    } else {
+                        estimatedRpeValues30.push(rpe);
+                    }
+                }
+            } else if (setDate && setDate >= start60 && setDate < start30) {
+                volumePrevious30 += loadedVolume;
+            }
+        }
+
+        const rpeSample = rpeValues30.length ? rpeValues30 : estimatedRpeValues30;
+        const avgRpe30 = rpeSample.length
+            ? rpeSample.reduce((sum, value) => sum + value, 0) / rpeSample.length
+            : null;
+        const uniqueTrainingDays30 = new Set(workouts30.map(workout => this.getLocalDateKey(workout.date))).size;
+        const sessionsPerWeek30 = workouts30.length / (30 / 7);
+        const setsPerSession30 = workouts30.length > 0 ? totalSets30 / workouts30.length : 0;
+        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
+        const exerciseStats = this.buildExerciseStats(setHistory || [], slotMap, now);
+
+        return {
+            totalWorkouts: sortedHistory.length,
+            totalSetsAll,
+            totalLoadedVolume,
+            thisMonthWorkouts,
+            thisWeekWorkouts: thisWeekWorkouts.length,
+            workouts7: workouts7.length,
+            workouts30: workouts30.length,
+            workoutsPrevious30: workoutsPrevious30.length,
+            weeklyGoal,
+            sessionsPerWeek30,
+            uniqueTrainingDays30,
+            volume7,
+            volumePrevious7,
+            volume7Delta: this.percentChange(volume7, volumePrevious7),
+            volume30,
+            volumePrevious30,
+            volume30Delta: this.percentChange(volume30, volumePrevious30),
+            hardSets7,
+            hardSets30,
+            effectiveSets30: Math.round(effectiveSets30 * 10) / 10,
+            avgRpe30,
+            avgRpe30Source: rpeValues30.length ? 'RPE saisis' : (estimatedRpeValues30.length ? 'estimé' : 'aucun RPE'),
+            setsPerSession30,
+            prCount30: exerciseStats.prCount30,
+            bestLift: exerciseStats.bestLift,
+            progressRows: exerciseStats.progressRows,
+            watchRows: exerciseStats.watchRows
+        };
+    }
+
+    renderAdvancedStats(snapshot) {
+        const insightGrid = document.getElementById('stats-insight-grid');
+        const detailPanel = document.getElementById('stats-detail-panel');
+        if (!insightGrid || !detailPanel) return;
+
+        const sessionsTone = snapshot.sessionsPerWeek30 >= snapshot.weeklyGoal
+            ? 'positive'
+            : snapshot.sessionsPerWeek30 >= Math.max(1, snapshot.weeklyGoal * 0.7)
+                ? 'warning'
+                : '';
+        const volumeTone = snapshot.volume7Delta > 8 ? 'positive' : snapshot.volume7Delta < -12 ? 'warning' : '';
+        const hardSetTone = snapshot.hardSets30 >= snapshot.workouts30 * 6 ? 'positive' : snapshot.hardSets30 > 0 ? '' : 'warning';
+        const rpeTone = snapshot.avgRpe30 == null
+            ? ''
+            : snapshot.avgRpe30 > 9.2
+                ? 'danger'
+                : snapshot.avgRpe30 >= 7.5
+                    ? 'positive'
+                    : 'warning';
+
+        insightGrid.innerHTML = [
+            {
+                tone: sessionsTone,
+                label: 'Rythme 30 jours',
+                value: `${this.formatOneDecimal(snapshot.sessionsPerWeek30)}/sem`,
+                note: `${snapshot.workouts30} séance${snapshot.workouts30 > 1 ? 's' : ''} sur 30j, objectif ${snapshot.weeklyGoal}/sem`
+            },
+            {
+                tone: volumeTone,
+                label: 'Volume chargé 7j',
+                value: `${this.formatVolume(snapshot.volume7)} kg`,
+                note: `${this.formatPercentDelta(snapshot.volume7Delta)} vs les 7 jours précédents`
+            },
+            {
+                tone: hardSetTone,
+                label: 'Séries effectives 30j',
+                value: this.formatOneDecimal(snapshot.effectiveSets30),
+                note: `${snapshot.hardSets30} hard sets, ${this.formatOneDecimal(snapshot.setsPerSession30)} séries/séance`
+            },
+            {
+                tone: rpeTone,
+                label: 'Intensité moyenne',
+                value: snapshot.avgRpe30 == null ? '--' : `RPE ${this.formatOneDecimal(snapshot.avgRpe30)}`,
+                note: snapshot.avgRpe30Source === 'aucun RPE'
+                    ? 'Ajoute des RPE pour une lecture plus fiable'
+                    : `${snapshot.avgRpe30Source} sur les 30 derniers jours`
+            }
+        ].map(card => `
+            <div class="stats-insight-card ${card.tone}">
+                <div class="stats-insight-label">${card.label}</div>
+                <div class="stats-insight-value">${card.value}</div>
+                <div class="stats-insight-note">${card.note}</div>
+            </div>
+        `).join('');
+
+        const bestLiftText = snapshot.bestLift
+            ? `${this.escapeHtml(snapshot.bestLift.exerciseId)}`
+            : 'Pas encore de charge de référence';
+        const bestLiftValue = snapshot.bestLift
+            ? `${this.formatOneDecimal(snapshot.bestLift.e1rm)} kg e1RM`
+            : '--';
+        const getWatchReason = (row) => {
+            if (row.deltaPct <= -6) {
+                return `e1RM en baisse nette vs dernier passage (${this.formatPercentDelta(row.deltaPct)})`;
+            }
+            if (row.peakDeltaKg < -1) {
+                return `dernier e1RM sous ton meilleur niveau de ${this.formatOneDecimal(Math.abs(row.peakDeltaKg))} kg`;
+            }
+            return `tendance récente sous la référence (${this.formatPercentDelta(row.deltaPct)})`;
+        };
+
+        const progressRowsHtml = snapshot.progressRows.length
+            ? snapshot.progressRows.map(row => `
+                <div class="stats-detail-row">
+                    <div class="stats-detail-main">
+                        <span class="stats-detail-name">${this.escapeHtml(row.exerciseId)}</span>
+                        <span class="stats-detail-meta">${row.sessions} séances suivies · dernier e1RM ${this.formatOneDecimal(row.latest.bestE1RM)} kg</span>
+                    </div>
+                    <span class="stats-detail-value positive">+${this.formatOneDecimal(row.deltaKg)} kg</span>
+                </div>
+            `).join('')
+            : `<div class="stats-detail-empty">Les progressions par exercice apparaîtront dès que tu as au moins deux passages sur le même mouvement.</div>`;
+
+        const watchRowsHtml = snapshot.watchRows.length
+            ? snapshot.watchRows.map(row => `
+                <div class="stats-detail-row">
+                    <div class="stats-detail-main">
+                        <span class="stats-detail-name">${this.escapeHtml(row.exerciseId)}</span>
+                        <span class="stats-detail-meta">${row.sessions} séances suivies · ${getWatchReason(row)}</span>
+                    </div>
+                    <span class="stats-detail-value warning">${this.formatPercentDelta(row.deltaPct)}</span>
+                </div>
+            `).join('')
+            : `<div class="stats-detail-empty">Aucun exercice prioritaire à surveiller sur les données récentes.</div>`;
+
+        detailPanel.innerHTML = `
+            <div class="stats-detail-card">
+                <div class="stats-detail-title-row">
+                    <div class="stats-detail-title">Lecture rapide</div>
+                    <div class="stats-detail-chip">30 jours</div>
+                </div>
+                <div class="stats-detail-list">
+                    <div class="stats-detail-row">
+                        <div class="stats-detail-main">
+                            <span class="stats-detail-name">Jours actifs</span>
+                            <span class="stats-detail-meta">Régularité réelle, pas seulement nombre de séances</span>
+                        </div>
+                        <span class="stats-detail-value">${snapshot.uniqueTrainingDays30}/30</span>
+                    </div>
+                    <div class="stats-detail-row">
+                        <div class="stats-detail-main">
+                            <span class="stats-detail-name">Records récents</span>
+                            <span class="stats-detail-meta">Nouveaux meilleurs e1RM détectés sur les séries</span>
+                        </div>
+                        <span class="stats-detail-value positive">${snapshot.prCount30}</span>
+                    </div>
+                    <div class="stats-detail-row">
+                        <div class="stats-detail-main">
+                            <span class="stats-detail-name">${bestLiftText}</span>
+                            <span class="stats-detail-meta">Meilleure force estimée enregistrée</span>
+                        </div>
+                        <span class="stats-detail-value">${bestLiftValue}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stats-detail-card">
+                <div class="stats-detail-title-row">
+                    <div class="stats-detail-title">Exercices en progression</div>
+                    <div class="stats-detail-chip">e1RM</div>
+                </div>
+                <div class="stats-detail-list">${progressRowsHtml}</div>
+            </div>
+            <div class="stats-detail-card">
+                <div class="stats-detail-title-row">
+                    <div class="stats-detail-title">À surveiller</div>
+                    <div class="stats-detail-chip">tendance</div>
+                </div>
+                <div class="stats-detail-list">${watchRowsHtml}</div>
+            </div>
+        `;
     }
     
     async renderMuscleStats() {
@@ -1478,7 +1890,14 @@ class App {
             if (slot.muscleGroup) {
                 usedMuscleGroups.add(slot.muscleGroup);
             }
+            this.getExerciseMuscleContributions(slot.activeExercise || slot.name)
+                .forEach(contribution => {
+                    if (contribution?.muscleId) usedMuscleGroups.add(contribution.muscleId);
+                });
         }
+        Object.keys(volumeByMuscle).forEach(muscleId => {
+            usedMuscleGroups.add(muscleId);
+        });
         
         // If no muscle groups configured, show empty state
         if (usedMuscleGroups.size === 0) {
@@ -1497,8 +1916,6 @@ class App {
         
         // Build muscle stats HTML
         let html = '';
-        const maxSets = 20; // Reference for progress bar
-        
         // Sort muscle groups: those with volume first, then alphabetically
         const sortedGroups = Array.from(usedMuscleGroups).sort((a, b) => {
             const volA = volumeByMuscle[a]?.effectiveSets || 0;
@@ -1516,23 +1933,28 @@ class App {
                 Number.isFinite(volume) ? Math.round(volume * 10) / 10 : 0
             );
             const hasVolume = volume > 0;
-            const isOptimal = volume >= VOLUME_THRESHOLDS.minimum && volume <= VOLUME_THRESHOLDS.optimal;
-            const isExcessive = volume > VOLUME_THRESHOLDS.maximum;
-            const isLow = hasVolume && volume < VOLUME_THRESHOLDS.minimum;
-            
-            const progressPercent = Math.min((volume / maxSets) * 100, 100);
+            const landmarks = VOLUME_LANDMARKS[muscleId] || VOLUME_LANDMARKS.default;
+            const isUnderMaintenance = hasVolume && volume < landmarks.MV;
+            const isMaintenance = hasVolume && volume >= landmarks.MV && volume < landmarks.MEV;
+            const isOptimal = volume >= landmarks.MEV && volume <= landmarks.MAV;
+            const isHigh = volume > landmarks.MAV && volume <= landmarks.MRV;
+            const isExcessive = volume > landmarks.MRV;
+            const progressPercent = Math.min((volume / Math.max(landmarks.MRV, 1)) * 100, 100);
             
             let statusClass = '';
             let statusLabel = '';
             if (isExcessive) {
                 statusClass = 'excessive';
-                statusLabel = 'Excessif';
+                statusLabel = 'MRV+';
             } else if (isOptimal) {
                 statusClass = 'optimal';
-                statusLabel = 'Optimal';
-            } else if (isLow) {
+                statusLabel = 'MAV';
+            } else if (isHigh) {
+                statusClass = 'has-volume';
+                statusLabel = 'Haut';
+            } else if (isUnderMaintenance || isMaintenance) {
                 statusClass = 'has-volume low';
-                statusLabel = 'Insuffisant';
+                statusLabel = isUnderMaintenance ? 'Sous MV' : 'MEV-';
             } else if (hasVolume) {
                 statusClass = 'has-volume';
                 statusLabel = '';
@@ -1551,6 +1973,7 @@ class App {
                         <span class="muscle-stat-sets">${formattedVolume}</span>
                         <span class="muscle-stat-unit">séries</span>
                     </div>
+                    <div class="muscle-stat-thresholds">MEV ${landmarks.MEV} · MAV ${landmarks.MAV} · MRV ${landmarks.MRV}</div>
                     <div class="muscle-stat-bar">
                         <div class="muscle-stat-fill" style="width: ${progressPercent}%"></div>
                     </div>
@@ -1750,13 +2173,14 @@ class App {
 
         const subtitle = document.getElementById('volume-chart-subtitle');
         const { ctx, width, height } = chart;
+        const slotMap = new Map((this.homeChartData.slots || []).map(slot => [slot.id, slot]));
         const weeks = this.getRecentWeeklyBuckets(4, (weekStart, weekEnd) => {
             let volume = 0;
 
             for (const set of setHistory) {
                 const setDate = new Date(set.date);
                 if (setDate >= weekStart && setDate < weekEnd) {
-                    volume += (set.weight || 0) * (set.reps || 0);
+                    volume += this.getSetLoadedVolume(set, slotMap.get(set.slotId));
                 }
             }
 
@@ -2081,16 +2505,644 @@ class App {
     async getVolumeStatus(muscleGroup) {
         const volumeByMuscle = await this.getWeeklyVolumeByMuscle();
         const volume = volumeByMuscle[muscleGroup]?.effectiveSets || 0;
-        
-        if (volume < VOLUME_THRESHOLDS.minimum) {
-            return { status: 'low', sets: volume, message: `Volume faible (${volume}/${VOLUME_THRESHOLDS.minimum} séries min)` };
-        } else if (volume <= VOLUME_THRESHOLDS.optimal) {
-            return { status: 'optimal', sets: volume, message: `Volume optimal (${volume} séries)` };
-        } else if (volume <= VOLUME_THRESHOLDS.maximum) {
-            return { status: 'high', sets: volume, message: `Volume élevé (${volume} séries)` };
+
+        const landmarks = VOLUME_LANDMARKS[muscleGroup] || VOLUME_LANDMARKS.default;
+        const roundedVolume = Math.round(volume * 10) / 10;
+
+        if (volume < landmarks.MV) {
+            return { status: 'low', sets: roundedVolume, message: `Volume sous maintenance (${roundedVolume}/${landmarks.MV} MV)` };
+        } else if (volume < landmarks.MEV) {
+            return { status: 'maintenance', sets: roundedVolume, message: `Volume de maintenance (${roundedVolume}/${landmarks.MEV} MEV)` };
+        } else if (volume <= landmarks.MAV) {
+            return { status: 'optimal', sets: roundedVolume, message: `Volume optimal (${roundedVolume} séries effectives)` };
+        } else if (volume <= landmarks.MRV) {
+            return { status: 'high', sets: roundedVolume, message: `Volume élevé (${roundedVolume}/${landmarks.MRV} MRV)` };
         } else {
-            return { status: 'excessive', sets: volume, message: `⚠️ Volume excessif (${volume}/${VOLUME_THRESHOLDS.maximum} max)` };
+            return { status: 'excessive', sets: roundedVolume, message: `Volume excessif (${roundedVolume} > MRV ${landmarks.MRV})` };
         }
+    }
+
+    // ===== Session Challenge Engine =====
+    async getSessionChallengeHistory() {
+        const history = await db.getSetting('sessionChallengeHistory');
+        return Array.isArray(history) ? history : [];
+    }
+
+    async saveSessionChallengeHistory(history) {
+        const cleaned = (Array.isArray(history) ? history : [])
+            .filter(item => item && item.id)
+            .slice(0, 50);
+        await db.setSetting('sessionChallengeHistory', cleaned);
+    }
+
+    async upsertSessionChallengeHistory(challenge, status) {
+        if (!challenge?.id) return;
+
+        const history = await this.getSessionChallengeHistory();
+        const entry = {
+            id: challenge.id,
+            date: new Date().toISOString(),
+            sessionId: challenge.sessionId,
+            slotId: challenge.slotId,
+            exerciseId: challenge.exerciseId,
+            type: challenge.type,
+            status,
+            targetLabel: challenge.targetLabel
+        };
+        const existingIndex = history.findIndex(item => item.id === challenge.id);
+
+        if (existingIndex >= 0) {
+            history[existingIndex] = { ...history[existingIndex], ...entry };
+        } else {
+            history.unshift(entry);
+        }
+
+        await this.saveSessionChallengeHistory(history);
+    }
+
+    getActiveSessionChallenge() {
+        const challenge = this.currentWorkout?.challenge;
+        if (!challenge) return null;
+        return ['active', 'completed'].includes(challenge.status) ? challenge : null;
+    }
+
+    getChallengeIconSVG() {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8"></circle>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+        </svg>`;
+    }
+
+    getSlotChallengeBadge(slotId) {
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || String(challenge.slotId) !== String(slotId)) return '';
+
+        const completed = challenge.status === 'completed';
+        return `
+            <span class="challenge-badge ${completed ? 'completed' : ''}">
+                ${this.getChallengeIconSVG()}
+                ${completed ? 'Défi réussi' : 'Défi'}
+            </span>
+        `;
+    }
+
+    getSlotChallengeNote(slotId) {
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || String(challenge.slotId) !== String(slotId) || challenge.status !== 'active') return '';
+
+        return `<div class="slot-challenge-note">${this.escapeHtml(challenge.targetLabel)}</div>`;
+    }
+
+    getChallengeForSlot(slotId) {
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || String(challenge.slotId) !== String(slotId)) return null;
+        return challenge;
+    }
+
+    getChallengeCrownSVG() {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8l4.5 3.5L12 4l4.5 7.5L21 8l-2 10H5L3 8z"></path>
+            <path d="M5 18h14"></path>
+        </svg>`;
+    }
+
+    getChallengeModalTitleHtml(challenge) {
+        const title = challenge?.title || 'Défi du jour';
+        const exerciseName = challenge?.exerciseName || '';
+        if (!exerciseName) return this.escapeHtml(title);
+
+        const normalizedTitle = title.toLocaleLowerCase();
+        const normalizedExercise = exerciseName.toLocaleLowerCase();
+        const start = normalizedTitle.indexOf(normalizedExercise);
+
+        if (start < 0) {
+            return `${this.escapeHtml(title)} <span class="challenge-modal-title-exercise">${this.escapeHtml(exerciseName)}</span>`;
+        }
+
+        const end = start + exerciseName.length;
+        return [
+            this.escapeHtml(title.slice(0, start)),
+            `<span class="challenge-modal-title-exercise">${this.escapeHtml(title.slice(start, end))}</span>`,
+            this.escapeHtml(title.slice(end))
+        ].join('');
+    }
+
+    getChallengeProgressLabel(challenge, slot, slotData) {
+        if (!challenge || !slot) return '';
+        if (challenge.status === 'completed') return 'Défi validé. Bonus sécurisé.';
+
+        const completedSets = this.getChallengeCompletedSets(slotData);
+        const completedCount = completedSets.length;
+
+        switch (challenge.type) {
+            case 'increase_load':
+                return `À surveiller: ${challenge.target?.weight || '?'} kg pour ${challenge.target?.minReps || 1}+ reps sur une série.`;
+
+            case 'increase_reps': {
+                const referenceWeight = Number(challenge.target?.referenceWeight || 0);
+                const eligibleSets = referenceWeight > 0
+                    ? completedSets.filter(set => Number(set.weight || 0) >= referenceWeight - 1)
+                    : completedSets;
+                const totalReps = eligibleSets.reduce((sum, set) => sum + Number(set.reps || 0), 0);
+                return `Progression défi: ${totalReps}/${challenge.target?.totalReps || '?'} reps comptées.`;
+            }
+
+            case 'hit_targets': {
+                const requiredSets = Number(challenge.target?.targetSetCount || challenge.target?.targetRepsArray?.length || slot.sets || 1);
+                return `Cibles à verrouiller: ${completedCount}/${requiredSets} série${requiredSets > 1 ? 's' : ''} validée${completedCount > 1 ? 's' : ''}.`;
+            }
+
+            case 'quality_baseline': {
+                const requiredSets = Number(challenge.target?.targetSetCount || slot.sets || 1);
+                return `Qualité avant tout: ${completedCount}/${requiredSets} série${requiredSets > 1 ? 's' : ''} propre${completedCount > 1 ? 's' : ''}.`;
+            }
+
+            default:
+                return 'Garde le défi en tête sur chaque série.';
+        }
+    }
+
+    renderExerciseChallengeCard(slots = []) {
+        const card = document.getElementById('exercise-challenge-card');
+        if (!card) return;
+
+        const slotList = Array.isArray(slots) ? slots.filter(Boolean) : [slots].filter(Boolean);
+        const challenge = this.getActiveSessionChallenge();
+        const challengeSlot = challenge
+            ? slotList.find(slot => String(slot.id) === String(challenge.slotId))
+            : null;
+
+        if (!challenge || !challengeSlot) {
+            card.style.display = 'none';
+            card.classList.remove('completed');
+            return;
+        }
+
+        const slotData = this.currentWorkout?.slots?.[challengeSlot.id] || null;
+        const title = document.getElementById('exercise-challenge-title');
+        const target = document.getElementById('exercise-challenge-target');
+        const progress = document.getElementById('exercise-challenge-progress');
+
+        if (title) title.textContent = challenge.exerciseName || this.getSlotExerciseName(challengeSlot);
+        if (target) target.textContent = challenge.targetLabel || 'Pousse un peu plus loin sur la séance.';
+        if (progress) progress.textContent = this.getChallengeProgressLabel(challenge, challengeSlot, slotData);
+
+        card.classList.toggle('completed', challenge.status === 'completed');
+        card.style.display = 'flex';
+    }
+
+    getSeriesChallengeReminder(slot, setIndex, slotData) {
+        const challenge = this.getChallengeForSlot(slot?.id);
+        if (!challenge || challenge.status !== 'active') return '';
+
+        const setNumber = setIndex + 1;
+
+        switch (challenge.type) {
+            case 'increase_load':
+                return `Défi: dès qu'une série est propre, tente ${challenge.target?.weight || '?'} kg pour ${challenge.target?.minReps || 1}+ reps.`;
+
+            case 'increase_reps': {
+                const completedSets = this.getChallengeCompletedSets(slotData);
+                const referenceWeight = Number(challenge.target?.referenceWeight || 0);
+                const eligibleSets = referenceWeight > 0
+                    ? completedSets.filter(set => Number(set.weight || 0) >= referenceWeight - 1)
+                    : completedSets;
+                const totalReps = eligibleSets.reduce((sum, set) => sum + Number(set.reps || 0), 0);
+                return `Défi: ${totalReps}/${challenge.target?.totalReps || '?'} reps comptées, ajoute proprement sur S${setNumber}.`;
+            }
+
+            case 'hit_targets': {
+                const targetReps = challenge.target?.targetRepsArray?.[setIndex] || slot?.repsMax || '?';
+                const referenceWeight = Number(challenge.target?.referenceWeight || 0);
+                const weightLabel = referenceWeight > 0 ? ` à environ ${referenceWeight} kg` : '';
+                return `Défi S${setNumber}: vise ${targetReps} reps${weightLabel}.`;
+            }
+
+            case 'quality_baseline': {
+                const maxRpe = challenge.target?.maxRpe || 9;
+                const targetReps = challenge.target?.targetRepsArray?.[setIndex] || slot?.repsMin || '?';
+                return `Défi S${setNumber}: ${targetReps}+ reps propres, RPE ${maxRpe} max.`;
+            }
+
+            default:
+                return challenge.targetLabel || '';
+        }
+    }
+
+    getChallengeLmsPenalty(slot) {
+        const scores = this.currentWorkout?.lmsScores || {};
+        const contributions = this.getExerciseMuscleContributions(slot.activeExercise || slot.name);
+        const primaryMuscles = contributions
+            .filter(item => item.role === 'primary')
+            .map(item => item.muscleId);
+
+        const relevantScores = primaryMuscles
+            .map(muscleId => Number(scores[muscleId]))
+            .filter(score => Number.isFinite(score));
+
+        if (relevantScores.length === 0) return { penalty: 0, worstScore: 1 };
+
+        const worstScore = Math.max(...relevantScores);
+        if (worstScore >= 3) return { penalty: 5, worstScore };
+        if (worstScore >= 2) return { penalty: 2.5, worstScore };
+        if (worstScore === 0) return { penalty: -0.8, worstScore };
+        return { penalty: 0, worstScore };
+    }
+
+    getChallengeHistoryPenalty(candidate, history) {
+        let penalty = 0;
+        const now = Date.now();
+        const recent = history.slice(0, 12);
+
+        recent.forEach((entry, index) => {
+            const ageDays = entry.date ? (now - new Date(entry.date).getTime()) / (1000 * 60 * 60 * 24) : 999;
+            const sameExercise = entry.exerciseId === candidate.exerciseId;
+            const sameType = entry.type === candidate.type;
+
+            if (sameExercise && sameType && entry.status !== 'completed' && ageDays <= 21) {
+                penalty += Math.max(2.5, 7 - index);
+            } else if (sameExercise && sameType && ageDays <= 14) {
+                penalty += 2.4;
+            } else if (sameExercise && ageDays <= 10) {
+                penalty += 1.2;
+            } else if (sameType && index < 3) {
+                penalty += 0.6;
+            }
+        });
+
+        return penalty;
+    }
+
+    buildChallengeCandidate(slot, type, data = {}) {
+        const exerciseName = slot.activeExercise || slot.name;
+        return {
+            type,
+            slotId: slot.id,
+            sessionId: slot.sessionId,
+            exerciseId: exerciseName,
+            exerciseName,
+            title: data.title,
+            targetLabel: data.targetLabel,
+            coachReason: data.coachReason,
+            instructions: data.instructions || '',
+            baseline: data.baseline || {},
+            target: data.target || {},
+            score: data.score || 0,
+            xpExerciseBonus: data.xpExerciseBonus || 20,
+            xpFinishBonus: data.xpFinishBonus || 40
+        };
+    }
+
+    async buildChallengeCandidatesForSlot(slot, history) {
+        const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
+        if (this.isCardioSlot(normalizedSlot)) return [];
+
+        const candidates = [];
+        const context = await this.buildProgressionContext(normalizedSlot);
+        const exerciseName = normalizedSlot.activeExercise || normalizedSlot.name;
+        const lastWorkout = context.lastWorkout;
+        const lmsPenalty = this.getChallengeLmsPenalty(normalizedSlot);
+        const targetRepsArray = context.targetRepsArray || this.genTargetReps(normalizedSlot.repsMin, normalizedSlot.repsMax, normalizedSlot.sets);
+        const targetSetCount = Math.max(1, normalizedSlot.sets || targetRepsArray.length || 1);
+        const isBodyweight = normalizedSlot.progressionMode === 'bodyweight' && !normalizedSlot.bodyweightProfile?.allowExternalLoad;
+
+        if (!lastWorkout) {
+            candidates.push(this.buildChallengeCandidate(normalizedSlot, 'quality_baseline', {
+                title: `Calibrage propre sur ${exerciseName}`,
+                targetLabel: `Valide ${targetSetCount} série${targetSetCount > 1 ? 's' : ''} propres dans la fourchette prévue.`,
+                coachReason: 'Pas encore assez d’historique sur ce mouvement: le meilleur défi est de créer une référence fiable pour le coach.',
+                instructions: 'Garde une technique reproductible et note le RPE si tu peux.',
+                target: { targetSetCount, targetRepsArray },
+                score: 3.2 - lmsPenalty.penalty,
+                xpExerciseBonus: 15,
+                xpFinishBonus: 25
+            }));
+            return candidates.map(candidate => ({
+                ...candidate,
+                score: candidate.score - this.getChallengeHistoryPenalty(candidate, history)
+            }));
+        }
+
+        const referenceWeight = Number(context.lastWeight || lastWorkout.maxWeight || 0);
+        const lastTotalReps = Number(lastWorkout.totalReps || 0);
+        const avgRpe = Number(context.avgRpe || 8);
+        const canPushLoad = !isBodyweight
+            && referenceWeight > 0
+            && context.canIncreaseLoad !== false
+            && context.nextLoadCandidate > referenceWeight
+            && avgRpe <= 9.1
+            && lmsPenalty.worstScore < 2;
+
+        if (canPushLoad && (context.lastExposure?.allSetsHitTargets || context.avgReps >= normalizedSlot.repsMax - 0.5)) {
+            candidates.push(this.buildChallengeCandidate(normalizedSlot, 'increase_load', {
+                title: `Monte la charge sur ${exerciseName}`,
+                targetLabel: `Tente ${context.nextLoadCandidate} kg sur au moins 1 série à ${normalizedSlot.repsMin}+ reps.`,
+                coachReason: context.lastExposure?.allSetsHitTargets
+                    ? 'Tes cibles récentes sont validées: une petite montée de charge est pertinente.'
+                    : 'Ton haut de fourchette est proche: le coach propose un top set contrôlé.',
+                instructions: 'Si la technique se dégrade, reste propre et valide la séance normalement.',
+                baseline: { weight: referenceWeight, totalReps: lastTotalReps },
+                target: { weight: context.nextLoadCandidate, minReps: normalizedSlot.repsMin },
+                score: 9.4 - lmsPenalty.penalty,
+                xpExerciseBonus: 25,
+                xpFinishBonus: 55
+            }));
+        }
+
+        const repIncrease = Math.max(1, Math.min(3, Math.ceil(targetSetCount / 2)));
+        if (lastTotalReps > 0 && lmsPenalty.worstScore < 3) {
+            candidates.push(this.buildChallengeCandidate(normalizedSlot, 'increase_reps', {
+                title: `Ajoute des reps sur ${exerciseName}`,
+                targetLabel: `Atteins ${lastTotalReps + repIncrease} reps totales sans baisser la charge de référence${referenceWeight > 0 ? ` (${referenceWeight} kg)` : ''}.`,
+                coachReason: avgRpe <= 8.5
+                    ? 'Ton effort récent laisse une marge utile: on pousse les reps avant de forcer plus lourd.'
+                    : 'La charge reste exigeante: ajouter quelques reps est le signal de progression le plus propre.',
+                instructions: 'Les reps propres comptent plus que les reps arrachées.',
+                baseline: { weight: referenceWeight, totalReps: lastTotalReps },
+                target: { totalReps: lastTotalReps + repIncrease, referenceWeight },
+                score: 7.8 - lmsPenalty.penalty,
+                xpExerciseBonus: 20,
+                xpFinishBonus: 45
+            }));
+        }
+
+        const exposure = context.lastExposure;
+        if (!exposure?.allSetsHitTargets && lastWorkout.sets?.length) {
+            candidates.push(this.buildChallengeCandidate(normalizedSlot, 'hit_targets', {
+                title: `Verrouille les cibles sur ${exerciseName}`,
+                targetLabel: `Valide les reps cibles: ${targetRepsArray.join(' / ')}${referenceWeight > 0 ? ` à environ ${referenceWeight} kg` : ''}.`,
+                coachReason: 'Le prochain vrai palier dépend surtout d’une exécution complète sur les cibles prévues.',
+                instructions: 'Si besoin, garde la charge stable et gagne la bataille sur les reps.',
+                baseline: { weight: referenceWeight, totalReps: lastTotalReps },
+                target: { targetSetCount, targetRepsArray, referenceWeight },
+                score: 6.7 - (lmsPenalty.penalty * 0.8),
+                xpExerciseBonus: 20,
+                xpFinishBonus: 40
+            }));
+        }
+
+        if (lmsPenalty.worstScore >= 2) {
+            candidates.push(this.buildChallengeCandidate(normalizedSlot, 'quality_baseline', {
+                title: `Séance propre sur ${exerciseName}`,
+                targetLabel: `Complète ${Math.min(targetSetCount, Math.max(2, targetSetCount - 1))} séries utiles sans dépasser RPE 9.`,
+                coachReason: 'Ton check-in indique de la fatigue locale: le défi reste ambitieux, mais il privilégie la qualité.',
+                instructions: 'La progression durable gagne aussi les jours où tu ne forces pas n’importe comment.',
+                baseline: { weight: referenceWeight, totalReps: lastTotalReps },
+                target: { targetSetCount: Math.min(targetSetCount, Math.max(2, targetSetCount - 1)), maxRpe: 9 },
+                score: 5.9,
+                xpExerciseBonus: 18,
+                xpFinishBonus: 35
+            }));
+        }
+
+        return candidates.map(candidate => ({
+            ...candidate,
+            score: candidate.score - this.getChallengeHistoryPenalty(candidate, history)
+        }));
+    }
+
+    pickSessionChallengeCandidate(candidates, history) {
+        const validCandidates = candidates
+            .filter(candidate => candidate && Number.isFinite(candidate.score))
+            .sort((a, b) => b.score - a.score);
+
+        if (validCandidates.length === 0) return null;
+
+        const bestScore = validCandidates[0].score;
+        const shortlist = validCandidates.filter(candidate => candidate.score >= bestScore - 1.2).slice(0, 3);
+        const seed = (new Date().getDate() + history.length + (this.sessionStartTime || Date.now())) % shortlist.length;
+        return shortlist[seed] || validCandidates[0];
+    }
+
+    async ensureSessionChallenge(session) {
+        if (!this.currentWorkout || this.currentWorkout.challenge) {
+            return this.currentWorkout?.challenge || null;
+        }
+
+        const slots = await db.getSlotsBySession(session.id);
+        const history = await this.getSessionChallengeHistory();
+        const candidates = [];
+
+        for (const slot of slots) {
+            const slotCandidates = await this.buildChallengeCandidatesForSlot(slot, history);
+            candidates.push(...slotCandidates);
+        }
+
+        const selected = this.pickSessionChallengeCandidate(candidates, history);
+        if (!selected) return null;
+
+        const challenge = {
+            ...selected,
+            id: `challenge-${session.id}-${Date.now()}`,
+            version: 1,
+            status: 'active',
+            shown: false,
+            createdAt: new Date().toISOString()
+        };
+
+        this.currentWorkout.challenge = challenge;
+        await db.saveCurrentWorkout(this.currentWorkout);
+        return challenge;
+    }
+
+    scheduleSessionChallengeReveal(delay = 1800) {
+        if (this.challengeRevealTimeout) {
+            clearTimeout(this.challengeRevealTimeout);
+            this.challengeRevealTimeout = null;
+        }
+
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || challenge.shown || challenge.status !== 'active') return;
+
+        this.challengeRevealTimeout = setTimeout(() => {
+            this.challengeRevealTimeout = null;
+            this.showSessionChallengeModal();
+        }, delay);
+    }
+
+    showSessionChallengeModal() {
+        const challenge = this.getActiveSessionChallenge();
+        const modal = document.getElementById('modal-session-challenge');
+        if (!challenge || !modal || challenge.status !== 'active') return;
+
+        document.getElementById('challenge-modal-title').innerHTML = this.getChallengeModalTitleHtml(challenge);
+        document.getElementById('challenge-modal-target').textContent = challenge.targetLabel || 'Pousse un peu plus loin sur la séance.';
+        document.getElementById('challenge-modal-message').textContent = [challenge.coachReason, challenge.instructions]
+            .filter(Boolean)
+            .join(' ');
+        document.getElementById('challenge-modal-reward').textContent =
+            `+${(challenge.xpExerciseBonus || 0) + (challenge.xpFinishBonus || 0)} XP bonus si tu le valides`;
+
+        modal.querySelector('.modal-session-challenge')?.classList.remove('challenge-accepted-pop');
+        modal.classList.add('active');
+    }
+
+    async dismissSessionChallengeModal(options = {}) {
+        const { celebrate = false } = options;
+        const modal = document.getElementById('modal-session-challenge');
+        const content = modal?.querySelector('.modal-session-challenge');
+        if (celebrate) {
+            if (content) {
+                content.classList.remove('challenge-accepted-pop');
+                void content.offsetWidth;
+                content.classList.add('challenge-accepted-pop');
+            }
+            gamification.triggerConfetti('light');
+        }
+        modal?.classList.remove('active');
+
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || !this.currentWorkout) return;
+
+        challenge.shown = true;
+        await db.saveCurrentWorkout(this.currentWorkout);
+    }
+
+    getChallengeCompletedSets(slotData) {
+        if (!slotData) return [];
+
+        const sets = [];
+        (slotData.sets || []).forEach(set => {
+            if (set?.completed) sets.push(set);
+        });
+        (slotData.setsLeft || []).forEach(set => {
+            if (set?.completed) sets.push(set);
+        });
+        (slotData.setsRight || []).forEach(set => {
+            if (set?.completed) sets.push(set);
+        });
+
+        return sets;
+    }
+
+    isSessionChallengeAchieved(challenge, slot, slotData) {
+        const sets = this.getChallengeCompletedSets(slotData);
+        if (!challenge || !slot || sets.length === 0) return false;
+
+        switch (challenge.type) {
+            case 'increase_load':
+                return sets.some(set =>
+                    Number(set.weight || 0) >= Number(challenge.target?.weight || 0)
+                    && Number(set.reps || 0) >= Number(challenge.target?.minReps || 1)
+                );
+
+            case 'increase_reps': {
+                const referenceWeight = Number(challenge.target?.referenceWeight || 0);
+                const eligibleSets = referenceWeight > 0
+                    ? sets.filter(set => Number(set.weight || 0) >= referenceWeight - 1)
+                    : sets;
+                const totalReps = eligibleSets.reduce((sum, set) => sum + Number(set.reps || 0), 0);
+                return totalReps >= Number(challenge.target?.totalReps || Infinity);
+            }
+
+            case 'hit_targets': {
+                const targets = challenge.target?.targetRepsArray || [];
+                const requiredSets = Number(challenge.target?.targetSetCount || targets.length || slot.sets || 1);
+                const referenceWeight = Number(challenge.target?.referenceWeight || 0);
+                let hits = 0;
+
+                sets.slice(0, requiredSets).forEach((set, index) => {
+                    const targetReps = targets[index] || slot.repsMax || 1;
+                    const weightOk = referenceWeight > 0 ? Number(set.weight || 0) >= referenceWeight - 1 : true;
+                    if (weightOk && Number(set.reps || 0) >= targetReps) {
+                        hits += 1;
+                    }
+                });
+
+                return hits >= requiredSets;
+            }
+
+            case 'quality_baseline': {
+                const requiredSets = Number(challenge.target?.targetSetCount || slot.sets || 1);
+                const maxRpe = Number(challenge.target?.maxRpe || 9.5);
+                const usefulSets = sets.filter((set, index) => {
+                    const targetReps = challenge.target?.targetRepsArray?.[index] || slot.repsMin || 1;
+                    const rpe = set.rpe != null ? Number(set.rpe) : 8;
+                    return Number(set.reps || 0) >= targetReps && rpe <= maxRpe;
+                });
+                return usefulSets.length >= requiredSets;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    async awardChallengeXp(challenge, fieldName) {
+        if (!challenge || challenge[fieldName]) return 0;
+
+        const amount = Number(fieldName === 'exerciseXpAwarded' ? challenge.xpExerciseBonus : challenge.xpFinishBonus) || 0;
+        if (amount <= 0) {
+            challenge[fieldName] = true;
+            return 0;
+        }
+
+        const currentXp = (await db.getSetting('xp')) ?? 0;
+        await db.setSetting('xp', currentXp + amount);
+        challenge[fieldName] = true;
+        return amount;
+    }
+
+    async completeSessionChallengeForSlot(slot, slotData) {
+        const challenge = this.getActiveSessionChallenge();
+        if (!challenge || challenge.status !== 'active' || String(challenge.slotId) !== String(slot?.id)) return false;
+
+        if (!this.isSessionChallengeAchieved(challenge, slot, slotData)) return false;
+
+        challenge.status = 'completed';
+        challenge.completedAt = new Date().toISOString();
+        const exerciseXp = await this.awardChallengeXp(challenge, 'exerciseXpAwarded');
+        await db.saveCurrentWorkout(this.currentWorkout);
+        await this.upsertSessionChallengeHistory(challenge, 'completed');
+
+        gamification.triggerConfetti('heavy');
+        gamification.showAchievement(
+            '🎯',
+            'Défi réussi',
+            `${challenge.exerciseName}: objectif validé.`,
+            exerciseXp
+        );
+
+        const summary = document.getElementById('exercise-summary');
+        if (summary) {
+            summary.classList.remove('challenge-success-pulse');
+            void summary.offsetWidth;
+            summary.classList.add('challenge-success-pulse');
+        }
+
+        this.renderExerciseChallengeCard([this.currentSlot, this.supersetSlot].filter(Boolean));
+
+        return true;
+    }
+
+    async finalizeSessionChallengeForFinish() {
+        const challenge = this.currentWorkout?.challenge;
+        if (!challenge || challenge.status !== 'active') return challenge || null;
+
+        const slot = await db.get('slots', challenge.slotId);
+        const slotData = this.currentWorkout.slots?.[challenge.slotId];
+
+        if (slot && slotData && this.isSessionChallengeAchieved(challenge, slot, slotData)) {
+            await this.completeSessionChallengeForSlot(slot, slotData);
+            return challenge;
+        }
+
+        const targetWasCompleted = this.currentWorkout.completedSlots?.includes(challenge.slotId);
+        challenge.status = targetWasCompleted ? 'failed' : 'missed';
+        challenge.completedAt = new Date().toISOString();
+        await db.saveCurrentWorkout(this.currentWorkout);
+        await this.upsertSessionChallengeHistory(challenge, challenge.status);
+        return challenge;
+    }
+
+    async awardSessionChallengeFinishXp() {
+        const challenge = this.currentWorkout?.challenge;
+        if (!challenge || challenge.status !== 'completed') return 0;
+
+        const finishXp = await this.awardChallengeXp(challenge, 'finishXpAwarded');
+        await db.saveCurrentWorkout(this.currentWorkout);
+        return finishXp;
     }
 
     // ===== Session Screen =====
@@ -2134,12 +3186,15 @@ class App {
         
         // Show LMS prompt for muscle groups in this session
         await this.showLMSPrompt(session);
+
+        await this.ensureSessionChallenge(session);
         
         // Start session timer
         this.startSessionTimer();
         
         await this.renderSlots();
         this.showScreen('session');
+        this.scheduleSessionChallengeReveal();
     }
     
     // ===== LMS (Local Muscle Soreness) System =====
@@ -3249,6 +4304,15 @@ class App {
         return slotOrExercise.activeExercise || slotOrExercise.name || '';
     }
 
+    escapeHtml(value = '') {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     async loadCustomExerciseLibrary() {
         const savedLibrary = await db.getSetting('customExerciseLibrary');
         this.customExerciseLibrary = Array.isArray(savedLibrary) ? savedLibrary : [];
@@ -3308,7 +4372,7 @@ class App {
         if (!datalist) return;
 
         datalist.innerHTML = this.getExerciseLibrary()
-            .map(exercise => `<option value="${exercise.name}"></option>`)
+            .map(exercise => `<option value="${this.escapeHtml(exercise.name)}"></option>`)
             .join('');
     }
 
@@ -3465,7 +4529,8 @@ class App {
                 ? 'Pour ce format, la charge sert à noter un niveau, une vitesse ou une résistance.'
                 : '',
             repsStep: isCardio ? '0.1' : '1',
-            repsInputMode: isCardio ? 'decimal' : 'numeric'
+            repsInputMode: isCardio ? 'decimal' : 'numeric',
+            repsMinValue: isCardio ? '0.1' : '1'
         };
     }
 
@@ -3492,11 +4557,16 @@ class App {
         const exactMatch = preferLibraryMatch ? this.findExerciseLibraryEntry(exerciseName) : null;
         if (exactMatch) return exactMatch;
 
+        const hasAny = (keywords = []) => keywords.some(keyword => normalizedName.includes(this.normalizeExerciseText(keyword)));
         const isolationKeywords = [
             'curl', 'extension', 'elevation', 'élévation', 'oiseau',
-            'kickback', 'leg curl', 'leg extension', 'pec deck', 'fly', 'ecarte', 'écarté'
+            'kickback', 'leg curl', 'leg extension', 'pec deck', 'fly', 'ecarte', 'écarté',
+            'abduction', 'adduction', 'mollet', 'calf', 'crunch'
         ];
-        const cardioTemplate = allowCardioInference && this.isCardioSlot(exerciseName)
+        const cardioTemplate = allowCardioInference && hasAny([
+            'tapis', 'course', 'marche inclinée', 'marche inclinee', 'rameur', 'velo', 'vélo', 'bike', 'elliptique',
+            'stair', 'escalier', 'ski erg', 'skierg', 'air bike', 'assault bike', 'cardio'
+        ])
             ? {
                 category: 'cardio',
                 equipment: 'cardio',
@@ -3523,23 +4593,131 @@ class App {
 
         const isBodyweight = this.isLikelyBodyweightExercise(exerciseName);
         const isIsolation = isolationKeywords.some(keyword => normalizedName.includes(this.normalizeExerciseText(keyword)));
+        const isMachine = hasAny(['machine', 'hack', 'presse', 'press machine', 'pec deck', 'leg extension', 'leg curl', 'mollets assis', 'mollets debout']);
+        const isPulley = hasAny(['poulie', 'cable', 'câble', 'tirage', 'pushdown', 'face pull']);
+        const isPlateLoaded = hasAny(['presse', 'leg press', 'hack squat', 'machine convergente']);
+        const equipment = isBodyweight
+            ? 'poids du corps'
+            : isPulley
+                ? 'poulie'
+                : isMachine
+                    ? 'machine'
+                    : hasAny(['haltère', 'haltere', 'dumbbell'])
+                        ? 'haltères'
+                        : hasAny(['barre', 'barbell', 'ez', 'smith'])
+                            ? 'barre'
+                            : hasAny(['élastique', 'elastique', 'band'])
+                                ? 'élastique'
+                                : '';
+
+        let category = 'fullbody';
+        let muscleGroup = '';
+        if (hasAny(['pec', 'chest', 'couche', 'couché', 'incline', 'incliné', 'decline', 'décliné', 'pompe', 'push up', 'pushup', 'fly', 'ecarte', 'écarté'])) {
+            category = 'pectoraux';
+            muscleGroup = 'pectoraux';
+        }
+        if (hasAny(['dos', 'back', 'rowing', 'row', 'tirage', 'traction', 'pull up', 'pullup', 'pulldown', 'pullover'])) {
+            category = 'dos';
+            muscleGroup = 'dos';
+        }
+        if (hasAny(['epaule', 'épaule', 'shoulder', 'militaire', 'elevation', 'élévation', 'oiseau', 'face pull', 'reverse pec deck', 'rear delt'])) {
+            category = 'epaules';
+            muscleGroup = 'epaules';
+        }
+        if (hasAny(['biceps', 'curl', 'brachial'])) {
+            category = 'bras';
+            muscleGroup = 'biceps';
+        }
+        if (hasAny(['triceps', 'pushdown', 'barre au front', 'skull', 'kickback', 'extension nuque'])) {
+            category = 'bras';
+            muscleGroup = 'triceps';
+        }
+        if (hasAny(['squat', 'presse', 'leg press', 'fente', 'split squat', 'leg extension', 'quadriceps'])) {
+            category = 'jambes';
+            muscleGroup = 'quadriceps';
+        }
+        if (hasAny(['ischio', 'leg curl', 'souleve de terre roumain', 'soulevé de terre roumain', 'rdl', 'romanian'])) {
+            category = 'jambes';
+            muscleGroup = 'ischio-jambiers';
+        }
+        if (hasAny(['fessier', 'glute', 'hip thrust', 'abduction'])) {
+            category = 'jambes';
+            muscleGroup = 'fessiers';
+        }
+        if (hasAny(['mollet', 'calf'])) {
+            category = 'jambes';
+            muscleGroup = 'mollets';
+        }
+        if (hasAny(['abdo', 'abs', 'crunch', 'gainage', 'planche', 'leg raise', 'relevé de jambes'])) {
+            category = 'abdominaux';
+            muscleGroup = 'abdominaux';
+        }
+
+        const heavyCompound = hasAny(['squat', 'souleve de terre', 'soulevé de terre', 'deadlift', 'couche', 'couché', 'bench', 'militaire', 'overhead press']);
+        const type = isIsolation ? 'isolation' : 'compound';
+        const sets = heavyCompound ? 4 : 3;
+        const repsMin = isBodyweight ? 6 : (heavyCompound ? 5 : (isIsolation ? 10 : 8));
+        const repsMax = isBodyweight ? 15 : (heavyCompound ? 8 : (isIsolation ? 15 : 12));
+        const rest = heavyCompound ? 120 : (isIsolation ? 60 : 90);
+        const rir = isIsolation ? 1 : 2;
+        const loadingProfile = isBodyweight
+            ? 'bodyweight'
+            : isPlateLoaded
+                ? 'plate_stack'
+                : (isMachine || isPulley)
+                    ? 'machine_stack'
+                    : null;
+        const cueByMuscle = {
+            pectoraux: 'Omoplates stables, poitrine ouverte, descente contrôlée puis poussée sans rebond.',
+            dos: 'Démarre avec les omoplates, tire les coudes dans la bonne trajectoire et évite l’élan.',
+            epaules: 'Épaules basses, trajectoire propre, aucune douleur pincée en haut du mouvement.',
+            biceps: 'Coudes fixes, poignet solide, montée contrôlée et descente lente.',
+            triceps: 'Coudes stables, extension complète, retour maîtrisé sans casser les poignets.',
+            quadriceps: 'Pied stable, genou dans l’axe, amplitude reproductible à chaque série.',
+            'ischio-jambiers': 'Hanches contrôlées, étirement net, dos gainé et répétitions propres.',
+            fessiers: 'Bassin stable, contraction volontaire en fin de mouvement, contrôle sur la négative.',
+            mollets: 'Étirement complet en bas, pause courte en haut, amplitude identique sur toutes les reps.',
+            abdominaux: 'Rétroversion du bassin, souffle fort, mouvement contrôlé sans tirer avec les hanches.'
+        };
+        const typeCue = type === 'isolation'
+            ? `Vise une brûlure propre sans tricher, en gardant environ ${rir} rep en réserve.`
+            : `Garde ${rir} reps en réserve, note la charge réelle et privilégie une technique répétable.`;
+        const equipmentCue = equipment
+            ? `Matériel prévu: ${equipment}.`
+            : 'Choisis le matériel disponible et garde le même repère de charge d’une séance à l’autre.';
+        const variantsByMuscle = {
+            pectoraux: ['Développé couché haltères', 'Développé machine convergente', 'Écarté poulie vis-à-vis'],
+            dos: ['Tirage vertical prise neutre', 'Rowing poulie assise', 'Rowing poitrine appuyée'],
+            epaules: ['Développé haltères épaules', 'Élévation latérale poulie', 'Face pull'],
+            biceps: ['Curl haltères', 'Curl poulie basse', 'Curl pupitre machine'],
+            triceps: ['Pushdown corde', 'Extension triceps poulie haute', 'Extension nuque haltère'],
+            quadriceps: ['Presse à cuisses', 'Hack squat', 'Leg extension'],
+            'ischio-jambiers': ['Leg curl allongé', 'Soulevé de terre roumain', 'Hip thrust'],
+            fessiers: ['Hip thrust', 'Split squat bulgare', 'Abduction machine'],
+            mollets: ['Mollets debout machine', 'Mollets assis machine'],
+            abdominaux: ['Crunch machine', 'Cable crunch', 'Relevé de jambes suspendu']
+        };
+        const pool = Array.from(new Set([
+            exerciseName,
+            ...(variantsByMuscle[muscleGroup] || [])
+        ].filter(Boolean)));
 
         return {
             name: exerciseName,
-            category: 'fullbody',
-            muscleGroup: '',
-            type: isIsolation ? 'isolation' : 'compound',
-            equipment: isBodyweight ? 'poids du corps' : '',
-            sets: 3,
-            repsMin: isBodyweight ? 6 : (isIsolation ? 10 : 8),
-            repsMax: isBodyweight ? 15 : (isIsolation ? 15 : 12),
-            rest: isIsolation ? 60 : 90,
-            rir: 2,
-            instructions: '',
+            category,
+            muscleGroup,
+            type,
+            equipment,
+            sets,
+            repsMin,
+            repsMax,
+            rest,
+            rir,
+            instructions: `${cueByMuscle[muscleGroup] || 'Amplitude complète, tempo contrôlé, posture solide.'} ${typeCue} ${equipmentCue}`,
             trackingMode: 'strength',
             progressionMode: isBodyweight ? 'bodyweight' : null,
-            loadingProfile: isBodyweight ? 'bodyweight' : null,
-            pool: [exerciseName],
+            loadingProfile,
+            pool,
             aliases: []
         };
     }
@@ -3960,6 +5138,9 @@ class App {
         let cardClass = `slot-card ${isCompleted ? 'completed' : ''}`;
         if (isFirstInSuperset) cardClass += ' superset-start';
         if (isSecondInSuperset) cardClass += ' superset-end';
+        const challenge = this.getActiveSessionChallenge();
+        const isChallengeTarget = challenge && String(challenge.slotId) === String(slot.id);
+        if (isChallengeTarget) cardClass += ' challenge-target';
         card.className = cardClass;
         card.dataset.slotId = slot.id;
         const supersetPalette = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444'];
@@ -3997,6 +5178,8 @@ class App {
                     </svg>
                 </button>
               `;
+        const challengeBadge = this.getSlotChallengeBadge(slot.id);
+        const challengeNote = this.getSlotChallengeNote(slot.id);
 
         if (isCompleted) {
             card.innerHTML = `
@@ -4004,6 +5187,7 @@ class App {
                     <div class="slot-title">
                         <span class="slot-id">${slot.slotId}</span>
                         <span class="slot-name">${slot.activeExercise || slot.name}</span>
+                        ${challengeBadge}
                     </div>
                     <div class="slot-completed-actions">
                         ${reopenBtn}
@@ -4015,6 +5199,7 @@ class App {
                         </div>
                     </div>
                 </div>
+                ${challengeNote}
             `;
         } else {
             // For superset exercises, both have same buttons
@@ -4051,6 +5236,7 @@ class App {
                         <span class="slot-id">${slot.slotId}</span>
                         <span class="slot-name">${slot.activeExercise || slot.name}</span>
                         ${supersetBadge}
+                        ${challengeBadge}
                     </div>
                     <div class="slot-status ${status.class}" title="${status.title}"></div>
                 </div>
@@ -4059,6 +5245,7 @@ class App {
                         .map(metric => `<span class="slot-detail"><strong>${metric}</strong></span>`)
                         .join('')}
                 </div>
+                ${challengeNote}
                 <div class="slot-actions">
                     ${launchBtns}
                     <button class="btn btn-pool-trigger" data-slot-id="${slot.id}" title="Changer d'exercice">
@@ -4166,6 +5353,7 @@ class App {
         document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(this.currentSlot);
         document.getElementById('exercise-rest').textContent = this.currentSlot.rest > 0 ? `${this.currentSlot.rest}s` : '--';
         document.getElementById('exercise-rir').textContent = isCardioExercise ? '--' : this.currentSlot.rir;
+        this.renderExerciseChallengeCard([this.currentSlot]);
         
         // Update instructions for unilateral exercises
         if (this.isUnilateralMode) {
@@ -4454,6 +5642,7 @@ class App {
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
         document.getElementById('exercise-rir').textContent = `${this.currentSlot.rir}-${this.supersetSlot.rir}`;
         document.getElementById('exercise-instructions').textContent = 'Enchaîne les deux exercices sans pause entre eux. Repos uniquement après avoir fait les deux.';
+        this.renderExerciseChallengeCard([this.currentSlot, this.supersetSlot]);
 
         // Hide standard coaching and logbook, show superset versions
         document.getElementById('coaching-advice').style.display = 'none';
@@ -5606,12 +6795,14 @@ class App {
                     referenceWeight: adviceB?.referenceWeight ?? null
                 }
             );
+            const challengeReminderA = this.getSeriesChallengeReminder(this.currentSlot, i, slotAData);
+            const challengeReminderB = this.getSeriesChallengeReminder(this.supersetSlot, i, slotBData);
             
             const isEditingSuperset = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
             
             const card = document.createElement('div');
-            card.className = `superset-series-card-new ${isCompleted && !isEditingSuperset ? 'completed' : ''} ${isEditingSuperset ? 'editing' : ''}`;
+            card.className = `superset-series-card-new ${isCompleted && !isEditingSuperset ? 'completed' : ''} ${isEditingSuperset ? 'editing' : ''} ${challengeReminderA || challengeReminderB ? 'challenge-series' : ''}`;
             card.dataset.setIndex = i;
 
             if (isCompleted && !isEditingSuperset) {
@@ -5659,6 +6850,12 @@ class App {
                             <span class="superset-input-badge badge-a">A</span>
                             <span class="superset-input-name">${nameA}</span>
                         </div>
+                        ${challengeReminderA ? `
+                            <div class="series-challenge-inline">
+                                <span class="series-challenge-inline-badge">${this.getChallengeCrownSVG()} Défi</span>
+                                <span class="series-challenge-inline-text">${this.escapeHtml(challengeReminderA)}</span>
+                            </div>
+                        ` : ''}
                         <div class="superset-input-row">
                             <div class="superset-input-group ${isSuggestedA ? 'suggested' : ''} ${isCoachingSuggestedA ? 'coaching-suggested' : ''}">
                                 <label>${this.getLoadFieldLabel(this.currentSlot)} ${isCoachingSuggestedA ? '<span class="suggested-label">coach</span>' : (isSuggestedA ? '<span class="suggested-label">base</span>' : '')}</label>
@@ -5697,6 +6894,12 @@ class App {
                             <span class="superset-input-badge badge-b">B</span>
                             <span class="superset-input-name">${nameB}</span>
                         </div>
+                        ${challengeReminderB ? `
+                            <div class="series-challenge-inline">
+                                <span class="series-challenge-inline-badge">${this.getChallengeCrownSVG()} Défi</span>
+                                <span class="series-challenge-inline-text">${this.escapeHtml(challengeReminderB)}</span>
+                            </div>
+                        ` : ''}
                         <div class="superset-input-row">
                             <div class="superset-input-group ${isSuggestedB ? 'suggested' : ''} ${isCoachingSuggestedB ? 'coaching-suggested' : ''}">
                                 <label>${this.getLoadFieldLabel(this.supersetSlot)} ${isCoachingSuggestedB ? '<span class="suggested-label">coach</span>' : (isSuggestedB ? '<span class="suggested-label">base</span>' : '')}</label>
@@ -5770,6 +6973,7 @@ class App {
         await this.refreshWorkoutCoachingState();
         await this.calculateSupersetCoachingAdvice();
         this.showSupersetCoachingAdvice();
+        this.renderExerciseChallengeCard([this.currentSlot, this.supersetSlot]);
         this.renderSupersetSeries();
 
         // Check if all sets complete
@@ -5816,9 +7020,13 @@ class App {
         if (!this.currentWorkout.completedSlots.includes(this.supersetSlot.id)) {
             this.currentWorkout.completedSlots.push(this.supersetSlot.id);
         }
+        const challengeCompletedA = await this.completeSessionChallengeForSlot(this.currentSlot, slotAData);
+        const challengeCompletedB = await this.completeSessionChallengeForSlot(this.supersetSlot, slotBData);
         await db.saveCurrentWorkout(this.currentWorkout);
         
-        this.triggerConfetti();
+        if (!challengeCompletedA && !challengeCompletedB) {
+            this.triggerConfetti();
+        }
     }
     
     // ===== Logbook =====
@@ -6035,19 +7243,34 @@ class App {
         const latest = values[values.length - 1];
         const baseline = values[0] || latest || 0;
         const pct = baseline > 0 ? ((latest - baseline) / baseline) * 100 : 0;
+        const latestWorkout = ordered[ordered.length - 1];
+        const baselineWorkout = ordered[0];
+        const weightDelta = Number(latestWorkout?.maxWeight || 0) - Number(baselineWorkout?.maxWeight || 0);
+        const repsDelta = Number(latestWorkout?.totalReps || 0) - Number(baselineWorkout?.totalReps || 0);
         const tone = pct >= 1 ? 'positive' : pct <= -1 ? 'negative' : 'neutral';
+        const deltaParts = [];
+        if (weightDelta !== 0) {
+            deltaParts.push(this.formatLogbookTrendDelta(weightDelta, ' kg'));
+        }
+        if (repsDelta !== 0) {
+            deltaParts.push(this.formatLogbookTrendDelta(repsDelta, ' reps'));
+        }
+        const deltaText = deltaParts.length ? deltaParts.join(' / ') : 'Stable';
 
         return {
             ordered,
             values,
             pct,
+            weightDelta,
+            repsDelta,
+            deltaText,
             tone,
             badgeText: tone === 'positive' ? 'En hausse' : tone === 'negative' ? 'À surveiller' : 'Stable',
-            metaText: `${pct >= 0 ? '+' : ''}${Math.round(pct * 10) / 10}% sur ${ordered.length} séances`
+            metaText: `${deltaText} · ${pct >= 0 ? '+' : ''}${Math.round(pct * 10) / 10}% qualité sur ${ordered.length} séances`
         };
     }
 
-    drawProgressSparkline(canvas, values = [], tone = 'neutral') {
+    drawProgressSparkline(canvas, values = [], tone = 'neutral', labelText = '') {
         if (!canvas || values.length < 2) return;
 
         const ctx = canvas.getContext('2d');
@@ -6099,10 +7322,7 @@ class App {
         ctx.lineTo(points[points.length - 1].x, height - padY);
         ctx.lineTo(points[0].x, height - padY);
         ctx.closePath();
-        const gradient = ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, fillTop);
-        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.02)');
-        ctx.fillStyle = gradient;
+        ctx.fillStyle = fillTop;
         ctx.fill();
 
         const latestPoint = points[points.length - 1];
@@ -6110,6 +7330,28 @@ class App {
         ctx.arc(latestPoint.x, latestPoint.y, 4, 0, Math.PI * 2);
         ctx.fillStyle = strokeColor;
         ctx.fill();
+
+        if (labelText) {
+            const label = labelText.length > 22 ? `${labelText.slice(0, 21)}…` : labelText;
+            ctx.font = '800 11px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
+            const labelWidth = Math.min(width - 12, ctx.measureText(label).width + 16);
+            const labelHeight = 24;
+            const labelX = width - labelWidth - 6;
+            const labelY = 6;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.strokeStyle = 'rgba(226, 232, 240, 0.95)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            this.drawRoundRect(ctx, labelX, labelY, labelWidth, labelHeight, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = tone === 'positive' ? '#16a34a' : tone === 'negative' ? '#d97706' : '#4f46e5';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, labelX + (labelWidth / 2), labelY + (labelHeight / 2) + 0.5);
+        }
     }
 
     renderProgressCard(cardId, badgeId, metaId, canvasId, historyArray = [], attempt = 0) {
@@ -6134,7 +7376,7 @@ class App {
             return;
         }
 
-        this.drawProgressSparkline(canvas, insight.values, insight.tone);
+        this.drawProgressSparkline(canvas, insight.values, insight.tone, insight.deltaText);
         badge.textContent = insight.badgeText;
         badge.className = `exercise-progress-badge ${insight.tone}`;
         meta.textContent = insight.metaText;
@@ -6514,9 +7756,10 @@ class App {
             
             const isEditing = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
+            const seriesChallengeReminder = this.getSeriesChallengeReminder(this.currentSlot, i, slotData);
             
             const card = document.createElement('div');
-            card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''} ${isNextIncompleteSet && !isEditing ? 'next-up' : ''}`;
+            card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''} ${isNextIncompleteSet && !isEditing ? 'next-up' : ''} ${seriesChallengeReminder ? 'challenge-series' : ''}`;
             card.dataset.setIndex = i;
             
             card.innerHTML = `
@@ -6537,6 +7780,12 @@ class App {
                         </div>
                     ` : ''}
                 </div>
+                ${seriesChallengeReminder ? `
+                    <div class="series-challenge-inline">
+                        <span class="series-challenge-inline-badge">${this.getChallengeCrownSVG()} Défi</span>
+                        <span class="series-challenge-inline-text">${this.escapeHtml(seriesChallengeReminder)}</span>
+                    </div>
+                ` : ''}
                 ${!isCompleted || isEditing ? `
                     <div class="series-inputs">
                         <div class="input-group ${isSuggested ? 'suggested' : ''} ${isCoachingSuggested ? 'coaching-suggested' : ''}">
@@ -6725,9 +7974,10 @@ class App {
             
             const isEditingUni = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
+            const seriesChallengeReminder = this.getSeriesChallengeReminder(this.currentSlot, i, slotData);
             
             const card = document.createElement('div');
-            card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isEditingUni ? 'editing' : ''}`;
+            card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isEditingUni ? 'editing' : ''} ${seriesChallengeReminder ? 'challenge-series' : ''}`;
             card.dataset.setIndex = i;
 
             if (isCompleted && !isEditingUni) {
@@ -6768,6 +8018,12 @@ class App {
                         <span class="unilateral-series-number">Série ${i + 1}</span>
                         <span class="unilateral-series-target">${this.currentSlot.repsMin}-${this.currentSlot.repsMax} reps / côté</span>
                     </div>
+                    ${seriesChallengeReminder ? `
+                        <div class="series-challenge-inline">
+                            <span class="series-challenge-inline-badge">${this.getChallengeCrownSVG()} Défi</span>
+                            <span class="series-challenge-inline-text">${this.escapeHtml(seriesChallengeReminder)}</span>
+                        </div>
+                    ` : ''}
                     
                     <!-- Left Side Block -->
                     <div class="unilateral-input-block block-left">
@@ -6883,6 +8139,7 @@ class App {
         await this.refreshWorkoutCoachingState();
         await this.calculateUnilateralCoachingAdvice();
         this.showUnilateralCoachingAdvice();
+        this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderUnilateralSeries();
 
         // Check if all sets complete
@@ -6945,9 +8202,12 @@ class App {
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
         }
+        const challengeCompleted = await this.completeSessionChallengeForSlot(this.currentSlot, slotData);
         await db.saveCurrentWorkout(this.currentWorkout);
         
-        this.triggerConfetti();
+        if (!challengeCompleted) {
+            this.triggerConfetti();
+        }
     }
 
     async completeSet(setIndex) {
@@ -6993,6 +8253,7 @@ class App {
             this.currentDayStatus = dayStatus;
         }
 
+        this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderSeries();
 
         // Check if all sets are complete against the accepted target only
@@ -7042,6 +8303,7 @@ class App {
         await this.refreshWorkoutCoachingState();
         this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
         await this.showCoachingAdvice();
+        this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderSeries();
     }
     
@@ -7070,6 +8332,7 @@ class App {
         await this.refreshWorkoutCoachingState();
         await this.calculateSupersetCoachingAdvice();
         this.showSupersetCoachingAdvice();
+        this.renderExerciseChallengeCard([this.currentSlot, this.supersetSlot]);
         this.renderSupersetSeries();
     }
 
@@ -7096,6 +8359,7 @@ class App {
         await this.refreshWorkoutCoachingState();
         await this.calculateUnilateralCoachingAdvice();
         this.showUnilateralCoachingAdvice();
+        this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderUnilateralSeries();
     }
 
@@ -8230,8 +9494,9 @@ class App {
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
-            await db.saveCurrentWorkout(this.currentWorkout);
         }
+        await this.completeSessionChallengeForSlot(this.currentSlot, slotData);
+        await db.saveCurrentWorkout(this.currentWorkout);
     }
 
     hideExerciseSummary() {
@@ -8292,6 +9557,8 @@ class App {
 
         try {
             const stimulusScore = await this.calculateStimulusScore();
+            const finalizedChallenge = await this.finalizeSessionChallengeForFinish();
+            const challengeFinishXp = await this.awardSessionChallengeFinishXp();
             const saveKey = `${this.currentSession.id}-${this.sessionStartTime}`;
             const saveDate = new Date().toISOString();
 
@@ -8303,6 +9570,7 @@ class App {
                 completedSlots: this.currentWorkout.completedSlots,
                 stimulusScore: stimulusScore.total,
                 sessionNote: this.currentWorkout.sessionNote || '',
+                challenge: this.currentWorkout.challenge || finalizedChallenge || null,
                 saveKey
             };
 
@@ -8451,8 +9719,19 @@ class App {
             gamification.celebrateWorkoutComplete(sessionName, {
                 totalSets,
                 duration,
-                xpGain: Math.round(stimulusScore.total * 2)
+                xpGain: Math.round(stimulusScore.total * 2) + challengeFinishXp
             });
+
+            if (finalizedChallenge?.status === 'failed' || finalizedChallenge?.status === 'missed') {
+                setTimeout(() => {
+                    gamification.showAchievement(
+                        '🎯',
+                        'Défi ajusté',
+                        'Pas grave: le coach variera le prochain défi au lieu de te resservir exactement le même.',
+                        null
+                    );
+                }, 1800);
+            }
 
             if (justMetWeeklyGoal) {
                 setTimeout(() => {
@@ -8949,7 +10228,8 @@ class App {
             return this.getExerciseSearchBlob(exercise).includes(query);
         });
 
-        customBtn.disabled = !(this.exerciseLibraryState.query || '').trim();
+        customBtn.disabled = false;
+        customBtn.setAttribute('aria-disabled', (!(this.exerciseLibraryState.query || '').trim()).toString());
         customBtn.textContent = (this.exerciseLibraryState.query || '').trim()
             ? `Créer "${(this.exerciseLibraryState.query || '').trim()}" en custom`
             : 'Créer cet exercice en custom';
@@ -8972,16 +10252,25 @@ class App {
                 exercise.trackingMode === 'cardio'
                     ? this.formatSlotRepRange(exercise)
                     : `${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}`,
+                exercise.rest > 0 ? `${exercise.rest}s repos` : 'sans repos',
+                exercise.trackingMode === 'cardio' ? 'cardio' : `RIR ${exercise.rir}`,
                 exercise.equipment || ''
             ].filter(Boolean);
+            const variants = (exercise.pool || []).filter(name => name !== exercise.name).slice(0, 3);
 
             return `
-                <button type="button" class="exercise-library-item" data-exercise-name="${exercise.name}">
+                <button type="button" class="exercise-library-item" data-exercise-name="${this.escapeHtml(exercise.name)}">
                     <div class="exercise-library-item-main">
-                        <div class="exercise-library-item-name">${exercise.name}</div>
+                        <div class="exercise-library-item-name">${this.escapeHtml(exercise.name)}</div>
                         <div class="exercise-library-item-meta">
-                            ${meta.map(item => `<span class="exercise-library-item-chip">${item}</span>`).join('')}
+                            ${meta.map(item => `<span class="exercise-library-item-chip">${this.escapeHtml(item)}</span>`).join('')}
                         </div>
+                        <div class="exercise-library-item-instructions">${this.escapeHtml(exercise.instructions || 'Prêt à ajouter avec les réglages recommandés.')}</div>
+                        ${variants.length ? `
+                            <div class="exercise-library-item-variants">
+                                Variantes: ${variants.map(item => this.escapeHtml(item)).join(' · ')}
+                            </div>
+                        ` : ''}
                     </div>
                     <span class="exercise-library-item-action">Ajouter</span>
                 </button>
@@ -9001,7 +10290,7 @@ class App {
         const definition = custom
             ? this.inferCustomExerciseTemplate(trimmedName, {
                 preferLibraryMatch: false,
-                allowCardioInference: false
+                allowCardioInference: true
             })
             : (this.findExerciseLibraryEntry(trimmedName) || this.inferCustomExerciseTemplate(trimmedName));
         const newSlot = this.buildSlotFromExerciseDefinition(definition, sessionId, order);
@@ -9089,21 +10378,39 @@ class App {
         const bodyweightProfile = slot.bodyweightProfile || {};
         const trackingMode = slot.trackingMode || this.getTrackingMode(slot);
         const trackingConfig = this.getTrackingModeFieldConfig(trackingMode);
+        const slotPool = Array.isArray(slot.pool) && slot.pool.length
+            ? slot.pool
+            : [slot.activeExercise || slot.name].filter(Boolean);
+        const activeExerciseName = slot.activeExercise || slot.name || '';
+        const matchedDefinition = this.findExerciseLibraryEntry(activeExerciseName);
+        const presetSummary = matchedDefinition
+            ? `${this.getExerciseCategoryLabel(matchedDefinition.category)} · ${this.getMuscleGroupLabel(matchedDefinition.muscleGroup) || 'général'} · ${matchedDefinition.sets}x${matchedDefinition.repsMin}-${matchedDefinition.repsMax}`
+            : 'Déduction automatique selon le nom tapé';
         
         const openAdvanced = progressionMode !== 'load' || loadingProfile !== 'free_weight';
         form.innerHTML = `
+            <div class="edit-slot-summary-card">
+                <div>
+                    <div class="edit-slot-summary-kicker">Réglage rapide</div>
+                    <div class="edit-slot-summary-title">${this.escapeHtml(activeExerciseName)}</div>
+                    <div class="edit-slot-summary-meta">${this.escapeHtml(presetSummary)}</div>
+                </div>
+                <button class="btn btn-outline btn-compact" id="btn-autofill-slot-template" type="button">
+                    Préremplir
+                </button>
+            </div>
             <div class="edit-slot-helper">
-                Modifie rapidement l'exercice ci-dessous. Les réglages coach avancés restent disponibles si besoin.
+                L'essentiel suffit: exercice, séries, objectif, repos. Le bouton Préremplir remet automatiquement les champs cohérents avec la base ou avec le nom custom.
             </div>
             <div class="edit-slot-block">
                 <div class="form-group">
-                    <label>Nom du slot</label>
-                    <input type="text" id="edit-slot-name" value="${slot.name}" class="form-input">
+                    <label>Exercice actif</label>
+                    <input type="text" id="edit-slot-active" value="${this.escapeHtml(activeExerciseName)}" class="form-input" list="exercise-library-options">
+                    <small class="edit-slot-caption">Choisis dans la base ou tape un nom custom, puis Préremplir si tu veux tout régler d'un coup.</small>
                 </div>
                 <div class="form-group">
-                    <label>Exercice actif</label>
-                    <input type="text" id="edit-slot-active" value="${slot.activeExercise}" class="form-input" list="exercise-library-options">
-                    <small class="edit-slot-caption">Tu peux choisir un nom existant de la base ou taper un exercice custom.</small>
+                    <label>Nom affiché dans la séance</label>
+                    <input type="text" id="edit-slot-name" value="${this.escapeHtml(slot.name || activeExerciseName)}" class="form-input">
                 </div>
                 <div class="form-group">
                     <label>Format de suivi</label>
@@ -9119,11 +10426,11 @@ class App {
                     </div>
                     <div class="form-group">
                         <label id="edit-slot-reps-min-label">${trackingConfig.repMinLabel}</label>
-                        <input type="number" id="edit-slot-reps-min" value="${slot.repsMin}" class="form-input" min="1" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
+                        <input type="number" id="edit-slot-reps-min" value="${slot.repsMin}" class="form-input" min="${trackingConfig.repsMinValue}" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
                     </div>
                     <div class="form-group">
                         <label id="edit-slot-reps-max-label">${trackingConfig.repMaxLabel}</label>
-                        <input type="number" id="edit-slot-reps-max" value="${slot.repsMax}" class="form-input" min="1" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
+                        <input type="number" id="edit-slot-reps-max" value="${slot.repsMax}" class="form-input" min="${trackingConfig.repsMinValue}" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
                     </div>
                 </div>
                 <div class="form-row">
@@ -9281,14 +10588,14 @@ class App {
             <div class="edit-slot-block">
                 <div class="form-group">
                     <label>Consignes d'exécution</label>
-                    <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${slot.instructions || ''}</textarea>
+                    <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${this.escapeHtml(slot.instructions || '')}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Pool d'exercices variantes</label>
                     <div class="pool-editor" id="pool-editor">
-                        ${slot.pool.map((ex, i) => `
+                        ${slotPool.map((ex, i) => `
                             <div class="pool-item-edit" data-index="${i}">
-                                <input type="text" class="pool-input" value="${ex}" placeholder="Nom de l'exercice" list="exercise-library-options">
+                                <input type="text" class="pool-input" value="${this.escapeHtml(ex)}" placeholder="Nom de l'exercice" list="exercise-library-options">
                                 <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${i}">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -9317,6 +10624,7 @@ class App {
         this.bindTypeSelector();
         this.bindTrackingModeEditor();
         this.bindProgressionModeEditor();
+        this.bindEditSlotAutofill();
     }
     
     bindTypeSelector() {
@@ -9358,10 +10666,12 @@ class App {
             if (repsMinInput) {
                 repsMinInput.step = config.repsStep;
                 repsMinInput.inputMode = config.repsInputMode;
+                repsMinInput.min = config.repsMinValue;
             }
             if (repsMaxInput) {
                 repsMaxInput.step = config.repsStep;
                 repsMaxInput.inputMode = config.repsInputMode;
+                repsMaxInput.min = config.repsMinValue;
             }
         };
 
@@ -9394,6 +10704,150 @@ class App {
         modeInput.onchange = syncVisibility;
         loadingProfileInput.onchange = syncVisibility;
         syncVisibility();
+    }
+
+    bindEditSlotAutofill() {
+        const activeInput = document.getElementById('edit-slot-active');
+        const autofillBtn = document.getElementById('btn-autofill-slot-template');
+        if (!activeInput || !autofillBtn) return;
+
+        const updatePresetSummary = () => {
+            const exerciseName = activeInput.value.trim();
+            const definition = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName || 'Nouvel exercice', {
+                preferLibraryMatch: true,
+                allowCardioInference: true
+            });
+            const title = document.querySelector('.edit-slot-summary-title');
+            const meta = document.querySelector('.edit-slot-summary-meta');
+            if (title) title.textContent = exerciseName || 'Nouvel exercice';
+            if (meta && definition) {
+                meta.textContent = [
+                    this.getExerciseCategoryLabel(definition.category),
+                    this.getMuscleGroupLabel(definition.muscleGroup) || definition.equipment || 'général',
+                    definition.trackingMode === 'cardio'
+                        ? `${definition.repsMin}-${definition.repsMax} min`
+                        : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
+                ].filter(Boolean).join(' · ');
+            }
+        };
+
+        activeInput.oninput = updatePresetSummary;
+        activeInput.onchange = () => {
+            updatePresetSummary();
+            const definition = this.findExerciseLibraryEntry(activeInput.value.trim());
+            if (definition) {
+                this.applyExerciseDefinitionToEditForm(definition, { updateName: true, toast: false });
+            }
+        };
+
+        autofillBtn.onclick = () => {
+            const exerciseName = activeInput.value.trim();
+            if (!exerciseName) {
+                activeInput.focus();
+                return;
+            }
+
+            const definition = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
+                preferLibraryMatch: false,
+                allowCardioInference: true
+            });
+            this.applyExerciseDefinitionToEditForm(definition, { updateName: true, toast: true });
+        };
+    }
+
+    renderPoolEditorItems(pool = []) {
+        const poolEditor = document.getElementById('pool-editor');
+        if (!poolEditor) return;
+
+        const items = pool.length ? pool : [''];
+        poolEditor.innerHTML = items.map((exercise, index) => `
+            <div class="pool-item-edit" data-index="${index}">
+                <input type="text" class="pool-input" value="${this.escapeHtml(exercise)}" placeholder="Nom de l'exercice" list="exercise-library-options">
+                <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${index}">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    applyExerciseDefinitionToEditForm(definition, options = {}) {
+        if (!definition) return;
+        const { updateName = false, toast = false } = options;
+        const normalizedDefinition = this.normalizeSlotProgressionConfig({
+            id: 'edit-preview',
+            name: definition.name,
+            activeExercise: definition.name,
+            type: definition.type || 'compound',
+            trackingMode: definition.trackingMode || 'strength',
+            progressionMode: definition.progressionMode || null,
+            loadingProfile: definition.loadingProfile || null,
+            muscleGroup: definition.muscleGroup || '',
+            sets: definition.sets ?? 3,
+            repsMin: definition.repsMin ?? 8,
+            repsMax: definition.repsMax ?? 12,
+            rest: definition.rest ?? 90,
+            rir: definition.rir ?? 2
+        });
+
+        const setValue = (id, value) => {
+            const input = document.getElementById(id);
+            if (input) input.value = value ?? '';
+        };
+
+        setValue('edit-slot-active', definition.name);
+        if (updateName) setValue('edit-slot-name', definition.name);
+        setValue('edit-slot-tracking-mode', normalizedDefinition.trackingMode || 'strength');
+        setValue('edit-slot-sets', definition.sets ?? 3);
+        setValue('edit-slot-reps-min', definition.repsMin ?? 8);
+        setValue('edit-slot-reps-max', definition.repsMax ?? 12);
+        setValue('edit-slot-rest', definition.rest ?? 90);
+        setValue('edit-slot-rir', definition.rir ?? 2);
+        setValue('edit-slot-muscle-group', definition.muscleGroup || '');
+        setValue('edit-slot-progression-mode', normalizedDefinition.progressionMode || 'load');
+        setValue('edit-slot-loading-profile', normalizedDefinition.loadingProfile || 'free_weight');
+        setValue('edit-slot-instructions', definition.instructions || '');
+        setValue('edit-slot-bodyweight-family', normalizedDefinition.bodyweightProfile?.family || 'generic');
+
+        const setChecked = (id, value) => {
+            const input = document.getElementById(id);
+            if (input) input.checked = Boolean(value);
+        };
+        setChecked('edit-slot-cap-user-flag', false);
+        setChecked('edit-slot-allow-external-load', normalizedDefinition.bodyweightProfile?.allowExternalLoad);
+        setChecked('edit-slot-allow-assistance', normalizedDefinition.bodyweightProfile?.allowAssistance);
+
+        const typeInput = document.getElementById('edit-slot-type');
+        if (typeInput) typeInput.value = definition.type || 'compound';
+        document.querySelectorAll('.type-btn').forEach(button => {
+            button.classList.toggle('active', button.dataset.type === (definition.type || 'compound'));
+        });
+
+        const pool = Array.from(new Set((definition.pool || [definition.name, ...(definition.variants || [])]).filter(Boolean)));
+        this.renderPoolEditorItems(pool);
+        this.bindPoolEditorEvents();
+        this.bindTrackingModeEditor();
+        this.bindProgressionModeEditor();
+
+        const title = document.querySelector('.edit-slot-summary-title');
+        if (title) title.textContent = definition.name;
+
+        const meta = document.querySelector('.edit-slot-summary-meta');
+        if (meta) {
+            meta.textContent = [
+                this.getExerciseCategoryLabel(definition.category),
+                this.getMuscleGroupLabel(definition.muscleGroup) || definition.equipment || 'général',
+                definition.trackingMode === 'cardio'
+                    ? `${definition.repsMin}-${definition.repsMax} min`
+                    : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
+            ].filter(Boolean).join(' · ');
+        }
+
+        if (toast) {
+            this.showCoachToast('Exercice prérempli: séries, reps, repos, consignes et variantes sont prêts.', 'hot', '✓');
+        }
     }
 
     syncExerciseProgressionControls(advice = null) {
@@ -10018,6 +11472,15 @@ class App {
         document.getElementById('btn-confirm-finish').onclick = () => this.confirmFinishSession();
         document.querySelector('#modal-finish .modal-backdrop').onclick = () => this.hideFinishModal();
 
+        const closeChallengeBtn = document.getElementById('btn-close-session-challenge');
+        if (closeChallengeBtn) {
+            closeChallengeBtn.onclick = () => this.dismissSessionChallengeModal({ celebrate: true });
+        }
+        const challengeBackdrop = document.querySelector('#modal-session-challenge .modal-backdrop');
+        if (challengeBackdrop) {
+            challengeBackdrop.onclick = () => this.dismissSessionChallengeModal();
+        }
+
         // Exercise screen
         document.getElementById('btn-back-session').onclick = () => {
             this.stopRestTimer();
@@ -10293,6 +11756,14 @@ class App {
                 this.exerciseLibraryState.query = exerciseLibrarySearch.value;
                 this.renderExerciseLibraryList();
             };
+            exerciseLibrarySearch.onkeydown = (event) => {
+                if (event.key !== 'Enter') return;
+                const customName = exerciseLibrarySearch.value.trim();
+                if (!customName) return;
+                event.preventDefault();
+                this.exerciseLibraryState.query = customName;
+                this.createExerciseFromLibrary(customName, { custom: !this.findExerciseLibraryEntry(customName) });
+            };
         }
 
         const exerciseLibraryFilters = document.getElementById('exercise-library-filters');
@@ -10318,11 +11789,12 @@ class App {
         const createCustomExerciseBtn = document.getElementById('btn-create-custom-exercise');
         if (createCustomExerciseBtn) {
             createCustomExerciseBtn.onclick = () => {
-                const customName = (this.exerciseLibraryState.query || '').trim();
+                const customName = (exerciseLibrarySearch?.value || this.exerciseLibraryState.query || '').trim();
                 if (!customName) {
                     exerciseLibrarySearch?.focus();
                     return;
                 }
+                this.exerciseLibraryState.query = customName;
                 this.createExerciseFromLibrary(customName, { custom: true });
             };
         }
@@ -10331,6 +11803,12 @@ class App {
         document.getElementById('sheet-edit-slot').onclick = (e) => {
             if (e.target.classList.contains('sheet-backdrop')) {
                 this.hideEditSlotSheet();
+                return;
+            }
+            const backBtn = e.target.closest('#btn-back-edit-slot');
+            if (backBtn) {
+                this.hideEditSlotSheet();
+                return;
             }
             const saveBtn = e.target.closest('#btn-save-slot');
             if (saveBtn) {
@@ -10410,6 +11888,11 @@ class App {
                 this.saveSessionName(saveNameBtn.dataset.sessionId);
             }
         });
+
+        const exerciseLibraryBack = document.getElementById('btn-back-exercise-library');
+        if (exerciseLibraryBack) {
+            exerciseLibraryBack.onclick = () => this.hideExerciseLibrarySheet();
+        }
         
         // Pool sheet
         document.querySelector('#sheet-pool .sheet-backdrop').onclick = () => this.hidePoolSheet();
@@ -10665,6 +12148,7 @@ class App {
                 document.getElementById('exercise-rest').textContent = slot.rest > 0 ? `${slot.rest}s` : '--';
                 document.getElementById('exercise-rir').textContent = this.isCardioSlot(slot) ? '--' : slot.rir;
                 document.getElementById('exercise-instructions').textContent = slot.instructions || '--';
+                this.renderExerciseChallengeCard([slot]);
                 await this.loadLogbook();
                 this.renderSeries();
             }
