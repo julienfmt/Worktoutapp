@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const CACHE_NAME = 'muscu-v4.2-streak-lite';
+const CACHE_NAME = 'muscu-v4.3-streak-game';
 const ASSETS = [
     './',
     './index.html',

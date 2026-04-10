@@ -2,14 +2,31 @@
 class StreakEngine {
     constructor() {
         this.LEVELS = [
-            { name: 'Rookie', min: 0, max: 2, color: '#94a3b8', emoji: '🌱', description: 'Début du voyage' },
-            { name: 'Initié', min: 3, max: 5, color: '#22c55e', emoji: '🔰', description: 'Tu prends le rythme' },
-            { name: 'Focus', min: 6, max: 9, color: '#f59e0b', emoji: '🔥', description: 'En pleine concentration' },
-            { name: 'Guerrier', min: 10, max: 15, color: '#f97316', emoji: '⚔️', description: 'Rien ne t\'arrête' },
-            { name: 'Machine', min: 16, max: 24, color: '#8b5cf6', emoji: '⚡', description: 'Régularité parfaite' },
-            { name: 'Elite', min: 25, max: 35, color: '#ec4899', emoji: '💎', description: 'Parmi les meilleurs' },
-            { name: 'Légende', min: 36, max: 51, color: '#ef4444', emoji: '👑', description: 'Statut légendaire' },
-            { name: 'Titan', min: 52, max: Infinity, color: '#eab308', emoji: '🏆', description: '1 an+ de streak !' }
+            { name: 'Rookie', min: 0, max: 2, color: '#64748b', emoji: '🙂', description: 'Le run démarre' },
+            { name: 'Initié', min: 3, max: 5, color: '#22c55e', emoji: '😄', description: 'Tu prends le rythme' },
+            { name: 'Focus', min: 6, max: 8, color: '#06b6d4', emoji: '😎', description: 'Concentration enclenchée' },
+            { name: 'Guerrier', min: 9, max: 11, color: '#f97316', emoji: '⚔️', description: 'Rien ne t\'arrête' },
+            { name: 'Berserker', min: 12, max: 14, color: '#ef4444', emoji: '🔥', description: 'Le feu est lancé' },
+            { name: 'Machine', min: 15, max: 17, color: '#8b5cf6', emoji: '🤖', description: 'Régularité parfaite' },
+            { name: 'Turbo', min: 18, max: 20, color: '#ec4899', emoji: '🚀', description: 'Accélération propre' },
+            { name: 'Champion', min: 21, max: 23, color: '#d946ef', emoji: '🏅', description: 'Le niveau monte' },
+            { name: 'Elite', min: 24, max: 26, color: '#7c3aed', emoji: '💎', description: 'Parmi les meilleurs' },
+            { name: 'Phénix', min: 27, max: 29, color: '#f43f5e', emoji: '🦅', description: 'Tu reviens toujours' },
+            { name: 'Master', min: 30, max: 32, color: '#0ea5e9', emoji: '🧠', description: 'Discipline maîtrisée' },
+            { name: 'Boss', min: 33, max: 35, color: '#14b8a6', emoji: '🕹️', description: 'Contrôle total' },
+            { name: 'Légende', min: 36, max: 38, color: '#f59e0b', emoji: '👑', description: 'Statut légendaire' },
+            { name: 'Mythique', min: 39, max: 41, color: '#eab308', emoji: '🌟', description: 'Aura mythique' },
+            { name: 'Invincible', min: 42, max: 44, color: '#22c55e', emoji: '🛡️', description: 'Streak blindé' },
+            { name: 'Cosmique', min: 45, max: 47, color: '#6366f1', emoji: '🪐', description: 'Orbitalement solide' },
+            { name: 'Immortel', min: 48, max: 50, color: '#fb923c', emoji: '☀️', description: 'Énergie solaire' },
+            { name: 'Titan', min: 51, max: 53, color: '#facc15', emoji: '🏆', description: 'Un an en ligne de mire' },
+            { name: 'Supernova', min: 54, max: 56, color: '#fb7185', emoji: '💥', description: 'Explosion de constance' },
+            { name: 'Oracle', min: 57, max: 59, color: '#a855f7', emoji: '🔮', description: 'Tu vois loin' },
+            { name: 'Kaiju', min: 60, max: 62, color: '#16a34a', emoji: '🦖', description: 'Monstre de régularité' },
+            { name: 'Galactique', min: 63, max: 65, color: '#2563eb', emoji: '🌌', description: 'Hors catégorie' },
+            { name: 'Apex', min: 66, max: 68, color: '#f97316', emoji: '🦁', description: 'Sommet atteint' },
+            { name: 'Ascendant', min: 69, max: 71, color: '#db2777', emoji: '🛸', description: 'Tu changes de dimension' },
+            { name: 'Infini', min: 72, max: Infinity, color: '#06b6d4', emoji: '♾️', description: 'Streak sans plafond' }
         ];
         this.MAX_SHIELDS = 3;
     }
@@ -373,17 +390,19 @@ class GamificationEngine {
     }
     
     celebrateStreak(streakCount) {
-        const milestones = {
-            3: { icon: '🔰', title: 'Initié !', message: 'Tu prends le rythme !', xp: 50 },
-            6: { icon: '🔥', title: 'Focus !', message: 'En pleine concentration !', xp: 75 },
-            10: { icon: '⚔️', title: 'Guerrier !', message: 'Rien ne t\'arrête !', xp: 100 },
-            16: { icon: '⚡', title: 'Machine !', message: 'Régularité parfaite !', xp: 150 },
-            25: { icon: '💎', title: 'Elite !', message: 'Parmi les meilleurs !', xp: 200 },
-            36: { icon: '👑', title: 'Légende !', message: 'Statut légendaire atteint !', xp: 300 },
-            52: { icon: '🏆', title: 'TITAN !', message: '1 AN DE STREAK ! Incroyable !', xp: 500 }
-        };
-        
-        const milestone = milestones[streakCount];
+        const oneYearMilestone = streakCount === 52
+            ? { icon: '🏆', title: '1 an de streak !', message: '52 semaines. C\'est colossal !', xp: 500 }
+            : null;
+        const levelMilestone = streakEngine.LEVELS.find((level) => level.min === streakCount && level.min > 0);
+        const milestone = oneYearMilestone || (levelMilestone
+            ? {
+                icon: levelMilestone.emoji,
+                title: `${levelMilestone.name} !`,
+                message: `${levelMilestone.description} !`,
+                xp: Math.min(450, 50 + Math.floor(levelMilestone.min / 3) * 25)
+            }
+            : null);
+
         if (milestone) {
             this.triggerConfetti('heavy');
             setTimeout(() => {
@@ -474,8 +493,22 @@ class App {
         this.restTimer = null;
         this.restTimeLeft = 0;
         this.restTimeTotal = 0;
+        this.restOverlayReady = false;
+        this.restFeedbackCaptured = false;
+        this.overlayTimerMode = null;
+        this.cardioTimerState = null;
+        this.restTimerStyle = null;
+        this.lastRestTimerStyleSignature = null;
+        this.lastRestTimerDisplayedSecond = null;
+        this.restTimerTickBoostTimeout = null;
         this.lastExerciseHistory = null;
         this.poolSlotId = null;
+        this.exerciseLibraryState = {
+            sessionId: null,
+            category: 'all',
+            query: ''
+        };
+        this.customExerciseLibrary = [];
         this.editingSessionId = null;
         this.isFinishingSession = false;
         this.isReviewMode = false;
@@ -507,6 +540,8 @@ class App {
         }
         
         await this.loadCurrentWorkout();
+        await this.loadCustomExerciseLibrary();
+        this.renderExerciseLibraryDatalist();
         this.bindEvents();
         this.setupVisibilityHandler();
         await this.updateStorageInfo();
@@ -670,14 +705,21 @@ class App {
             
             if (remaining > 0 && this.currentScreen === 'exercise') {
                 // Timer still running, restore it
+                this.overlayTimerMode = 'rest';
                 this.restTimerEndTime = parseInt(timerEndTime);
-                this.restTimeTotal = remaining; // Approximate, but good enough
+                const storedTotal = Number(localStorage.getItem('restTimerTotalTime'));
+                this.restTimeTotal = Number.isFinite(storedTotal) && storedTotal > 0 ? storedTotal : remaining;
+                this.restTimeLeft = remaining;
+                this.restFeedbackCaptured = false;
                 
                 // Show timer overlay if not already visible
                 const overlay = document.getElementById('timer-overlay');
                 if (!overlay.classList.contains('active')) {
                     overlay.classList.add('active');
                 }
+                this.applyRestTimerVariation(this.restoreRestTimerVariation() || this.restTimerStyle || this.pickRestTimerVariation(true));
+                this.setRestOverlayReadyState(false);
+                this.updateRestOverlayContext();
                 
                 // Restart the update loop if not running
                 if (!this.restTimer) {
@@ -687,6 +729,7 @@ class App {
             } else if (remaining <= 0) {
                 // Timer expired while app was in background
                 localStorage.removeItem('restTimerEndTime');
+                localStorage.removeItem('restTimerTotalTime');
                 if (this.currentScreen === 'exercise') {
                     this.onTimerComplete();
                 }
@@ -981,7 +1024,7 @@ class App {
         const nextLevel = streakEngine.LEVELS.find(l => l.min > effectiveStreakCount) || level;
         
         // Render consolidated streak card
-        this.renderStreakCard({ ...data, effectiveStreakCount }, prediction, level, nextLevel);
+        this.renderStreakCard({ ...data, effectiveStreakCount }, level, nextLevel);
         
         // Render prediction/warning
         this.renderWeekPrediction(prediction);
@@ -994,11 +1037,45 @@ class App {
         </svg>`;
     }
 
-    hexToRgbObject(hex) {
-        const safe = String(hex || '').trim().replace('#', '');
-        const full = safe.length === 3
-            ? safe.split('').map((char) => char + char).join('')
-            : safe.padEnd(6, '0').slice(0, 6);
+    getCheckCircleIconSVG() {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M8.5 12.5l2.3 2.3 4.8-5.1"></path>
+        </svg>`;
+    }
+
+    colorToRgbObject(color) {
+        const fallback = { r: 99, g: 102, b: 241 };
+
+        if (!color || typeof color !== 'string') {
+            return fallback;
+        }
+
+        const trimmed = color.trim();
+        const rgbMatch = trimmed.match(/^rgba?\(([^)]+)\)$/i);
+        if (rgbMatch) {
+            const parts = rgbMatch[1]
+                .split(',')
+                .slice(0, 3)
+                .map((part) => Number.parseFloat(part.trim()));
+
+            if (parts.length === 3 && parts.every((part) => Number.isFinite(part))) {
+                return {
+                    r: Math.max(0, Math.min(255, Math.round(parts[0]))),
+                    g: Math.max(0, Math.min(255, Math.round(parts[1]))),
+                    b: Math.max(0, Math.min(255, Math.round(parts[2])))
+                };
+            }
+        }
+
+        const normalized = trimmed.replace('#', '');
+        const full = normalized.length === 3
+            ? normalized.split('').map((char) => char + char).join('')
+            : normalized;
+
+        if (!/^[0-9a-fA-F]{6}$/.test(full)) {
+            return fallback;
+        }
 
         return {
             r: Number.parseInt(full.slice(0, 2), 16),
@@ -1007,10 +1084,10 @@ class App {
         };
     }
 
-    mixHexColors(hexA, hexB, amount = 0.5) {
+    mixColors(colorA, colorB, amount = 0.5) {
         const t = Math.min(1, Math.max(0, amount));
-        const a = this.hexToRgbObject(hexA);
-        const b = this.hexToRgbObject(hexB);
+        const a = this.colorToRgbObject(colorA);
+        const b = this.colorToRgbObject(colorB);
 
         const r = Math.round(a.r + (b.r - a.r) * t);
         const g = Math.round(a.g + (b.g - a.g) * t);
@@ -1019,106 +1096,33 @@ class App {
         return `rgb(${r}, ${g}, ${bValue})`;
     }
 
-    rgbaFromHex(hex, alpha) {
-        const { r, g, b } = this.hexToRgbObject(hex);
+    rgbaFromColor(color, alpha) {
+        const { r, g, b } = this.colorToRgbObject(color);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
     getStreakVisualConfig(streakCount) {
-        const clamped = Math.min(Math.max(Number(streakCount) || 0, 0), 52);
+        const rawScore = Math.max(Number(streakCount) || 0, 0);
+        const finiteMaxScore = streakEngine.LEVELS.reduce((max, level) => {
+            return Number.isFinite(level.min) ? Math.max(max, level.min) : max;
+        }, 0);
+        const clamped = Math.min(rawScore, finiteMaxScore);
+        const getIntensityClass = (score) => {
+            if (score >= 72) return 'is-titan';
+            if (score >= 54) return 'is-legendary';
+            if (score >= 36) return 'is-elite';
+            if (score >= 18) return 'is-hot';
+            if (score >= 9) return 'is-rising';
+            if (score >= 3) return 'is-awake';
+            return 'is-calm';
+        };
 
-        const stages = [
-            {
-                score: 0,
-                colors: ['#ffe35a', '#ffbf1f', '#ff9200', '#ff5f0f'],
-                glow: '#ff9d14',
-                halo: '#ffcb47',
-                shadow: '#8f3a00',
-                sparkOpacity: 0.12,
-                flameOpacity: 0.3,
-                motionClass: 'is-calm'
-            },
-            {
-                score: 4,
-                colors: ['#ffd93f', '#ffab14', '#ff7b00', '#ff4d0a'],
-                glow: '#ff8a12',
-                halo: '#ffc43f',
-                shadow: '#8d2f00',
-                sparkOpacity: 0.18,
-                flameOpacity: 0.38,
-                motionClass: 'is-warm'
-            },
-            {
-                score: 8,
-                colors: ['#ffc926', '#ff8d00', '#ff5a00', '#f23800'],
-                glow: '#ff7108',
-                halo: '#ffb22a',
-                shadow: '#851f00',
-                sparkOpacity: 0.34,
-                flameOpacity: 0.46,
-                motionClass: 'is-warm'
-            },
-            {
-                score: 12,
-                colors: ['#ffb01f', '#ff6200', '#ff2b00', '#d40000'],
-                glow: '#ff4d0d',
-                halo: '#ff9631',
-                shadow: '#7f1200',
-                sparkOpacity: 0.44,
-                flameOpacity: 0.56,
-                motionClass: 'is-hot'
-            },
-            {
-                score: 16,
-                colors: ['#ffad22', '#ff4f0e', '#ff1720', '#a40010'],
-                glow: '#ff3520',
-                halo: '#ff7a40',
-                shadow: '#710813',
-                sparkOpacity: 0.52,
-                flameOpacity: 0.62,
-                motionClass: 'is-hot'
-            },
-            {
-                score: 24,
-                colors: ['#ff9a3a', '#ff4d5f', '#ff117c', '#bb005f'],
-                glow: '#ff2d75',
-                halo: '#ff7db2',
-                shadow: '#700038',
-                sparkOpacity: 0.58,
-                flameOpacity: 0.68,
-                motionClass: 'is-pink'
-            },
-            {
-                score: 32,
-                colors: ['#ff8fd0', '#ff3ea7', '#ff007f', '#b30066'],
-                glow: '#ff2395',
-                halo: '#ff7fcc',
-                shadow: '#650038',
-                sparkOpacity: 0.64,
-                flameOpacity: 0.74,
-                motionClass: 'is-pink'
-            },
-            {
-                score: 40,
-                colors: ['#d48cff', '#a33cff', '#6e1fff', '#4215cf'],
-                glow: '#7d36ff',
-                halo: '#bc78ff',
-                shadow: '#2f116f',
-                sparkOpacity: 0.72,
-                flameOpacity: 0.8,
-                motionClass: 'is-purple'
-            },
-            {
-                score: 52,
-                colors: ['#e2a5ff', '#b24cff', '#6e20ff', '#2e0fc9'],
-                glow: '#8141ff',
-                halo: '#c58cff',
-                shadow: '#240c72',
-                sparkOpacity: 0.78,
-                flameOpacity: 0.88,
-                motionClass: 'is-purple-max'
-            }
-        ];
+        const stages = streakEngine.LEVELS.map((level) => ({
+            score: level.min,
+            accent: level.color,
+            glow: this.mixColors(level.color, '#ffffff', 0.38),
+            intensityClass: getIntensityClass(level.min)
+        }));
 
         let start = stages[0];
         let end = stages[stages.length - 1];
@@ -1135,93 +1139,111 @@ class App {
         }
 
         const span = Math.max(1, end.score - start.score);
-        const t = Math.min(1, Math.max(0, (clamped - start.score) / span));
+        const linearT = Math.min(1, Math.max(0, (clamped - start.score) / span));
+        const t = linearT * linearT * (3 - 2 * linearT);
 
-        const gradient = start.colors.map((color, index) => this.mixHexColors(color, end.colors[index], t));
-        const glow = this.mixHexColors(start.glow, end.glow, t);
-        const halo = this.mixHexColors(start.halo, end.halo, t);
-        const shadow = this.mixHexColors(start.shadow, end.shadow, t);
-        const sparkOpacity = (start.sparkOpacity + (end.sparkOpacity - start.sparkOpacity) * t).toFixed(2);
-        const flameOpacity = (start.flameOpacity + (end.flameOpacity - start.flameOpacity) * t).toFixed(2);
-
-        const scale = (1 + clamped * 0.0026).toFixed(3);
-        const floatDistance = `${Math.min(10, 5 + clamped * 0.08).toFixed(2)}px`;
-        const animationSeconds = `${Math.max(5.2, 7.2 - clamped * 0.03).toFixed(2)}s`;
+        const accent = this.mixColors(start.accent, end.accent, t);
+        const glow = this.mixColors(start.glow, end.glow, t);
+        const animationDurationValue = Math.max(2.65, 5.6 - clamped * 0.036);
+        const numberScale = (Math.min(1.1, 1 + clamped * 0.0017)).toFixed(3);
+        const sparkScale = (Math.min(1.8, 0.95 + clamped * 0.014)).toFixed(2);
+        const sparkOpacity = (Math.min(0.96, 0.3 + clamped * 0.011)).toFixed(2);
+        const beamOpacity = (Math.min(0.68, 0.2 + clamped * 0.0075)).toFixed(2);
+        const auraOpacity = (Math.min(0.82, 0.22 + clamped * 0.0075)).toFixed(2);
+        const orbitOpacity = (Math.min(0.76, 0.18 + clamped * 0.008)).toFixed(2);
+        const orbitScale = (Math.min(1.24, 0.92 + clamped * 0.004)).toFixed(2);
+        const cardTint = this.rgbaFromColor(accent, Math.min(0.2, 0.08 + clamped * 0.002));
+        const cardTintStrong = this.rgbaFromColor(accent, Math.min(0.32, 0.14 + clamped * 0.0027));
+        const cardGlow = this.rgbaFromColor(accent, Math.min(0.28, 0.12 + clamped * 0.002));
+        const pillGlow = this.rgbaFromColor(accent, Math.min(0.42, 0.2 + clamped * 0.0028));
+        const numberGlow = this.rgbaFromColor(glow, Math.min(0.48, 0.2 + clamped * 0.0035));
+        const numberFrom = this.mixColors(accent, '#ffffff', 0.12);
+        const numberTo = this.mixColors(accent, '#0f172a', 0.05);
 
         return {
-            c1: gradient[0],
-            c2: gradient[1],
-            c3: gradient[2],
-            c4: gradient[3],
+            accent,
             glow,
-            glowSoft: this.rgbaFromHex(glow, 0.18),
-            glowMid: this.rgbaFromHex(glow, 0.32),
-            halo,
-            haloSoft: this.rgbaFromHex(halo, 0.32),
-            shadow,
-            shadowSoft: this.rgbaFromHex(shadow, 0.28),
-            shadowDeep: this.rgbaFromHex(shadow, 0.38),
+            cardTint,
+            cardTintStrong,
+            cardGlow,
+            pillGlow,
+            numberFrom,
+            numberTo,
+            numberGlow,
+            beamOpacity,
             sparkOpacity,
-            flameOpacity,
-            scale,
-            floatDistance,
-            animationSeconds,
-            motionClass: end.motionClass
+            sparkScale,
+            numberScale,
+            sparkDuration: `${animationDurationValue.toFixed(2)}s`,
+            beamDuration: `${(animationDurationValue * 1.35).toFixed(2)}s`,
+            orbitDuration: `${Math.max(5.8, 11.5 - clamped * 0.055).toFixed(2)}s`,
+            driftDuration: `${Math.max(3.3, 6.4 - clamped * 0.032).toFixed(2)}s`,
+            auraOpacity,
+            orbitOpacity,
+            orbitScale,
+            intensityClass: getIntensityClass(clamped)
         };
     }
 
-    renderStreakScoreVisual(score) {
-        const theme = this.getStreakVisualConfig(score);
+    renderStreakScoreVisual(score, providedTheme = null) {
+        const theme = providedTheme || this.getStreakVisualConfig(score);
+        const safeScore = Math.max(0, Number(score) || 0);
+        const digitCount = String(safeScore).length;
 
         return `
             <div
-                class="streakv4-score-visual ${theme.motionClass}"
+                class="streakv4-score-visual ${theme.intensityClass}"
+                data-score="${safeScore}"
+                data-digits="${digitCount}"
                 style="
-                    --streak-core-1:${theme.c1};
-                    --streak-core-2:${theme.c2};
-                    --streak-core-3:${theme.c3};
-                    --streak-core-4:${theme.c4};
-                    --streak-glow:${theme.glow};
-                    --streak-glow-soft:${theme.glowSoft};
-                    --streak-glow-mid:${theme.glowMid};
-                    --streak-halo:${theme.halo};
-                    --streak-halo-soft:${theme.haloSoft};
-                    --streak-shadow:${theme.shadow};
-                    --streak-shadow-soft:${theme.shadowSoft};
-                    --streak-shadow-deep:${theme.shadowDeep};
+                    --streak-number-start:${theme.numberFrom};
+                    --streak-number-end:${theme.numberTo};
+                    --streak-number-glow:${theme.numberGlow};
+                    --streak-spark-color:${theme.glow};
+                    --streak-beam-color:${theme.glow};
+                    --streak-beam-opacity:${theme.beamOpacity};
                     --streak-spark-opacity:${theme.sparkOpacity};
-                    --streak-flame-opacity:${theme.flameOpacity};
-                    --streak-score-scale:${theme.scale};
-                    --streak-float-distance:${theme.floatDistance};
-                    --streak-flow-duration:${theme.animationSeconds};
+                    --streak-spark-scale:${theme.sparkScale};
+                    --streak-number-scale:${theme.numberScale};
+                    --streak-spark-duration:${theme.sparkDuration};
+                    --streak-beam-duration:${theme.beamDuration};
+                    --streak-orbit-duration:${theme.orbitDuration};
+                    --streak-drift-duration:${theme.driftDuration};
+                    --streak-aura-opacity:${theme.auraOpacity};
+                    --streak-orbit-opacity:${theme.orbitOpacity};
+                    --streak-orbit-scale:${theme.orbitScale};
                 "
-                aria-label="Score streak ${score}"
+                aria-label="Score streak ${safeScore}"
             >
-                <span class="streakv4-score-flame flame-back" aria-hidden="true"></span>
-                <span class="streakv4-score-flame flame-front" aria-hidden="true"></span>
-                <span class="streakv4-score-number" data-score="${score}">${score}</span>
+                <span class="streakv4-score-aura" aria-hidden="true"></span>
+                <span class="streakv4-score-orbit orbit-a" aria-hidden="true"><span></span></span>
+                <span class="streakv4-score-orbit orbit-b" aria-hidden="true"><span></span></span>
+                <span class="streakv4-score-beam beam-back" aria-hidden="true"></span>
+                <span class="streakv4-score-beam beam-front" aria-hidden="true"></span>
+                <span class="streakv4-score-number">${safeScore}</span>
                 <span class="streakv4-score-spark spark-a" aria-hidden="true"></span>
                 <span class="streakv4-score-spark spark-b" aria-hidden="true"></span>
                 <span class="streakv4-score-spark spark-c" aria-hidden="true"></span>
                 <span class="streakv4-score-spark spark-d" aria-hidden="true"></span>
                 <span class="streakv4-score-spark spark-e" aria-hidden="true"></span>
                 <span class="streakv4-score-spark spark-f" aria-hidden="true"></span>
-                <span class="streakv4-score-spark spark-g" aria-hidden="true"></span>
             </div>
         `;
     }
 
-    renderStreakCard(data, prediction, level, nextLevel) {
+    renderStreakCard(data, level, nextLevel) {
         const container = document.getElementById('streak-card');
         if (!container) return;
 
         const isComplete = data.currentWeekValidated ?? (data.currentWeekSessions >= data.weeklyGoal);
         const effectiveStreakCount = data.effectiveStreakCount ?? data.displayStreakCount ?? data.streakCount;
+        const scoreTheme = this.getStreakVisualConfig(effectiveStreakCount);
         const progressInLevel = effectiveStreakCount - level.min;
         const levelRange = nextLevel === level ? 1 : (nextLevel.min - level.min) || 1;
         const levelProgress = nextLevel === level ? 100 : Math.min((progressInLevel / levelRange) * 100, 100);
         const weeksToNext = nextLevel.min - effectiveStreakCount;
         const sessionsRemaining = Math.max(0, data.weeklyGoal - data.currentWeekSessions);
+        const wasCelebrating = container.classList.contains('celebrating');
 
         const sessionsHtml = Array.from({ length: data.weeklyGoal }, (_, index) => {
             const filled = index < data.currentWeekSessions;
@@ -1245,25 +1267,21 @@ class App {
         }).join('');
 
         const protectedBadge = data.weekProtected
-            ? `<div class="streakv4-protected">
-                ${this.getShieldSVG('full')}
-                <span>Protégé</span>
-            </div>`
+            ? `<div class="streakv4-protected">Semaine protégée</div>`
             : '';
-
         const weekStatusText = isComplete
-            ? `<div class="streakv4-status streakv4-status--success"><strong>✓ Objectif validé !</strong></div>`
-            : sessionsRemaining === 1
-                ? `<div class="streakv4-status">
-                    <span class="streakv4-status-icon">${this.getStreakClockIconSVG()}</span>
-                    <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
-                    <span class="streakv4-status-muted">· Plus qu'une !</span>
-                </div>`
-                : `<div class="streakv4-status">
-                    <span class="streakv4-status-icon">${this.getStreakClockIconSVG()}</span>
-                    <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
-                    <span class="streakv4-status-muted">· ${sessionsRemaining} restante${sessionsRemaining > 1 ? 's' : ''}</span>
-                </div>`;
+            ? `<div class="streakv4-week-status is-success">
+                <span class="streakv4-week-status-icon">${this.getCheckCircleIconSVG()}</span>
+                <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
+                <span class="streakv4-week-status-sep">•</span>
+                <span class="streakv4-week-status-text">objectif validé</span>
+            </div>`
+            : `<div class="streakv4-week-status">
+                <span class="streakv4-week-status-icon">${this.getStreakClockIconSVG()}</span>
+                <strong>${data.currentWeekSessions}/${data.weeklyGoal}</strong>
+                <span class="streakv4-week-status-sep">•</span>
+                <span class="streakv4-week-status-text">${sessionsRemaining} restante${sessionsRemaining > 1 ? 's' : ''}</span>
+            </div>`;
 
         const shieldExplanation = data.shieldCount < 3
             ? `<div class="streakv4-shields-hint">+0.5 par semaine validée</div>`
@@ -1271,25 +1289,24 @@ class App {
 
         const levelStyle = [
             `--streak-level-color:${level.color}`,
-            `--streak-level-soft:${level.color}`,
             `--streak-level-glow:${this.hexToRgba(level.color, 0.24)}`
         ].join(';');
 
         const nextLevelText = weeksToNext > 0
-            ? `${nextLevel.emoji} <strong>${nextLevel.name}</strong> dans ${weeksToNext} sem.`
+            ? `<span class="streakv4-next-level-mark">⚡</span><strong>${nextLevel.name}</strong><span>dans ${weeksToNext} sem.</span>`
             : `<strong>Niveau max !</strong>`;
 
         container.innerHTML = `
             <div class="streakv4-shell">
                 <div class="streakv4-hero">
                     <div class="streakv4-score">
-                        ${this.renderStreakScoreVisual(effectiveStreakCount)}
-                        <div class="streakv4-score-label">STREAK</div>
+                        ${this.renderStreakScoreVisual(effectiveStreakCount, scoreTheme)}
+                        <div class="streakv4-score-label">Streak</div>
                     </div>
 
                     <div class="streakv4-meta">
                         <div class="streakv4-level-row">
-                            <span class="streakv4-level-emoji">${level.emoji}</span>
+                            <span class="streakv4-level-icon" aria-hidden="true">${this.getLevelEmoji(level)}</span>
                             <div class="streakv4-level-pill" style="${levelStyle}">
                                 <span>${level.name}</span>
                             </div>
@@ -1307,60 +1324,38 @@ class App {
                 <div class="streakv4-divider"></div>
 
                 <div class="streakv4-week">
-                    <div class="streakv4-week-header">
-                        <div class="streakv4-week-title">Cette semaine</div>
-                        ${protectedBadge}
-                    </div>
+                    <div class="streakv4-section-title">Cette semaine</div>
 
-                    <div class="streakv4-week-body">
-                        <div class="streakv4-week-left">
+                    <div class="streakv4-week-grid">
+                        <div class="streakv4-week-main">
                             ${weekStatusText}
                             <div class="streakv4-session-row">${sessionsHtml}</div>
                         </div>
 
-                        <div class="streakv4-week-right">
+                        <div class="streakv4-week-side">
                             <div class="streakv4-shields-header">
                                 <span class="streakv4-shields-label">🛡️ Boucliers</span>
                                 <span class="streakv4-shields-count">${data.shieldCount}/3</span>
                             </div>
                             <div class="streakv4-shields-row">${shieldsHtml}</div>
                             ${shieldExplanation}
+                            ${protectedBadge}
                         </div>
                     </div>
                 </div>
             </div>
         `;
 
-        container.className = `streak-card streak-card-v4${isComplete ? ' is-week-complete' : ''}`;
+        container.style.setProperty('--streak-accent', scoreTheme.accent);
+        container.style.setProperty('--streak-card-tint', scoreTheme.cardTint);
+        container.style.setProperty('--streak-card-tint-strong', scoreTheme.cardTintStrong);
+        container.style.setProperty('--streak-card-glow', scoreTheme.cardGlow);
+        container.style.setProperty('--streak-pill-glow', scoreTheme.pillGlow);
+        container.className = `streak-card streak-card-v4${isComplete ? ' is-week-complete' : ''}${wasCelebrating ? ' celebrating' : ''}`;
     }
     
-    getLevelIconSVG(levelName) {
-        const name = levelName.toLowerCase();
-        
-        if (name === 'rookie') {
-            // Rookie: Simple target/goal icon
-            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10"/>
-                <circle cx="12" cy="12" r="6"/>
-                <circle cx="12" cy="12" r="2"/>
-            </svg>`;
-        } else if (name === 'focus') {
-            // Focus: Lightning bolt for energy/focus
-            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>`;
-        } else if (name === 'machine') {
-            // Machine: Gear/cog for mechanical precision
-            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
-            </svg>`;
-        } else {
-            // Légende: Crown/star for legendary status
-            return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>`;
-        }
+    getLevelEmoji(level) {
+        return level?.emoji || '🙂';
     }
     
     getShieldSVG(type) {
@@ -1546,7 +1541,10 @@ class App {
             html += `
                 <div class="muscle-stat-item ${statusClass}">
                     <div class="muscle-stat-header">
-                        <span class="muscle-stat-name">${muscleInfo.name}</span>
+                        <span class="muscle-stat-name">
+                            ${renderMuscleIcon(muscleId, { className: 'muscle-stat-icon', size: 18 })}
+                            <span>${muscleInfo.name}</span>
+                        </span>
                         ${statusLabel ? `<span class="muscle-stat-status">${statusLabel}</span>` : ''}
                     </div>
                     <div class="muscle-stat-value">
@@ -2180,20 +2178,7 @@ class App {
     }
     
     getMuscleGroupInfo(muscleId) {
-        const info = {
-            'pectoraux': { name: 'Pectoraux', icon: '🫁' },
-            'dos': { name: 'Dos', icon: '🔙' },
-            'epaules': { name: 'Épaules', icon: '🎯' },
-            'biceps': { name: 'Biceps', icon: '💪' },
-            'triceps': { name: 'Triceps', icon: '🦾' },
-            'quadriceps': { name: 'Quadriceps', icon: '🦵' },
-            'ischio-jambiers': { name: 'Ischio-jambiers', icon: '🦿' },
-            'mollets': { name: 'Mollets', icon: '🦶' },
-            'abdominaux': { name: 'Abdominaux', icon: '🎽' },
-            'fessiers': { name: 'Fessiers', icon: '🍑' },
-            'avant-bras': { name: 'Avant-bras', icon: '✊' }
-        };
-        return info[muscleId] || { name: muscleId, icon: '💪' };
+        return getMuscleGroupMeta(muscleId);
     }
     
     // Show LMS prompt modal
@@ -2202,6 +2187,16 @@ class App {
         
         if (muscleGroups.length === 0) {
             return; // No identified muscles, skip LMS
+        }
+
+        const titleIcon = document.querySelector('.lms-title-icon');
+        if (titleIcon) {
+            titleIcon.innerHTML = renderAppIcon('recovery-checkin', { size: 20, label: 'Check-in récupération' });
+        }
+
+        const infoIcon = document.querySelector('.lms-info-icon');
+        if (infoIcon) {
+            infoIcon.innerHTML = renderAppIcon('recovery-info', { size: 22, label: 'Information récupération' });
         }
         
         // Generate LMS UI for each muscle group
@@ -2219,17 +2214,17 @@ class App {
             muscleItem.dataset.muscle = muscleId;
             muscleItem.innerHTML = `
                 <div class="lms-muscle-name">
-                    <span class="lms-muscle-icon">${info.icon}</span>
+                    ${renderMuscleIcon(muscleId, { className: 'lms-muscle-icon', size: 22 })}
                     <span class="lms-muscle-label">${info.name}</span>
                 </div>
                 <div class="lms-slider-container">
                     <input type="range" class="lms-slider" data-muscle="${muscleId}" 
                            min="0" max="3" step="1" value="1">
                     <div class="lms-labels">
-                        <span data-value="0"><small>Frais</small>💪</span>
-                        <span data-value="1" class="active"><small>Prêt</small>👍</span>
-                        <span data-value="2"><small>Courbaturé</small>😬</span>
-                        <span data-value="3"><small>Épuisé</small>🤕</span>
+                        <span data-value="0"><small>Frais</small>${renderRecoveryIcon(0, { className: 'lms-label-icon', size: 18 })}</span>
+                        <span data-value="1" class="active"><small>Prêt</small>${renderRecoveryIcon(1, { className: 'lms-label-icon', size: 18 })}</span>
+                        <span data-value="2"><small>Courbaturé</small>${renderRecoveryIcon(2, { className: 'lms-label-icon', size: 18 })}</span>
+                        <span data-value="3"><small>Épuisé</small>${renderRecoveryIcon(3, { className: 'lms-label-icon', size: 18 })}</span>
                     </div>
                 </div>
                 <div class="lms-feedback">
@@ -2351,26 +2346,26 @@ class App {
         const adaptationPercent = adaptationMap[worstScore];
         
         // Determine phase
-        let phase, title, icon;
+        let phase, title, iconKey;
         if (adaptationPercent >= 85) {
             phase = 'supercompensation';
             title = 'Prêt pour progresser !';
-            icon = '🚀';
+            iconKey = 'recovery-supercompensation';
         } else if (adaptationPercent >= 50) {
             phase = 'refuel';
             title = 'Bientôt prêt';
-            icon = '⚡';
+            iconKey = 'recovery-refuel';
         } else {
             phase = 'repair';
             title = 'En récupération';
-            icon = '🔧';
+            iconKey = 'recovery-repair';
         }
         
         // Get volume recommendation
         const volumeRec = this.getVolumeRecommendationFromLMS(worstScore, worstMuscle);
         
         // Update modal UI
-        document.getElementById('adaptation-icon').textContent = icon;
+        document.getElementById('adaptation-icon').innerHTML = renderAppIcon(iconKey, { size: 44, label: title });
         document.getElementById('adaptation-title').textContent = title;
         document.getElementById('adaptation-bar-marker').style.left = `${Math.min(95, adaptationPercent)}%`;
         
@@ -2397,9 +2392,18 @@ class App {
         } else {
             recText = 'Volume normal';
         }
+        const recIcon = volumeRec.setChange > 0
+            ? `<span class="adaptation-recommendation-icon adaptation-recommendation-icon-svg">${this.getTrendArrowSVG('up')}</span>`
+            : volumeRec.setChange < 0
+                ? `<span class="adaptation-recommendation-icon adaptation-recommendation-icon-svg">${this.getTrendArrowSVG('down')}</span>`
+                : renderAppIcon('recovery-ready', {
+                    className: 'adaptation-recommendation-icon',
+                    size: 18,
+                    label: 'Volume normal'
+                });
         recContainer.innerHTML = `
             <div class="adaptation-recommendation-item">
-                <span class="adaptation-recommendation-icon">${volumeRec.setChange > 0 ? '📈' : volumeRec.setChange < 0 ? '📉' : '✓'}</span>
+                ${recIcon}
                 <span class="adaptation-recommendation-text">${recText}</span>
             </div>
         `;
@@ -2544,10 +2548,10 @@ class App {
             primaryMuscles,
             secondaryMuscles: muscleMapping.secondary,
             muscleName: muscleInfo.name,
-            muscleIcon: muscleInfo.icon,
+            muscleIconKey: muscleInfo.iconKey,
             lmsScore: worstPrimaryLMS,
             lmsLabel: lmsInfo.label,
-            lmsEmoji: lmsInfo.emoji,
+            lmsIconKey: lmsInfo.iconKey,
             lmsDescription: lmsInfo.description,
             mrvStatus: lmsInfo.mrvStatus,
             originalSets,
@@ -2623,9 +2627,16 @@ class App {
         const exerciseName = typeof slotOrExercise === 'string'
             ? slotOrExercise
             : (slot?.activeExercise || slot?.name || '');
+        const isCardio = slot
+            ? this.isCardioSlot(slot)
+            : this.isCardioSlot(exerciseName);
         const isPureBodyweight = slot
             ? this.isPureBodyweightSlot(slot)
             : (numericWeight <= 0 && this.getBodyweightAutoConfig(exerciseName).autoMode);
+
+        if (isCardio) {
+            return numericWeight > 0 ? `${numericWeight}` : 'Libre';
+        }
 
         if (isPureBodyweight && numericWeight <= 0) {
             return 'PDC';
@@ -2637,6 +2648,7 @@ class App {
     getLoadFieldLabel(slotOrMeta) {
         const slot = typeof slotOrMeta === 'object' ? this.normalizeSlotProgressionConfig({ ...slotOrMeta }) : null;
         if (!slot) return 'Charge (kg)';
+        if (this.isCardioSlot(slot)) return 'Niveau / vitesse';
         if (slot.progressionMode !== 'bodyweight') return 'Charge (kg)';
         if (slot.bodyweightProfile?.allowAssistance) return 'Assistance (kg)';
         if (slot.bodyweightProfile?.allowExternalLoad) return 'Lest (kg)';
@@ -2650,6 +2662,56 @@ class App {
             return '--';
         }
         return `${advice.suggestedWeight} kg`;
+    }
+
+    getSuggestedWeightReferenceNote(advice, slot = this.currentSlot) {
+        if (!advice || !slot) return '';
+        if (advice.suggestedAssistanceKg != null) return '';
+        if (this.isPureBodyweightSlot(slot)) return '';
+
+        const suggestedWeight = Number(advice.suggestedWeight);
+        const referenceWeight = Number(advice.referenceWeight);
+
+        if (!Number.isFinite(suggestedWeight) || suggestedWeight <= 0) return '';
+        if (!Number.isFinite(referenceWeight) || referenceWeight <= 0) return '';
+        if (suggestedWeight >= referenceWeight || Math.abs(suggestedWeight - referenceWeight) < 0.5) return '';
+
+        const delta = Math.round(Math.abs(referenceWeight - suggestedWeight) * 10) / 10;
+        return `Base precedente: ${referenceWeight} kg (-${delta} kg)`;
+    }
+
+    formatInlineCoachWeight(weight, slot = this.currentSlot) {
+        const numericWeight = Number(weight);
+        if (!Number.isFinite(numericWeight)) return '';
+        if (this.isPureBodyweightSlot(slot) && numericWeight <= 0) return 'PDC';
+
+        const rounded = Math.round(numericWeight * 10) / 10;
+        return `${Number.isInteger(rounded) ? rounded : rounded}kg`;
+    }
+
+    formatInlineCoachTarget(targetReps) {
+        const numericTarget = Number(targetReps);
+        if (Number.isFinite(numericTarget) && numericTarget > 0) {
+            return `${numericTarget}`;
+        }
+        return String(targetReps || '').trim();
+    }
+
+    getHistorySetSnapshot(history, setIndex, slot = this.currentSlot) {
+        if (!history?.sets?.length || !Number.isInteger(setIndex) || setIndex < 0) return null;
+
+        const set = history.sets[setIndex];
+        if (!set) return null;
+
+        const weight = Number(set.weight);
+        const reps = Number(set.reps);
+        if (!Number.isFinite(reps) || reps <= 0) return null;
+
+        return {
+            weight: Number.isFinite(weight) ? weight : 0,
+            reps,
+            label: `${this.formatInlineCoachWeight(weight, slot)} x ${reps}`
+        };
     }
 
     getAdviceTargetRepsArray(advice, fallbackTargets = []) {
@@ -2683,6 +2745,125 @@ class App {
             .replace(/\s*Motif:.*$/i, '')
             .replace(/\s*Repos conseillé:.*$/i, '')
             .trim();
+    }
+
+    stripTrailingPunctuation(text = '') {
+        return String(text || '')
+            .replace(/[\s.!:,;]+$/g, '')
+            .trim();
+    }
+
+    buildCoachActionSummary(advice, slot = this.currentSlot, setPlan = this.buildCoachSetPlan(slot, advice)) {
+        if (!advice) return '';
+
+        const parts = [];
+        const suggestedWeightDisplay = this.formatSuggestedWeightDisplay(advice);
+        const suggestedWeightNumeric = Number(advice.suggestedWeight);
+        const referenceWeight = Number(advice.referenceWeight);
+        const hasRepLadder = typeof advice.suggestedReps === 'string' && advice.suggestedReps.includes('/');
+
+        if (advice.topSetProgression && advice.backOffWeight) {
+            parts.push(`top set propre puis back-off à <strong>${advice.backOffWeight} kg</strong>`);
+        } else if (advice.suggestedAssistanceKg != null) {
+            parts.push(`environ <strong>${advice.suggestedAssistanceKg} kg d'assistance</strong>`);
+        } else if (advice.suggestedWeightLabel?.includes('PDC') || advice.suggestedWeight === 0) {
+            parts.push(`travail en <strong>${suggestedWeightDisplay}</strong>`);
+        } else if (suggestedWeightDisplay !== '--') {
+            if (Number.isFinite(referenceWeight) && referenceWeight > 0 && Number.isFinite(suggestedWeightNumeric) && suggestedWeightNumeric > 0 && Math.abs(suggestedWeightNumeric - referenceWeight) >= 0.5) {
+                const delta = Math.round((suggestedWeightNumeric - referenceWeight) * 10) / 10;
+                const sign = delta > 0 ? '+' : '';
+                parts.push(`<strong>${suggestedWeightDisplay}</strong> (${sign}${delta} kg vs base précédente)`);
+            } else {
+                parts.push(`<strong>${suggestedWeightDisplay}</strong>`);
+            }
+        }
+
+        if (advice.suggestedReps) {
+            parts.push(hasRepLadder
+                ? `schéma reps <strong>${advice.suggestedReps}</strong>`
+                : `vise <strong>${advice.suggestedReps} reps</strong>`);
+        }
+
+        if (advice.restRecommendation) {
+            parts.push(`repos <strong>${advice.restRecommendation}</strong>`);
+        }
+
+        if (setPlan.reductionAccepted) {
+            parts.push(`volume validé à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong>`);
+        } else if (setPlan.showReductionPrompt) {
+            parts.push(`option: s'arrêter à <strong>${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</strong>`);
+        } else if (setPlan.hasOptionalIncrease) {
+            parts.push(`+1 série possible si la qualité reste propre`);
+        }
+
+        if (advice.progressionAxis) {
+            parts.push(`axe du jour: <strong>${this.getReadableProgressionAxis(advice.progressionAxis).toLowerCase()}</strong>`);
+        }
+
+        return parts.slice(0, 4).join(' · ');
+    }
+
+    buildCoachExecutionRule(advice) {
+        if (!advice) return '';
+
+        const fatigueLevel = advice.sessionContext?.fatigueLevel || 'low';
+        const trend = advice.trendSummary?.trend || 'stable';
+
+        if (advice.suggestedAssistanceKg != null) {
+            return `Règle: garde une amplitude complète, puis ajuste l'assistance d'un palier seulement si tu sors de la fourchette.`;
+        }
+
+        if (fatigueLevel === 'high' || advice.weightTrend === 'down' || trend === 'regressed') {
+            return `Règle: garde 1 à 2 reps en réserve et baisse d'un palier dès que la technique se dégrade.`;
+        }
+
+        if (advice.weightTrend === 'up' && trend === 'improved' && fatigueLevel === 'low') {
+            return `Règle: valide d'abord la première série proprement; si elle passe, garde la même charge sur le reste de la séance.`;
+        }
+
+        return `Règle: stabilise des reps propres sur toutes les séries avant de chercher à monter la charge.`;
+    }
+
+    buildCoachDataReasonSummary(advice) {
+        if (!advice) return '';
+
+        const reasons = [];
+        const trendSummary = advice.trendSummary;
+        const sessionContext = advice.sessionContext;
+
+        if (trendSummary?.confidence >= 0.3) {
+            const e1rmPct = Number.isFinite(trendSummary.e1rmDelta)
+                ? Math.round(trendSummary.e1rmDelta * 1000) / 10
+                : null;
+            if (trendSummary.trend === 'improved') {
+                reasons.push(`historique en hausse${e1rmPct != null ? ` (${e1rmPct >= 0 ? '+' : ''}${e1rmPct}% e1RM)` : ''}`);
+            } else if (trendSummary.trend === 'regressed') {
+                reasons.push(`historique en retrait${e1rmPct != null ? ` (${e1rmPct}% e1RM)` : ''}`);
+            } else {
+                reasons.push(`historique stable`);
+            }
+        }
+
+        if (sessionContext) {
+            const readiness = Number.isFinite(Number(sessionContext.readinessScore))
+                ? Math.round(Number(sessionContext.readinessScore))
+                : null;
+            const fatigueLabel = sessionContext.fatigueLevel === 'high'
+                ? 'fatigue haute'
+                : sessionContext.fatigueLevel === 'moderate'
+                    ? 'fatigue modérée'
+                    : 'fatigue basse';
+            reasons.push(readiness != null
+                ? `readiness ${readiness}/100 (${fatigueLabel})`
+                : fatigueLabel);
+        }
+
+        const triggerReason = sessionContext?.reasons?.[0] || advice.decisionReasons?.[0] || '';
+        if (triggerReason) {
+            reasons.push(this.stripTrailingPunctuation(triggerReason));
+        }
+
+        return reasons.slice(0, 2).join(' · ');
     }
 
     buildCoachSetPlan(slot = this.currentSlot, advice = this.currentCoachingAdvice) {
@@ -2807,10 +2988,10 @@ class App {
             items.push({
                 label: 'Muscle déjà entamé',
                 text: local >= 4
-                    ? `Le muscle principal a déjà beaucoup travaillé juste avant, donc le coach protège la qualité.`
+                    ? `Le muscle principal a déjà beaucoup travaillé juste avant. C'est un indicateur de contexte, sans baisse auto de charge.`
                     : local >= 2.4
-                        ? `Le muscle principal commence à fatiguer, donc le coach garde un peu de marge.`
-                        : `Le muscle principal reste encore assez frais, donc la séance peut continuer normalement.`
+                        ? `Le muscle principal commence à fatiguer. Le signal sert surtout à lire la séance plus proprement.`
+                        : `Le muscle principal reste encore assez frais.`
             });
         }
 
@@ -2818,8 +2999,8 @@ class App {
             items.push({
                 label: 'Volume déjà fait',
                 text: hardSets >= 4
-                    ? `Tu as déjà accumulé pas mal de séries dures sur ce groupe, donc ajouter du volume devient moins rentable.`
-                    : `Tu as déjà commencé à accumuler du travail utile, ce qui compte dans la recommandation.`
+                    ? `Tu as déjà accumulé pas mal de séries dures sur ce groupe. Cela sert de repère de récupération, pas de sanction automatique.`
+                    : `Tu as déjà commencé à accumuler du travail utile, ce qui aide à lire la suite de la séance.`
             });
         }
 
@@ -2827,7 +3008,7 @@ class App {
             items.push({
                 label: 'Fatigue générale',
                 text: systemic >= 4.5
-                    ? `La séance commence à coûter cher globalement, pas seulement localement, donc le coach freine un peu.`
+                    ? `La séance commence à coûter cher globalement. C'est suivi comme un indicateur, sans baisse automatique des reps ou de la charge.`
                     : `Pour l’instant, la fatigue générale reste sous contrôle.`
             });
         }
@@ -2836,7 +3017,7 @@ class App {
             items.push({
                 label: 'Charge sur le corps',
                 text: axial >= 3.5
-                    ? `L’exercice charge aussi fortement le corps dans son ensemble, donc le coach peut ajouter du repos ou limiter le volume.`
+                    ? `L’exercice charge aussi fortement le corps dans son ensemble. Le coach peut surtout suggérer un peu plus de repos.`
                     : `L’impact global de l’exercice reste modéré.`
             });
         }
@@ -2857,39 +3038,16 @@ class App {
     formatCoachAdviceMessage(advice, slot = this.currentSlot, setPlan = this.buildCoachSetPlan(slot, advice)) {
         if (!advice) return '';
 
-        let primary = '';
-        if (advice.topSetProgression && advice.backOffWeight) {
-            primary = `Aujourd'hui, on joue un <strong>top set propre</strong> puis un <strong>back-off maîtrisé</strong> pour pousser sans cramer la suite.`;
-        } else if (advice.suggestedAssistanceKg != null) {
-            primary = `Le focus du jour est une version <strong>assistée, fluide et propre</strong>, avec priorité à l'amplitude et au contrôle.`;
-        } else if (advice.suggestedWeightLabel?.includes('PDC') || advice.suggestedWeight === 0) {
-            primary = `Le coach veut une séance <strong>poids du corps ultra propre</strong>, sans chercher à forcer la charge aujourd'hui.`;
-        } else if (advice.weightTrend === 'up') {
-            primary = `Il y a de la marge: <strong>tu peux appuyer un peu plus fort</strong> si la technique reste solide du début à la fin.`;
-        } else if (advice.weightTrend === 'down') {
-            primary = `Le but est de <strong>protéger la qualité</strong> et d'éviter une série sale ou trop coûteuse.`;
-        } else {
-            primary = `Le coach veut une série <strong>maîtrisée, régulière et propre</strong>, sans gaspiller d'énergie inutile.`;
-        }
+        const actionSummary = this.buildCoachActionSummary(advice, slot, setPlan);
+        const executionRule = this.buildCoachExecutionRule(advice);
+        const primary = [actionSummary ? `Plan concret: ${actionSummary}.` : '', executionRule]
+            .filter(Boolean)
+            .join(' ');
 
-        if (setPlan.reductionAccepted) {
-            primary += ` Tu as validé un arrêt à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong> aujourd'hui.`;
-        } else if (setPlan.showReductionPrompt) {
-            primary += ` Le coach <strong>propose</strong> de s'arrêter à <strong>${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</strong>, sans l'imposer.`;
-        } else if (setPlan.hasOptionalIncrease) {
-            primary += ` Une <strong>${setPlan.increaseCandidate.sets}e série</strong> reste possible si la qualité tient.`;
-        }
-
-        const supportingReason = advice.sessionContext?.fatigueLevel === 'high'
-            ? `Fatigue du jour <strong>élevée</strong>, donc on protège la qualité.`
-            : advice.sessionContext?.fatigueLevel === 'moderate'
-                ? `La fatigue monte, donc on garde une marge utile.`
-                : advice.decisionReasons?.[0]
-                    ? `${advice.decisionReasons[0]}.`
-                    : this.stripCoachMetaFromMessage(advice.message);
-
+        const supportingReasonRaw = this.buildCoachDataReasonSummary(advice) || this.stripCoachMetaFromMessage(advice.message);
+        const supportingReason = this.stripTrailingPunctuation(supportingReasonRaw);
         const secondary = supportingReason
-            ? `<span class="coaching-advice-note">${supportingReason}</span>`
+            ? `<span class="coaching-advice-note"><strong>Base algos:</strong> ${supportingReason}.</span>`
             : '';
 
         return `
@@ -2923,7 +3081,7 @@ class App {
 
         const fatiguePill = this.getCoachFatiguePill(advice);
         title.textContent = fatiguePill?.label || 'Lecture de récupération';
-        subtitle.textContent = 'Le coach regarde surtout ce que tes muscles ont déjà pris dans la séance, ce que tu as déjà accumulé comme travail dur, et la fatigue globale du moment.';
+        subtitle.textContent = 'Lecture indicative: le coach regarde ce que tes muscles ont déjà pris dans la séance et la récup du moment, sans baisser automatiquement la charge ni les reps.';
         score.textContent = `Readiness ${sessionContext.readinessScore || '—'}/100`;
         const details = this.buildCoachFatigueExplanationItems(sessionContext);
 
@@ -2942,8 +3100,16 @@ class App {
         if (sheet) sheet.classList.remove('active');
     }
 
-    getInlineCoachSetHint(advice, targetReps, suggestedWeight, isNextIncompleteSet, previousWeight = null) {
+    getInlineCoachSetHint(advice, targetReps, suggestedWeight, isNextIncompleteSet, options = {}) {
         if (!advice || !isNextIncompleteSet) return '';
+
+        const {
+            slot = this.currentSlot,
+            setIndex = -1,
+            histories = [],
+            previousCompletedSet = null,
+            referenceWeight = null
+        } = options;
 
         if (advice.suggestedAssistanceKg != null) {
             return `Le coach propose environ ${advice.suggestedAssistanceKg}kg d’assistance pour viser ${targetReps} reps propres. Ajuste si la qualité baisse.`;
@@ -2951,31 +3117,98 @@ class App {
 
         const weightLabel = this.formatSuggestedWeightDisplay(advice);
         const bodyweightStyle = advice.suggestedWeightLabel?.includes('PDC') || advice.suggestedWeight === 0;
+        const suggestedNumericWeight = Number(suggestedWeight);
+        const referenceNumericWeight = Number(referenceWeight);
+        const targetLabel = this.formatInlineCoachTarget(targetReps);
+        const suggestedLabel = this.formatInlineCoachWeight(suggestedNumericWeight, slot);
+        const latestSet = this.getHistorySetSnapshot(histories[0], setIndex, slot);
+        const previousSessionSet = this.getHistorySetSnapshot(histories[1], setIndex, slot);
+        const previousCompletedWeight = Number(previousCompletedSet?.weight);
+        const previousCompletedReps = Number(previousCompletedSet?.reps);
 
         if (bodyweightStyle) {
-            return `Le coach suggère de rester sur ${weightLabel.toLowerCase()} et de viser ${targetReps} reps propres. Ajuste selon ton ressenti réel.`;
+            return `Reste sur ${weightLabel.toLowerCase()} et vise ${targetLabel} reps propres.`;
         }
 
-        if (typeof suggestedWeight === 'number' && suggestedWeight > 0) {
-            if (typeof previousWeight === 'number' && previousWeight > 0) {
-                if (suggestedWeight < previousWeight) {
-                    if (advice.sessionContext?.fatigueLevel === 'high' || advice.sessionContext?.fatigueLevel === 'moderate') {
-                        return `Tu as déjà accumulé de la fatigue sur les séries précédentes. Le coach te propose ${suggestedWeight}kg pour garder environ ${targetReps} reps propres au lieu de forcer une série dégradée.`;
-                    }
-                    return `Le coach te propose ${suggestedWeight}kg pour retrouver environ ${targetReps} reps propres. Garde plus lourd seulement si la technique reste vraiment stable.`;
-                }
+        if (Number.isFinite(suggestedNumericWeight) && suggestedNumericWeight > 0) {
+            const isDeloadAdvice = advice.type === 'deload'
+                || advice.type === 'reactive_deload'
+                || advice.type === 'deload_mini'
+                || advice.isDeload;
 
-                if (suggestedWeight > previousWeight) {
-                    return `La série précédente semblait confortable. Tu peux tenter ${suggestedWeight}kg pour environ ${targetReps} reps sans le prendre comme une obligation.`;
-                }
-
-                return `Le coach garde ${suggestedWeight}kg comme base pour viser environ ${targetReps} reps propres. Ajuste seulement si ton ressenti réel raconte autre chose.`;
+            if (advice.topSetProgression && Number.isFinite(Number(advice.backOffWeight)) && setIndex >= 1) {
+                return `Back-off: ${this.formatInlineCoachWeight(advice.backOffWeight, slot)} pour garder ${targetLabel} reps propres.`;
             }
 
-            return `Le coach pose ${suggestedWeight}kg comme base pour viser ${targetReps} reps propres. Ajuste selon le RPE réel et la qualité d'exécution.`;
+            if (isDeloadAdvice) {
+                return `Garde ${suggestedLabel}. Aujourd'hui, on coupe surtout le volume.`;
+            }
+
+            if (advice.type === 'decrease' && Number.isFinite(referenceNumericWeight) && referenceNumericWeight > suggestedNumericWeight) {
+                return `Avant: ${this.formatInlineCoachWeight(referenceNumericWeight, slot)}. Mets ${suggestedLabel} pour ${targetLabel} propres.`;
+            }
+
+            if (Number.isFinite(previousCompletedWeight) && previousCompletedWeight > 0 && suggestedNumericWeight < previousCompletedWeight) {
+                return `Serie d'avant trop chere. Descends a ${suggestedLabel} pour garder ${targetLabel}.`;
+            }
+
+            if (advice.type === 'increase') {
+                if (latestSet?.label) {
+                    return `Derniere S${setIndex + 1}: ${latestSet.label}. Teste ${suggestedLabel}.`;
+                }
+                if (Number.isFinite(referenceNumericWeight) && referenceNumericWeight > 0) {
+                    return `Base validee: ${this.formatInlineCoachWeight(referenceNumericWeight, slot)}. Teste ${suggestedLabel}.`;
+                }
+                return `Teste ${suggestedLabel} pour ${targetLabel} reps propres.`;
+            }
+
+            if (advice.type === 'volume_up') {
+                return `Garde ${suggestedLabel}. Le plus se joue sur le volume, pas sur la charge.`;
+            }
+
+            if (Number.isFinite(previousCompletedWeight) && previousCompletedWeight > 0 && Math.abs(suggestedNumericWeight - previousCompletedWeight) < 0.5) {
+                if (Number.isFinite(previousCompletedReps) && targetLabel) {
+                    if (previousCompletedReps < Number(targetLabel || 0)) {
+                        return `Garde ${suggestedLabel}. Serie d'avant: ${previousCompletedReps} reps, vise ${targetLabel}.`;
+                    }
+                    return `Garde ${suggestedLabel}. Serie d'avant propre, refais pareil.`;
+                }
+                return `Garde ${suggestedLabel} sur la prochaine serie.`;
+            }
+
+            if (latestSet?.label) {
+                if (Math.abs(suggestedNumericWeight - latestSet.weight) < 0.5) {
+                    if (previousSessionSet && Math.abs(previousSessionSet.weight - latestSet.weight) < 0.5 && latestSet.reps > previousSessionSet.reps) {
+                        return `Meme base: ${latestSet.label}. Tu avais gagne ${latestSet.reps - previousSessionSet.reps} rep.`;
+                    }
+                    if (targetLabel && latestSet.reps < Number(targetLabel || 0)) {
+                        return `Derniere S${setIndex + 1}: ${latestSet.label}. Reprends ${suggestedLabel}, vise ${targetLabel}.`;
+                    }
+                    return `Derniere S${setIndex + 1}: ${latestSet.label}. Repars pareil.`;
+                }
+
+                if (suggestedNumericWeight > latestSet.weight) {
+                    return `Derniere S${setIndex + 1}: ${latestSet.label}. Monte a ${suggestedLabel}.`;
+                }
+
+                if (suggestedNumericWeight < latestSet.weight) {
+                    return `Derniere S${setIndex + 1}: ${latestSet.label}. Reviens a ${suggestedLabel}.`;
+                }
+            }
+
+            if (Number.isFinite(referenceNumericWeight) && referenceNumericWeight > 0) {
+                if (suggestedNumericWeight > referenceNumericWeight) {
+                    return `Base: ${this.formatInlineCoachWeight(referenceNumericWeight, slot)}. Teste ${suggestedLabel}.`;
+                }
+                if (suggestedNumericWeight < referenceNumericWeight) {
+                    return `Base: ${this.formatInlineCoachWeight(referenceNumericWeight, slot)}. Repars a ${suggestedLabel}.`;
+                }
+            }
+
+            return `Mets ${suggestedLabel} et vise ${targetLabel} reps propres.`;
         }
 
-        return `Objectif souple: environ ${targetReps} reps propres. Ajuste selon ton RPE, la technique et la fatigue du moment.`;
+        return `Vise ${targetLabel} reps propres.`;
     }
 
     showCoachToast(message, status = 'hot', icon = '💡') {
@@ -3014,6 +3247,361 @@ class App {
         if (!slotOrExercise) return '';
         if (typeof slotOrExercise === 'string') return slotOrExercise;
         return slotOrExercise.activeExercise || slotOrExercise.name || '';
+    }
+
+    async loadCustomExerciseLibrary() {
+        const savedLibrary = await db.getSetting('customExerciseLibrary');
+        this.customExerciseLibrary = Array.isArray(savedLibrary) ? savedLibrary : [];
+    }
+
+    async saveCustomExerciseLibrary(library) {
+        this.customExerciseLibrary = Array.isArray(library) ? library : [];
+        await db.setSetting('customExerciseLibrary', this.customExerciseLibrary);
+        this.renderExerciseLibraryDatalist();
+    }
+
+    getCustomExerciseLibrary() {
+        return Array.isArray(this.customExerciseLibrary) ? this.customExerciseLibrary : [];
+    }
+
+    getExerciseLibrary() {
+        const builtInLibrary = Array.isArray(EXERCISE_LIBRARY) ? EXERCISE_LIBRARY : [];
+        const mergedLibrary = [...this.getCustomExerciseLibrary(), ...builtInLibrary];
+        const seen = new Set();
+
+        return mergedLibrary.filter(entry => {
+            const normalizedName = this.normalizeExerciseText(entry?.name);
+            if (!normalizedName || seen.has(normalizedName)) return false;
+            seen.add(normalizedName);
+            return true;
+        });
+    }
+
+    async persistCustomExerciseDefinition(definition) {
+        const exerciseName = (definition?.name || '').trim();
+        if (!exerciseName) return;
+
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        const customEntry = typeof createExerciseLibraryEntry === 'function'
+            ? createExerciseLibraryEntry(definition)
+            : { ...definition };
+
+        customEntry.isCustom = true;
+        const nextLibrary = [...this.getCustomExerciseLibrary()];
+        const existingIndex = nextLibrary.findIndex(entry => this.normalizeExerciseText(entry.name) === normalizedName);
+
+        if (existingIndex >= 0) {
+            nextLibrary[existingIndex] = {
+                ...nextLibrary[existingIndex],
+                ...customEntry,
+                isCustom: true
+            };
+        } else {
+            nextLibrary.push(customEntry);
+        }
+
+        await this.saveCustomExerciseLibrary(nextLibrary);
+    }
+
+    renderExerciseLibraryDatalist() {
+        const datalist = document.getElementById('exercise-library-options');
+        if (!datalist) return;
+
+        datalist.innerHTML = this.getExerciseLibrary()
+            .map(exercise => `<option value="${exercise.name}"></option>`)
+            .join('');
+    }
+
+    getExerciseCategoryLabel(categoryId) {
+        const labels = {
+            all: 'Tous',
+            fullbody: 'Libre',
+            pectoraux: 'Pectoraux',
+            dos: 'Dos',
+            epaules: 'Épaules',
+            bras: 'Bras',
+            jambes: 'Jambes',
+            abdominaux: 'Core',
+            cardio: 'Cardio'
+        };
+
+        return labels[categoryId] || categoryId;
+    }
+
+    getMuscleGroupLabel(muscleGroupId) {
+        if (!muscleGroupId) return '';
+        return MUSCLE_GROUPS.find(group => group.id === muscleGroupId)?.name || this.getExerciseCategoryLabel(muscleGroupId);
+    }
+
+    findExerciseLibraryEntry(exerciseName) {
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        if (!normalizedName) return null;
+
+        return this.getExerciseLibrary().find(entry => {
+            const searchableNames = [
+                entry.name,
+                ...(entry.aliases || []),
+                ...(entry.pool || [])
+            ];
+            return searchableNames.some(name => this.normalizeExerciseText(name) === normalizedName);
+        }) || null;
+    }
+
+    getExerciseSearchBlob(entry) {
+        return this.normalizeExerciseText([
+            entry.name,
+            this.getExerciseCategoryLabel(entry.category),
+            this.getMuscleGroupLabel(entry.muscleGroup),
+            entry.equipment || '',
+            ...(entry.aliases || []),
+            ...(entry.pool || [])
+        ].join(' '));
+    }
+
+    getTrackingMode(slotOrExercise) {
+        if (!slotOrExercise) return 'strength';
+
+        if (typeof slotOrExercise === 'object') {
+            if (slotOrExercise.trackingMode) {
+                return slotOrExercise.trackingMode;
+            }
+
+            // Legacy slots without explicit tracking should stay on the classic
+            // load/reps flow when they already use standard progression settings.
+            if (slotOrExercise.progressionMode === 'load' || slotOrExercise.progressionMode === 'capped_load') {
+                return 'strength';
+            }
+        }
+
+        const libraryEntry = this.findExerciseLibraryEntry(this.getSlotExerciseName(slotOrExercise));
+        return libraryEntry?.trackingMode || 'strength';
+    }
+
+    isCardioSlot(slotOrExercise) {
+        return this.getTrackingMode(slotOrExercise) === 'cardio';
+    }
+
+    getRepFieldLabel(slotOrMeta) {
+        return this.isCardioSlot(slotOrMeta) ? 'Durée (min)' : 'Reps';
+    }
+
+    formatSlotRepRange(slotOrMeta) {
+        const slot = typeof slotOrMeta === 'object' ? slotOrMeta : null;
+        if (!slot) return '--';
+        return this.isCardioSlot(slot)
+            ? `${this.formatSetInputValue(slot.repsMin, slot)}-${this.formatSetInputValue(slot.repsMax, slot)} min`
+            : `${slot.repsMin}-${slot.repsMax}`;
+    }
+
+    formatSlotSetsLabel(slotOrMeta) {
+        const slot = typeof slotOrMeta === 'object' ? slotOrMeta : null;
+        if (!slot) return '--';
+        const sets = Number(slot.sets || 0);
+        const unit = this.isCardioSlot(slot) ? 'bloc' : 'série';
+        return `${sets} ${unit}${sets > 1 ? 's' : ''}`;
+    }
+
+    formatSlotRestLabel(slotOrMeta) {
+        const slot = typeof slotOrMeta === 'object' ? slotOrMeta : null;
+        if (!slot) return '--';
+
+        if (Number(slot.rest || 0) > 0) {
+            return `${slot.rest}s repos`;
+        }
+
+        return this.isCardioSlot(slot) ? 'En continu' : 'Sans repos';
+    }
+
+    getSlotSummaryMetrics(slotOrMeta) {
+        const slot = typeof slotOrMeta === 'object' ? slotOrMeta : null;
+        if (!slot) return [];
+
+        return [
+            this.formatSlotSetsLabel(slot),
+            this.isCardioSlot(slot) ? this.formatSlotRepRange(slot) : `${this.formatSlotRepRange(slot)} reps`,
+            this.formatSlotRestLabel(slot),
+            this.isCardioSlot(slot) ? 'Cardio' : `RIR ${slot.rir}`
+        ].filter(Boolean);
+    }
+
+    formatRepTargetValue(value, slotOrMeta) {
+        return this.isCardioSlot(slotOrMeta)
+            ? `${this.formatSetInputValue(value, slotOrMeta)} min`
+            : `${value}`;
+    }
+
+    formatSetInputValue(value, slotOrMeta = null) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue) || numericValue <= 0) return '';
+
+        if (!this.isCardioSlot(slotOrMeta)) {
+            return `${Math.round(numericValue)}`;
+        }
+
+        const rounded = Math.round(numericValue * 10) / 10;
+        return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+    }
+
+    parseSetInputValue(rawValue, slotOrMeta = null) {
+        const normalizedValue = String(rawValue ?? '').replace(',', '.').trim();
+        if (!normalizedValue) return 0;
+
+        const parsed = this.isCardioSlot(slotOrMeta)
+            ? parseFloat(normalizedValue)
+            : parseInt(normalizedValue, 10);
+
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    getTrackingModeFieldConfig(trackingMode = 'strength') {
+        const isCardio = trackingMode === 'cardio';
+
+        return {
+            repMinLabel: isCardio ? 'Durée min (min)' : 'Reps min',
+            repMaxLabel: isCardio ? 'Durée max (min)' : 'Reps max',
+            restLabel: isCardio ? 'Repos entre blocs (s)' : 'Repos (secondes)',
+            rirLabel: isCardio ? 'Marge / RIR' : 'RIR',
+            helperText: isCardio
+                ? 'Pour ce format, la charge sert à noter un niveau, une vitesse ou une résistance.'
+                : '',
+            repsStep: isCardio ? '0.1' : '1',
+            repsInputMode: isCardio ? 'decimal' : 'numeric'
+        };
+    }
+
+    formatSetResult(set, slotOrExercise = null) {
+        if (!set) return '--';
+
+        if (this.isCardioSlot(slotOrExercise)) {
+            const duration = this.formatSetInputValue(set.reps, slotOrExercise) || '0';
+            const effortValue = Number(set.weight || 0);
+            return effortValue > 0
+                ? `${duration} min · niveau ${effortValue}`
+                : `${duration} min`;
+        }
+
+        return `${this.formatSetWeight(set.weight, slotOrExercise)} × ${set.reps}`;
+    }
+
+    inferCustomExerciseTemplate(exerciseName, options = {}) {
+        const {
+            preferLibraryMatch = true,
+            allowCardioInference = preferLibraryMatch
+        } = options;
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        const exactMatch = preferLibraryMatch ? this.findExerciseLibraryEntry(exerciseName) : null;
+        if (exactMatch) return exactMatch;
+
+        const isolationKeywords = [
+            'curl', 'extension', 'elevation', 'élévation', 'oiseau',
+            'kickback', 'leg curl', 'leg extension', 'pec deck', 'fly', 'ecarte', 'écarté'
+        ];
+        const cardioTemplate = allowCardioInference && this.isCardioSlot(exerciseName)
+            ? {
+                category: 'cardio',
+                equipment: 'cardio',
+                trackingMode: 'cardio',
+                sets: 1,
+                repsMin: 10,
+                repsMax: 30,
+                rest: 0,
+                rir: 3,
+                instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau, vitesse ou résistance si tu veux la conserver.',
+                pool: [exerciseName],
+                aliases: []
+            }
+            : null;
+
+        if (cardioTemplate) {
+            return {
+                name: exerciseName,
+                type: 'compound',
+                muscleGroup: '',
+                ...cardioTemplate
+            };
+        }
+
+        const isBodyweight = this.isLikelyBodyweightExercise(exerciseName);
+        const isIsolation = isolationKeywords.some(keyword => normalizedName.includes(this.normalizeExerciseText(keyword)));
+
+        return {
+            name: exerciseName,
+            category: 'fullbody',
+            muscleGroup: '',
+            type: isIsolation ? 'isolation' : 'compound',
+            equipment: isBodyweight ? 'poids du corps' : '',
+            sets: 3,
+            repsMin: isBodyweight ? 6 : (isIsolation ? 10 : 8),
+            repsMax: isBodyweight ? 15 : (isIsolation ? 15 : 12),
+            rest: isIsolation ? 60 : 90,
+            rir: 2,
+            instructions: '',
+            trackingMode: 'strength',
+            progressionMode: isBodyweight ? 'bodyweight' : null,
+            loadingProfile: isBodyweight ? 'bodyweight' : null,
+            pool: [exerciseName],
+            aliases: []
+        };
+    }
+
+    buildSlotFromExerciseDefinition(definition, sessionId, order) {
+        const exercise = definition || this.inferCustomExerciseTemplate('Nouvel exercice');
+        const slotLetter = String.fromCharCode(65 + order);
+        const pool = Array.from(new Set((exercise.pool || [exercise.name]).filter(Boolean)));
+        const activeExercise = exercise.name;
+
+        const slot = {
+            id: `${sessionId}-${Date.now()}-${order}`,
+            sessionId,
+            slotId: `${slotLetter}${order + 1}`,
+            name: activeExercise,
+            order,
+            sets: exercise.sets ?? 3,
+            repsMin: exercise.repsMin ?? 8,
+            repsMax: exercise.repsMax ?? 12,
+            rest: exercise.rest ?? 90,
+            rir: exercise.rir ?? 2,
+            type: exercise.type || 'compound',
+            muscleGroup: exercise.muscleGroup || '',
+            instructions: exercise.instructions || '',
+            activeExercise,
+            pool,
+            trackingMode: exercise.trackingMode || 'strength'
+        };
+
+        if (exercise.progressionMode) {
+            slot.progressionMode = exercise.progressionMode;
+        }
+
+        if (exercise.loadingProfile) {
+            slot.loadingProfile = exercise.loadingProfile;
+        }
+
+        this.normalizeSlotProgressionConfig(slot);
+        return slot;
+    }
+
+    buildExerciseDefinitionFromSlot(slot) {
+        const activeExercise = slot?.activeExercise || slot?.name || 'Exercice custom';
+        const variants = (slot?.pool || []).filter(name => name && name !== activeExercise);
+
+        return {
+            name: activeExercise,
+            category: this.isCardioSlot(slot) ? 'cardio' : 'fullbody',
+            muscleGroup: slot?.muscleGroup || '',
+            type: slot?.type || 'compound',
+            equipment: this.isCardioSlot(slot) ? 'cardio' : '',
+            sets: slot?.sets ?? 3,
+            repsMin: slot?.repsMin ?? 8,
+            repsMax: slot?.repsMax ?? 12,
+            rest: slot?.rest ?? 90,
+            rir: slot?.rir ?? 2,
+            instructions: slot?.instructions || '',
+            trackingMode: slot?.trackingMode || this.getTrackingMode(activeExercise),
+            progressionMode: slot?.progressionMode || null,
+            loadingProfile: slot?.loadingProfile || null,
+            variants
+        };
     }
 
     getBodyweightAutoConfig(slotOrExercise) {
@@ -3467,10 +4055,9 @@ class App {
                     <div class="slot-status ${status.class}" title="${status.title}"></div>
                 </div>
                 <div class="slot-details">
-                    <span class="slot-detail"><strong>${slot.sets}</strong> séries</span>
-                    <span class="slot-detail"><strong>${slot.repsMin}-${slot.repsMax}</strong> reps</span>
-                    <span class="slot-detail"><strong>${slot.rest}s</strong> repos</span>
-                    <span class="slot-detail">RIR <strong>${slot.rir}</strong></span>
+                    ${this.getSlotSummaryMetrics(slot)
+                        .map(metric => `<span class="slot-detail"><strong>${metric}</strong></span>`)
+                        .join('')}
                 </div>
                 <div class="slot-actions">
                     ${launchBtns}
@@ -3543,6 +4130,7 @@ class App {
         
         // Check if this is a unilateral exercise
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
+        const isCardioExercise = this.isCardioSlot(this.currentSlot);
         this.isUnilateralMode = this.isUnilateralExercise(exerciseName);
 
         // Initialize slot data in current workout if needed
@@ -3575,9 +4163,9 @@ class App {
         this.currentLMSData = lmsData; // Store for later use
         document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
         
-        document.getElementById('exercise-reps').textContent = `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}`;
-        document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
-        document.getElementById('exercise-rir').textContent = this.currentSlot.rir;
+        document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(this.currentSlot);
+        document.getElementById('exercise-rest').textContent = this.currentSlot.rest > 0 ? `${this.currentSlot.rest}s` : '--';
+        document.getElementById('exercise-rir').textContent = isCardioExercise ? '--' : this.currentSlot.rir;
         
         // Update instructions for unilateral exercises
         if (this.isUnilateralMode) {
@@ -3634,11 +4222,18 @@ class App {
             
             // Load logbook (last session data)
             await this.loadLogbook();
-            
-            // Calculate and show coaching advice (store for use in renderSeries)
-            this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
-            await this.showCoachingAdvice();
-            this.renderExerciseProgressSparkline(this.exerciseProgressHistory);
+
+            if (isCardioExercise) {
+                this.currentCoachingAdvice = null;
+                document.getElementById('coaching-advice').style.display = 'none';
+                document.getElementById('exercise-progress-card').style.display = 'none';
+                document.getElementById('coach-decision-card').style.display = 'none';
+            } else {
+                // Calculate and show coaching advice (store for use in renderSeries)
+                this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
+                await this.showCoachingAdvice();
+                this.renderExerciseProgressSparkline(this.exerciseProgressHistory);
+            }
             this.renderExerciseNotes();
             
             this.renderSeries();
@@ -3810,7 +4405,7 @@ class App {
             </div>`;
             html += '<div class="unilateral-logbook-sets">';
             for (const set of history.sets) {
-                html += `<span class="unilateral-logbook-set">${this.formatSetWeight(set.weight, set.exerciseId || this.currentSlot)}×${set.reps}</span>`;
+                html += `<span class="unilateral-logbook-set">${this.formatSetResult(set, set.exerciseId || this.currentSlot)}</span>`;
             }
             html += '</div></div>';
         });
@@ -4077,13 +4672,8 @@ class App {
         adjusted.coachOverlay = 'superset_secondary';
         const overlap = context.sessionContext?.reasons?.find(reason => reason.includes('pré-fatigue'));
         const note = overlap
-            ? `Le coach tient compte de la pré-fatigue du superset sur cet exercice.`
-            : `Le coach garde une marge car l'exercice B arrive déjà pré-fatigué.`;
-
-        if (typeof adjusted.suggestedWeight === 'number' && slot.progressionMode === 'load' && context.sessionContext?.fatigueLevel !== 'low') {
-            adjusted.suggestedWeight = this.roundToHalf(adjusted.suggestedWeight * 0.975);
-            adjusted.weightTrend = adjusted.suggestedWeight < context.lastWeight ? 'down' : adjusted.weightTrend;
-        }
+            ? `Le superset crée une pré-fatigue sur cet exercice, à lire comme un repère de contexte seulement.`
+            : `L'exercice B arrive déjà un peu entamé dans le superset, sans baisse auto de charge.`;
 
         adjusted.message = `${this.stripCoachMetaFromMessage(adjusted.message)} ${note}`.trim();
         return adjusted;
@@ -4107,8 +4697,6 @@ class App {
         const currentAxis = slot.progressionState?.primaryAxis || 'reps';
         const nextAxis = this.getNextProgressionAxis('capped_load', currentAxis, slot);
         const maxSets = slot.type === 'isolation' ? 6 : 5;
-        const fatigueHigh = context.sessionContext?.fatigueLevel === 'high';
-        const fatigueModerate = context.sessionContext?.fatigueLevel === 'moderate';
 
         if (!context.lastWorkout) {
             return {
@@ -4141,7 +4729,7 @@ class App {
         if (currentAxis === 'reps') {
             const cappedTargets = this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, slot.sets));
             if (context.consecutiveExposureSuccess >= 2) {
-                if (slot.sets < maxSets && !fatigueHigh && !fatigueModerate) {
+                if (slot.sets < maxSets) {
                     return {
                         type: 'volume_up',
                         title: 'Cap validé, on ajoute du volume',
@@ -4184,15 +4772,13 @@ class App {
             return {
                 type: 'volume_up',
                 title: 'Volume avant tout',
-                message: fatigueHigh
-                    ? 'Fatigue trop élevée pour ajouter une série aujourd’hui. Garde le volume actuel et privilégie la qualité.'
-                    : `Le plafond est atteint. Garde la charge et vise ${targetSets} séries productives avant de passer au tempo.`,
+                message: `Le plafond est atteint. Garde la charge et vise ${targetSets} séries productives avant de passer au tempo.`,
                 suggestedWeight: context.lastWeight,
-                suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, fatigueHigh ? slot.sets : targetSets)),
-                suggestedSets: fatigueHigh ? slot.sets : targetSets,
+                suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, targetSets)),
+                suggestedSets: targetSets,
                 weightTrend: 'neutral',
-                progressionAxis: fatigueHigh ? 'sets' : 'tempo',
-                nextProgressionAxis: fatigueHigh ? 'sets' : 'tempo'
+                progressionAxis: 'tempo',
+                nextProgressionAxis: 'tempo'
             };
         }
 
@@ -4259,7 +4845,7 @@ class App {
         const nextAxis = this.getNextProgressionAxis('bodyweight', currentAxis, slot);
         const repUpperBound = this.getExtendedRepUpperBound(slot, 'bodyweight');
         const bodyweightTargets = this.formatTargetReps(this.genTargetReps(slot.repsMin, repUpperBound, slot.sets));
-        const canAdvance = context.consecutiveExposureSuccess >= 2 && (!context.sessionContext || context.sessionContext.fatigueLevel !== 'high');
+        const canAdvance = context.consecutiveExposureSuccess >= 2;
         const assistanceStepKg = profile.assistanceStepKg || 5;
 
         if (!context.lastWorkout) {
@@ -4519,6 +5105,9 @@ class App {
         const coachContext = await this.buildCoachContextForSlot(normalizedSlot, options);
         advice = this.applyContextualAdjustmentsToAdvice(advice, normalizedSlot, coachContext);
         advice = this.enforceProgressionConstraints(advice, normalizedSlot, context);
+        if (typeof context.lastWeight === 'number' && context.lastWeight > 0) {
+            advice.referenceWeight = context.lastWeight;
+        }
         await this.syncSlotProgressionStateFromAdvice(normalizedSlot, advice, context);
 
         return advice;
@@ -4734,8 +5323,7 @@ class App {
                     <div class="logbook-set">
                         <span class="logbook-set-number">S${set.setNumber}</span>
                         <div class="logbook-set-data">
-                            <span class="logbook-value"><strong>${this.formatSetWeight(set.weight, set.exerciseId || slotRef)}</strong></span>
-                            <span class="logbook-value"><strong>${set.reps}</strong>reps</span>
+                            <span class="logbook-value"><strong>${this.formatSetResult(set, set.exerciseId || slotRef)}</strong></span>
                         </div>
                     </div>
                 `;
@@ -4875,7 +5463,7 @@ class App {
             html += `
                 <div class="logbook-set">
                     <span class="logbook-set-number">S${set.setNumber}</span>
-                    <span class="logbook-set-data">${this.formatSetWeight(set.weight, set.exerciseId || this.supersetSlot)} × ${set.reps}</span>
+                    <span class="logbook-set-data">${this.formatSetResult(set, set.exerciseId || this.supersetSlot)}</span>
                 </div>
             `;
         }
@@ -4990,21 +5578,33 @@ class App {
             const isCoachingSuggestedB = !setBData.weight && isNextIncompleteB && !!adviceB;
             const targetRepsA = targetRepsAArray[i] || this.currentSlot.repsMax;
             const targetRepsB = targetRepsBArray[i] || this.supersetSlot.repsMax;
-            const previousWeightA = [...slotAData.sets].slice(0, i).reverse().find(set => set?.completed && Number.isFinite(set.weight) && set.weight > 0)?.weight ?? null;
-            const previousWeightB = [...slotBData.sets].slice(0, i).reverse().find(set => set?.completed && Number.isFinite(set.weight) && set.weight > 0)?.weight ?? null;
+            const previousSetA = [...slotAData.sets].slice(0, i).reverse().find(set => set?.completed && Number.isFinite(set.weight) && set.weight > 0) || null;
+            const previousSetB = [...slotBData.sets].slice(0, i).reverse().find(set => set?.completed && Number.isFinite(set.weight) && set.weight > 0) || null;
             const inlineHintA = this.getInlineCoachSetHint(
                 adviceA,
                 targetRepsA,
                 isNextIncompleteA && suggestedWeightA ? suggestedWeightA : displayWeightA,
                 isNextIncompleteA,
-                previousWeightA
+                {
+                    slot: this.currentSlot,
+                    setIndex: i,
+                    histories: this.lastExerciseHistoryAll || [this.lastExerciseHistory].filter(Boolean),
+                    previousCompletedSet: previousSetA,
+                    referenceWeight: adviceA?.referenceWeight ?? null
+                }
             );
             const inlineHintB = this.getInlineCoachSetHint(
                 adviceB,
                 targetRepsB,
                 isNextIncompleteB && suggestedWeightB ? suggestedWeightB : displayWeightB,
                 isNextIncompleteB,
-                previousWeightB
+                {
+                    slot: this.supersetSlot,
+                    setIndex: i,
+                    histories: this.lastSupersetHistoryAll || [this.lastSupersetHistory].filter(Boolean),
+                    previousCompletedSet: previousSetB,
+                    referenceWeight: adviceB?.referenceWeight ?? null
+                }
             );
             
             const isEditingSuperset = isCompleted && this.editingSetIndex === i;
@@ -5037,12 +5637,12 @@ class App {
                         <div class="superset-completed-exercise exercise-a">
                             <span class="superset-completed-badge badge-a">A</span>
                             <span class="superset-completed-name">${nameA}</span>
-                            <span class="superset-completed-value">${this.formatSetWeight(setAData.weight, this.currentSlot)} × ${setAData.reps}</span>
+                            <span class="superset-completed-value">${this.formatSetResult(setAData, this.currentSlot)}</span>
                         </div>
                         <div class="superset-completed-exercise exercise-b">
                             <span class="superset-completed-badge badge-b">B</span>
                             <span class="superset-completed-name">${nameB}</span>
-                            <span class="superset-completed-value">${this.formatSetWeight(setBData.weight, this.supersetSlot)} × ${setBData.reps}</span>
+                            <span class="superset-completed-value">${this.formatSetResult(setBData, this.supersetSlot)}</span>
                         </div>
                     </div>
                 `;
@@ -5364,8 +5964,7 @@ class App {
                     <div class="logbook-set">
                         <span class="logbook-set-number">S${set.setNumber}</span>
                         <div class="logbook-set-data">
-                            <span class="logbook-value"><strong>${this.formatSetWeight(set.weight, set.exerciseId || this.currentSlot)}</strong></span>
-                            <span class="logbook-value"><strong>${set.reps}</strong>reps</span>
+                            <span class="logbook-value"><strong>${this.formatSetResult(set, set.exerciseId || this.currentSlot)}</strong></span>
                         </div>
                     </div>
                 `;
@@ -5846,10 +6445,6 @@ class App {
                 if (isNextIncompleteSet && this.nextSetSuggestedWeight) {
                     suggestedWeight = this.nextSetSuggestedWeight;
                 }
-                // PRIORITY 1bis: live coaching adjustment based on cumulative fatigue
-                else if (isNextIncompleteSet && advice?.liveLoadAdjustment && coachingSuggestedWeight) {
-                    suggestedWeight = coachingSuggestedWeight;
-                }
                 // PRIORITY 2: Coaching suggestion for first set
                 else if (coachingSuggestedWeight && i === 0) {
                     suggestedWeight = coachingSuggestedWeight;
@@ -5879,7 +6474,6 @@ class App {
                 .slice(0, i)
                 .reverse()
                 .find(set => set?.completed && Number.isFinite(set.weight) && set.weight > 0);
-            const previousCompletedWeight = previousCompletedSet?.weight ?? null;
 
             let baselineWeight = '';
             if (!setData.weight) {
@@ -5899,7 +6493,8 @@ class App {
                 : baselineWeight;
             const displayWeight = this.getInputValueOrFallback(setData.weight, preferredSuggestedWeight);
             const weightPlaceholder = setData.weight || suggestedWeight || baselineWeight || '0';
-            const displayReps = setData.reps || '';
+            const displayReps = this.formatSetInputValue(setData.reps, this.currentSlot);
+            const repsPlaceholder = this.formatSetInputValue(targetReps, this.currentSlot) || targetReps;
             const isSuggested = !setData.weight && (suggestedWeight || baselineWeight);
             const isCoachingSuggested = !setData.weight && isNextIncompleteSet && !!advice;
             const coachReferenceWeight = isNextIncompleteSet && suggestedWeight ? suggestedWeight : displayWeight;
@@ -5908,7 +6503,13 @@ class App {
                 targetReps,
                 coachReferenceWeight,
                 isNextIncompleteSet,
-                previousCompletedWeight
+                {
+                    slot: this.currentSlot,
+                    setIndex: i,
+                    histories: this.lastExerciseHistoryAll || [this.lastExerciseHistory].filter(Boolean),
+                    previousCompletedSet,
+                    referenceWeight: advice?.referenceWeight ?? null
+                }
             );
             
             const isEditing = isCompleted && this.editingSetIndex === i;
@@ -5923,7 +6524,7 @@ class App {
                     <span class="series-number">Série ${i + 1}</span>
                     ${isCompleted && !isEditing ? `
                         <div class="series-check-container">
-                            <span class="series-result">${this.formatSetWeight(setData.weight, this.currentSlot)} × ${setData.reps}</span>
+                            <span class="series-result">${this.formatSetResult(setData, this.currentSlot)}</span>
                             ${canEditValidatedSet ? `
                             <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5951,10 +6552,11 @@ class App {
                             `}
                         </div>
                         <div class="input-group">
-                            <label>Reps ${isCoachingSuggested ? `<span class="suggested-label">coach: ${targetReps}</span>` : `<span class="suggested-label">cible: ${targetReps}</span>`}</label>
-                            <input type="number" inputmode="numeric" class="input-reps" 
+                            <label>${this.getRepFieldLabel(this.currentSlot)} ${isCoachingSuggested ? `<span class="suggested-label">coach: ${this.formatRepTargetValue(targetReps, this.currentSlot)}</span>` : `<span class="suggested-label">cible: ${this.formatRepTargetValue(targetReps, this.currentSlot)}</span>`}</label>
+                            <input type="number" inputmode="${this.isCardioSlot(this.currentSlot) ? 'decimal' : 'numeric'}" class="input-reps" 
+                                   step="${this.isCardioSlot(this.currentSlot) ? '0.1' : '1'}"
                                    value="${displayReps}" 
-                                   placeholder="${targetReps}"
+                                   placeholder="${repsPlaceholder}"
                                    data-set-index="${i}">
                         </div>
                     </div>
@@ -5964,12 +6566,19 @@ class App {
                             <span class="series-coach-inline-text">${inlineCoachHint}</span>
                         </div>
                     ` : ''}
-                    <button class="btn ${isEditing ? 'btn-save-edit' : 'btn-series-done'}" data-set-index="${i}">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                        ${isEditing ? 'Sauvegarder' : 'Série terminée'}
-                    </button>
+                    <div class="series-actions">
+                        ${this.isCardioSlot(this.currentSlot) && !isEditing ? `
+                            <button class="btn btn-secondary btn-cardio-timer" data-set-index="${i}">
+                                ${displayReps ? 'Relancer le timer' : `Lancer ${this.formatRepTargetValue(targetReps, this.currentSlot)}`}
+                            </button>
+                        ` : ''}
+                        <button class="btn ${isEditing ? 'btn-save-edit' : 'btn-series-done'}" data-set-index="${i}">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                            ${isEditing ? 'Sauvegarder' : (this.isCardioSlot(this.currentSlot) ? 'Valider le bloc' : 'Série terminée')}
+                        </button>
+                    </div>
                 ` : ''}
             `;
 
@@ -6346,7 +6955,7 @@ class App {
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         
         const weight = parseFloat(weightInput.value) || 0;
-        const reps = parseInt(repsInput.value) || 0;
+        const reps = this.parseSetInputValue(repsInput.value, this.currentSlot);
 
         if (reps === 0) {
             repsInput.focus();
@@ -6416,7 +7025,7 @@ class App {
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         
         const weight = parseFloat(weightInput.value) || 0;
-        const reps = parseInt(repsInput.value) || 0;
+        const reps = this.parseSetInputValue(repsInput.value, this.currentSlot);
         
         if (reps === 0) {
             repsInput.focus();
@@ -6491,17 +7100,472 @@ class App {
     }
 
     // ===== Rest Timer =====
+    formatRestCountdownDisplay(seconds) {
+        const safeSeconds = Math.max(0, Number(seconds) || 0);
+        if (safeSeconds >= 60) {
+            const minutes = Math.floor(safeSeconds / 60);
+            const remainingSeconds = safeSeconds % 60;
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        return `${safeSeconds}`;
+    }
+
+    setRestOverlayReadyState(isReady) {
+        const overlay = document.getElementById('timer-overlay');
+        const label = document.getElementById('timer-label');
+        const stageBadge = document.getElementById('timer-stage-badge');
+        const stageCopy = document.getElementById('timer-stage-copy');
+        const minusAction = document.getElementById('btn-timer-minus');
+        const primaryAction = document.getElementById('btn-timer-skip');
+        const plusAction = document.getElementById('btn-timer-plus');
+        const stopLabel = document.getElementById('btn-timer-stop-label');
+        const rpeSection = document.getElementById('rpe-section');
+
+        this.restOverlayReady = Boolean(isReady);
+        overlay?.classList.toggle('ready', this.restOverlayReady);
+        if (minusAction) minusAction.disabled = this.restOverlayReady;
+
+        const isWorkTimer = this.overlayTimerMode === 'work';
+        if (rpeSection) {
+            rpeSection.hidden = isWorkTimer;
+        }
+
+        if (isWorkTimer) {
+            if (label) label.textContent = 'Série';
+            if (stageBadge) stageBadge.textContent = 'Cardio';
+            if (stageCopy) stageCopy.textContent = 'Le chrono pré-remplit la durée. Valide ensuite le bloc.';
+            if (primaryAction) primaryAction.textContent = 'Finir';
+            if (plusAction) plusAction.textContent = '+15s';
+            if (stopLabel) stopLabel.textContent = 'Arrêter plus tôt';
+            overlay?.classList.remove('ready');
+            this.restOverlayReady = false;
+            return;
+        }
+
+        if (this.restOverlayReady) {
+            if (label) label.textContent = 'Prêt';
+            if (stageBadge) stageBadge.textContent = 'Prêt';
+            if (stageCopy) stageCopy.textContent = '';
+            if (primaryAction) primaryAction.textContent = 'Go';
+            if (plusAction) plusAction.textContent = '+15s';
+            if (stopLabel) stopLabel.textContent = 'Fermer';
+            return;
+        }
+
+        if (label) label.textContent = 'Repos';
+        if (stageBadge) stageBadge.textContent = 'Repos';
+        if (stageCopy) stageCopy.textContent = '';
+        if (primaryAction) primaryAction.textContent = 'Passer';
+        if (plusAction) plusAction.textContent = '+15s';
+        if (stopLabel) stopLabel.textContent = 'Arrêter le timer';
+        if (rpeSection) {
+            rpeSection.hidden = false;
+        }
+    }
+
+    pickRestTimerVariation(forceNew = false) {
+        const themes = ['iris', 'amethyst', 'violet', 'plum', 'orchid', 'indigo'];
+        const motions = ['float', 'tilt', 'orbit', 'pulse', 'drift', 'bloom'];
+        const ornaments = ['sparkles', 'confetti', 'dots', 'comets', 'markers', 'bursts', 'glitter', 'ribbons', 'petals', 'shards'];
+
+        const randomItem = items => items[Math.floor(Math.random() * items.length)];
+        let variation = null;
+        let signature = '';
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            variation = {
+                theme: randomItem(themes),
+                motion: randomItem(motions),
+                ornament: randomItem(ornaments),
+                orbitDuration: `${(7.8 + Math.random() * 4.4).toFixed(2)}s`,
+                driftDuration: `${(4.6 + Math.random() * 2.6).toFixed(2)}s`,
+                sparkDuration: `${(2.7 + Math.random() * 2.1).toFixed(2)}s`,
+                confettiDuration: `${(4.8 + Math.random() * 2.4).toFixed(2)}s`,
+                ambientOpacity: `${(0.15 + Math.random() * 0.12).toFixed(2)}`,
+                ornamentScale: `${(0.94 + Math.random() * 0.22).toFixed(2)}`
+            };
+            signature = `${variation.theme}-${variation.motion}-${variation.ornament}`;
+            if (!forceNew || signature !== this.lastRestTimerStyleSignature) break;
+        }
+
+        variation.signature = signature;
+        return variation;
+    }
+
+    restoreRestTimerVariation() {
+        const rawVariation = localStorage.getItem('restTimerStyle');
+        if (!rawVariation) return null;
+
+        try {
+            const variation = JSON.parse(rawVariation);
+            if (!variation?.theme || !variation?.motion || !variation?.ornament) {
+                return null;
+            }
+            return variation;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    applyRestTimerVariation(variation = null) {
+        const overlay = document.getElementById('timer-overlay');
+        if (!overlay) return null;
+
+        const nextVariation = variation || this.restTimerStyle || this.pickRestTimerVariation(true);
+        this.restTimerStyle = nextVariation;
+        this.lastRestTimerStyleSignature = nextVariation.signature || `${nextVariation.theme}-${nextVariation.motion}-${nextVariation.ornament}`;
+
+        overlay.dataset.theme = nextVariation.theme;
+        overlay.dataset.motion = nextVariation.motion;
+        overlay.dataset.ornament = nextVariation.ornament;
+        overlay.style.setProperty('--timer-orbit-duration', nextVariation.orbitDuration || '10.4s');
+        overlay.style.setProperty('--timer-drift-duration', nextVariation.driftDuration || '5.6s');
+        overlay.style.setProperty('--timer-spark-duration', nextVariation.sparkDuration || '3.2s');
+        overlay.style.setProperty('--timer-confetti-duration', nextVariation.confettiDuration || '5.8s');
+        overlay.style.setProperty('--timer-ambient-opacity', nextVariation.ambientOpacity || '0.2');
+        overlay.style.setProperty('--timer-ornament-scale', nextVariation.ornamentScale || '1');
+
+        localStorage.setItem('restTimerStyle', JSON.stringify(nextVariation));
+        return nextVariation;
+    }
+
+    clearRestTimerVariation() {
+        const overlay = document.getElementById('timer-overlay');
+        if (overlay) {
+            overlay.style.removeProperty('--timer-orbit-duration');
+            overlay.style.removeProperty('--timer-drift-duration');
+            overlay.style.removeProperty('--timer-spark-duration');
+            overlay.style.removeProperty('--timer-confetti-duration');
+            overlay.style.removeProperty('--timer-ambient-opacity');
+            overlay.style.removeProperty('--timer-ornament-scale');
+        }
+        this.restTimerStyle = null;
+        localStorage.removeItem('restTimerStyle');
+    }
+
+    clearRestTimerAnimationState() {
+        const overlay = document.getElementById('timer-overlay');
+        const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+
+        overlay?.classList.remove('ending', 'critical');
+        countdown?.classList.remove('ending', 'critical', 'tick-boost', 'timer-done', 'go-ready');
+        timerRing?.classList.remove('ending', 'critical', 'tick-boost', 'go-ready');
+
+        if (this.restTimerTickBoostTimeout) {
+            clearTimeout(this.restTimerTickBoostTimeout);
+            this.restTimerTickBoostTimeout = null;
+        }
+        this.lastRestTimerDisplayedSecond = null;
+    }
+
+    triggerRestTimerTickBoost(isCritical = false) {
+        const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+
+        if (!countdown || !timerRing) return;
+
+        countdown.classList.remove('tick-boost');
+        timerRing.classList.remove('tick-boost');
+        void countdown.offsetWidth;
+        countdown.classList.add('tick-boost');
+        timerRing.classList.add('tick-boost');
+
+        if (this.restTimerTickBoostTimeout) {
+            clearTimeout(this.restTimerTickBoostTimeout);
+        }
+        this.restTimerTickBoostTimeout = setTimeout(() => {
+            countdown.classList.remove('tick-boost');
+            timerRing.classList.remove('tick-boost');
+            this.restTimerTickBoostTimeout = null;
+        }, isCritical ? 430 : 320);
+    }
+
+    updateRestTimerAnimationState(remaining) {
+        const overlay = document.getElementById('timer-overlay');
+        const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+        const isEnding = remaining <= 10 && remaining > 0;
+        const isCritical = remaining <= 3 && remaining > 0;
+
+        overlay?.classList.toggle('ending', isEnding);
+        overlay?.classList.toggle('critical', isCritical);
+        countdown?.classList.toggle('ending', isEnding);
+        countdown?.classList.toggle('critical', isCritical);
+        timerRing?.classList.toggle('ending', isEnding);
+        timerRing?.classList.toggle('critical', isCritical);
+
+        if (!isEnding) {
+            countdown?.classList.remove('tick-boost');
+            timerRing?.classList.remove('tick-boost');
+            return;
+        }
+
+        if (remaining !== this.lastRestTimerDisplayedSecond) {
+            this.lastRestTimerDisplayedSecond = remaining;
+            this.triggerRestTimerTickBoost(isCritical);
+        }
+    }
+
+    renderRestOverlayMetrics(metrics = []) {
+        const metricsEl = document.getElementById('timer-context-metrics');
+        if (!metricsEl) return;
+
+        metricsEl.innerHTML = '';
+        metrics.forEach(metric => {
+            const metricEl = document.createElement('div');
+            metricEl.className = 'timer-context-metric';
+
+            const labelEl = document.createElement('span');
+            labelEl.className = 'timer-context-metric-label';
+            labelEl.textContent = metric.label;
+
+            const valueEl = document.createElement('span');
+            valueEl.className = 'timer-context-metric-value';
+            valueEl.textContent = metric.value;
+
+            metricEl.append(labelEl, valueEl);
+            metricsEl.appendChild(metricEl);
+        });
+    }
+
+    getStandardRestOverlayData() {
+        if (!this.currentSlot || !this.currentWorkout) return null;
+
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id] || { sets: [] };
+        const advice = this.currentCoachingAdvice;
+        const lastSets = this.lastExerciseHistory?.sets || [];
+        const coachingSuggestedWeight = advice && advice.suggestedWeight !== '?' ? advice.suggestedWeight : null;
+        const setPlan = this.buildCoachSetPlan(this.currentSlot, advice);
+        const displayedSets = setPlan.reductionAccepted ? setPlan.activeTargetSets : setPlan.programmedSets;
+        const completedSets = slotData.sets.filter(set => set?.completed).length;
+        const nextSetIndex = Math.min(completedSets, Math.max(0, displayedSets - 1));
+        const isPureBodyweight = this.isPureBodyweightSlot(this.currentSlot);
+
+        let suggestedWeight = '';
+        if (this.nextSetSuggestedWeight && !isPureBodyweight) {
+            suggestedWeight = this.nextSetSuggestedWeight;
+        } else if (coachingSuggestedWeight && nextSetIndex === 0) {
+            suggestedWeight = coachingSuggestedWeight;
+        } else if (nextSetIndex > 0 && slotData.sets[nextSetIndex - 1]?.weight) {
+            suggestedWeight = slotData.sets[nextSetIndex - 1].weight;
+        } else if (lastSets[nextSetIndex]?.weight) {
+            suggestedWeight = lastSets[nextSetIndex].weight;
+        } else if (coachingSuggestedWeight) {
+            suggestedWeight = coachingSuggestedWeight;
+        } else if (lastSets[0]?.weight) {
+            suggestedWeight = lastSets[0].weight;
+        }
+
+        const targetRepsArray = this.genTargetReps(this.currentSlot.repsMin, this.currentSlot.repsMax, displayedSets);
+        const advisedTargetRepsArray = this.getAdviceTargetRepsArray(advice, targetRepsArray);
+        const targetReps = advisedTargetRepsArray[nextSetIndex] || targetRepsArray[nextSetIndex] || this.currentSlot.repsMax;
+
+        const loadLabel = this.getLoadFieldLabel(this.currentSlot).replace(' (kg)', '');
+        let loadValue = 'À définir';
+        if (isPureBodyweight && Number(suggestedWeight || 0) <= 0) {
+            loadValue = 'PDC';
+        } else if (suggestedWeight !== '' && suggestedWeight !== null && suggestedWeight !== undefined) {
+            loadValue = this.formatSetWeight(suggestedWeight, this.currentSlot);
+        }
+
+        return {
+            progress: `${Math.min(completedSets + 1, displayedSets)}/${displayedSets}`,
+            title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice',
+            metrics: [
+                { label: loadLabel, value: loadValue },
+                { label: this.isCardioSlot(this.currentSlot) ? 'Durée' : 'Rép', value: this.formatRepTargetValue(targetReps, this.currentSlot) }
+            ],
+            note: ''
+        };
+    }
+
+    getSupersetRestOverlayData() {
+        if (!this.currentSlot || !this.supersetSlot || !this.currentWorkout) return null;
+
+        const slotAData = this.currentWorkout.slots?.[this.currentSlot.id] || { sets: [] };
+        const sets = Math.min(this.currentSlot.sets, this.supersetSlot.sets);
+        const completedSets = slotAData.sets.filter(set => set?.completed).length;
+        const nextSetIndex = Math.min(completedSets, Math.max(0, sets - 1));
+        const targetRepsAArray = this.getAdviceTargetRepsArray(
+            this.supersetCoachingAdviceA,
+            this.genTargetReps(this.currentSlot.repsMin, this.currentSlot.repsMax, sets)
+        );
+        const targetRepsBArray = this.getAdviceTargetRepsArray(
+            this.supersetCoachingAdviceB,
+            this.genTargetReps(this.supersetSlot.repsMin, this.supersetSlot.repsMax, sets)
+        );
+
+        return {
+            progress: `${Math.min(completedSets + 1, sets)}/${sets}`,
+            title: `${this.currentSlot.activeExercise || this.currentSlot.name} + ${this.supersetSlot.activeExercise || this.supersetSlot.name}`,
+            metrics: [
+                { label: 'A', value: `${targetRepsAArray[nextSetIndex] || this.currentSlot.repsMax} rép` },
+                { label: 'B', value: `${targetRepsBArray[nextSetIndex] || this.supersetSlot.repsMax} rép` }
+            ],
+            note: ''
+        };
+    }
+
+    getUnilateralRestOverlayData() {
+        if (!this.currentSlot || !this.currentWorkout) return null;
+
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id] || { setsLeft: [], setsRight: [] };
+        const completedLeft = (slotData.setsLeft || []).filter(set => set?.completed).length;
+        const completedRight = (slotData.setsRight || []).filter(set => set?.completed).length;
+        const completedSets = Math.min(completedLeft, completedRight);
+        const nextSetNumber = Math.min(completedSets + 1, this.currentSlot.sets);
+
+        return {
+            progress: `${nextSetNumber}/${this.currentSlot.sets}`,
+            title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice unilatéral',
+            metrics: [
+                { label: 'Rép', value: `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}` },
+                { label: 'Côté', value: 'G / D' }
+            ],
+            note: ''
+        };
+    }
+
+    getRestOverlayData() {
+        if (this.isSupersetMode && this.supersetSlot) {
+            return this.getSupersetRestOverlayData();
+        }
+        if (this.isUnilateralMode) {
+            return this.getUnilateralRestOverlayData();
+        }
+        return this.getStandardRestOverlayData();
+    }
+
+    getWorkTimerOverlayData() {
+        if (!this.currentSlot || !this.cardioTimerState) return null;
+
+        const setIndex = this.cardioTimerState.setIndex ?? 0;
+        const slotData = this.currentWorkout?.slots?.[this.currentSlot.id] || { sets: [] };
+        const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
+        const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
+        const weightValue = parseFloat(weightInput?.value) || 0;
+
+        return {
+            progress: `${Math.min(setIndex + 1, targetSets)}/${targetSets}`,
+            title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice cardio',
+            metrics: [
+                { label: 'Cible', value: this.formatRepTargetValue(this.cardioTimerState.targetMinutes, this.currentSlot) },
+                { label: this.getLoadFieldLabel(this.currentSlot), value: this.formatSetWeight(weightValue, this.currentSlot) }
+            ],
+            note: 'Le chrono remplit la durée, puis tu valides manuellement le bloc.'
+        };
+    }
+
+    updateRestOverlayContext() {
+        const progressEl = document.getElementById('timer-context-progress');
+        const titleEl = document.getElementById('timer-context-title');
+        const noteEl = document.getElementById('timer-context-note');
+        const overlayData = this.overlayTimerMode === 'work'
+            ? this.getWorkTimerOverlayData()
+            : this.getRestOverlayData();
+
+        if (!overlayData) return;
+
+        if (progressEl) progressEl.textContent = overlayData.progress;
+        if (titleEl) titleEl.textContent = overlayData.title;
+        if (noteEl) {
+            noteEl.textContent = overlayData.note || '';
+            noteEl.hidden = !overlayData.note;
+        }
+        this.renderRestOverlayMetrics(overlayData.metrics);
+    }
+
+    dismissRestOverlay() {
+        const overlay = document.getElementById('timer-overlay');
+        overlay?.classList.remove('active', 'ready');
+        this.clearRestTimerAnimationState();
+
+        this.setRestOverlayReadyState(false);
+        this.restTimeLeft = 0;
+        this.restTimeTotal = 0;
+        this.restFeedbackCaptured = false;
+        this.overlayTimerMode = null;
+        this.cardioTimerState = null;
+        this.lastVibrateAt = null;
+        this.clearRestTimerVariation();
+        this.resetRpeSlider();
+    }
+
+    finishRestTimer({ showReadyState = false } = {}) {
+        if (this.overlayTimerMode === 'work') {
+            this.finishCardioSetTimer({ useElapsed: true });
+            return;
+        }
+
+        if (this.restTimer) {
+            clearInterval(this.restTimer);
+            this.restTimer = null;
+        }
+
+        if (!this.restFeedbackCaptured) {
+            this.restFeedbackCaptured = true;
+            this.saveRpeToLastSet();
+        }
+
+        this.restTimerEndTime = null;
+        this.lastVibrateAt = null;
+        localStorage.removeItem('restTimerEndTime');
+        localStorage.removeItem('restTimerTotalTime');
+
+        const overlay = document.getElementById('timer-overlay');
+        const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+
+        this.clearRestTimerAnimationState();
+
+        if (showReadyState) {
+            this.restTimeLeft = 0;
+            overlay?.classList.add('active');
+            this.setRestOverlayReadyState(true);
+            if (countdown) {
+                countdown.textContent = 'GO';
+                timerRing?.offsetWidth;
+                timerRing?.classList.add('go-ready');
+                countdown.classList.add('go-ready');
+            }
+            this.updateTimerProgress();
+            return;
+        }
+
+        this.dismissRestOverlay();
+    }
+
     startRestTimer(seconds) {
+        if (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return;
+        if (this.restTimer) {
+            clearInterval(this.restTimer);
+            this.restTimer = null;
+        }
+
+        this.overlayTimerMode = 'rest';
+        this.cardioTimerState = null;
+
         // Store end timestamp instead of countdown
         this.restTimeTotal = seconds;
+        this.restTimeLeft = seconds;
         this.restTimerEndTime = Date.now() + (seconds * 1000);
         localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+        localStorage.setItem('restTimerTotalTime', String(seconds));
         
         const overlay = document.getElementById('timer-overlay');
         const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+        this.restFeedbackCaptured = false;
+        this.applyRestTimerVariation(this.pickRestTimerVariation(true));
+        this.clearRestTimerAnimationState();
         
         overlay.classList.add('active');
-        countdown.classList.remove('ending');
+        overlay.classList.remove('ready');
+        this.setRestOverlayReadyState(false);
+        this.updateRestOverlayContext();
+        countdown.classList.remove('timer-done', 'go-ready');
+        timerRing?.classList.remove('go-ready');
         
         // Vibrate on start (if supported)
         if (navigator.vibrate) {
@@ -6514,16 +7578,18 @@ class App {
     }
     
     updateRestTimer() {
+        if (!this.restTimerEndTime) return;
+
         const countdown = document.getElementById('timer-countdown');
         const remaining = Math.max(0, Math.ceil((this.restTimerEndTime - Date.now()) / 1000));
         this.restTimeLeft = remaining;
         
-        countdown.textContent = remaining;
+        countdown.textContent = this.formatRestCountdownDisplay(remaining);
         this.updateTimerProgress();
+        this.updateRestTimerAnimationState(remaining);
         
-        // Add ending animation when < 5 seconds
+        // Vibrate near the end
         if (remaining <= 5 && remaining > 0) {
-            countdown.classList.add('ending');
             if (navigator.vibrate && !this.lastVibrateAt) {
                 navigator.vibrate(30);
                 this.lastVibrateAt = Date.now();
@@ -6540,6 +7606,11 @@ class App {
     updateTimerProgress() {
         const progressRing = document.getElementById('timer-ring-progress');
         if (!progressRing) return;
+        if (this.restOverlayReady || this.restTimeLeft <= 0) {
+            progressRing.style.strokeDashoffset = 0;
+            return;
+        }
+        if (!Number.isFinite(this.restTimeTotal) || this.restTimeTotal <= 0) return;
         
         const circumference = 2 * Math.PI * 90; // r=90
         const progress = this.restTimeLeft / this.restTimeTotal;
@@ -6548,65 +7619,149 @@ class App {
     }
     
     onTimerComplete() {
-        this.stopRestTimer();
+        if (this.overlayTimerMode === 'work') {
+            this.finishCardioSetTimer({ useElapsed: false });
+            return;
+        }
+
+        this.finishRestTimer({ showReadyState: true });
         
         // Vibrate pattern on complete
         if (navigator.vibrate) {
             navigator.vibrate([100, 50, 100, 50, 100]);
         }
-        
-        // Visual feedback
-        const countdown = document.getElementById('timer-countdown');
-        countdown.textContent = '0';
-        countdown.classList.add('timer-done');
-        
-        setTimeout(() => {
-            countdown.classList.remove('timer-done');
-        }, 500);
     }
 
     stopRestTimer() {
+        this.finishRestTimer({ showReadyState: false });
+    }
+
+    getCardioTimerTargetMinutes(setIndex) {
+        const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
+        if (!repsInput) return 0;
+
+        const draftValue = this.parseSetInputValue(repsInput.value, this.currentSlot);
+        if (draftValue > 0) return draftValue;
+
+        const placeholderValue = this.parseSetInputValue(repsInput.placeholder, this.currentSlot);
+        if (placeholderValue > 0) return placeholderValue;
+
+        return Number(this.currentSlot?.repsMax || 0);
+    }
+
+    async prefillCardioTimerResult(setIndex, durationMinutes) {
+        const roundedMinutes = Math.max(0.1, Math.round(Number(durationMinutes || 0) * 10) / 10);
+        const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
+        if (!repsInput || !this.currentWorkout?.slots?.[this.currentSlot?.id]) return;
+
+        repsInput.value = this.formatSetInputValue(roundedMinutes, this.currentSlot);
+
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        if (!slotData.sets[setIndex]) {
+            slotData.sets[setIndex] = {};
+        }
+        slotData.sets[setIndex].reps = roundedMinutes;
+        await db.saveCurrentWorkout(this.currentWorkout);
+    }
+
+    startCardioSetTimer(setIndex) {
+        if (!this.currentSlot || !this.isCardioSlot(this.currentSlot)) return;
+
+        const targetMinutes = this.getCardioTimerTargetMinutes(setIndex);
+        if (!Number.isFinite(targetMinutes) || targetMinutes <= 0) return;
+
         if (this.restTimer) {
             clearInterval(this.restTimer);
             this.restTimer = null;
         }
-        
-        // Capture RPE from slider and save to last completed set
-        this.saveRpeToLastSet();
-        
-        this.restTimerEndTime = null;
+
+        this.overlayTimerMode = 'work';
+        this.cardioTimerState = {
+            setIndex,
+            targetMinutes,
+            startedAt: Date.now()
+        };
+        this.restOverlayReady = false;
+        this.restFeedbackCaptured = false;
+        this.restTimeTotal = Math.round(targetMinutes * 60);
+        this.restTimeLeft = this.restTimeTotal;
+        this.restTimerEndTime = Date.now() + (this.restTimeTotal * 1000);
         this.lastVibrateAt = null;
         localStorage.removeItem('restTimerEndTime');
-        document.getElementById('timer-overlay').classList.remove('active');
-        document.getElementById('timer-countdown').classList.remove('ending');
-        
-        // Reset RPE slider for next set
-        this.resetRpeSlider();
+        localStorage.removeItem('restTimerTotalTime');
+
+        const overlay = document.getElementById('timer-overlay');
+        const countdown = document.getElementById('timer-countdown');
+        const timerRing = document.querySelector('.timer-ring');
+
+        this.applyRestTimerVariation(this.pickRestTimerVariation(true));
+        this.clearRestTimerAnimationState();
+        overlay?.classList.add('active');
+        overlay?.classList.remove('ready');
+        this.setRestOverlayReadyState(false);
+        this.updateRestOverlayContext();
+        if (countdown) countdown.classList.remove('timer-done', 'go-ready');
+        timerRing?.classList.remove('go-ready');
+
+        this.updateRestTimer();
+        this.restTimer = setInterval(() => this.updateRestTimer(), 100);
+    }
+
+    async finishCardioSetTimer({ useElapsed = false } = {}) {
+        if (!this.cardioTimerState || !this.currentSlot) {
+            this.dismissRestOverlay();
+            return;
+        }
+
+        if (this.restTimer) {
+            clearInterval(this.restTimer);
+            this.restTimer = null;
+        }
+
+        const elapsedSeconds = Math.max(0, (Date.now() - this.cardioTimerState.startedAt) / 1000);
+        const targetSeconds = this.restTimeTotal || Math.round(this.cardioTimerState.targetMinutes * 60);
+        const appliedSeconds = useElapsed
+            ? Math.min(elapsedSeconds, targetSeconds)
+            : targetSeconds;
+        const appliedMinutes = appliedSeconds / 60;
+        const targetSetIndex = this.cardioTimerState.setIndex;
+
+        await this.prefillCardioTimerResult(targetSetIndex, appliedMinutes);
+
+        this.dismissRestOverlay();
+        this.renderSeries();
+
+        const repsInput = document.querySelector(`.input-reps[data-set-index="${targetSetIndex}"]`);
+        repsInput?.focus();
+        this.showCoachToast(
+            `${this.formatRepTargetValue(appliedMinutes, this.currentSlot)} pré-remplies. Valide maintenant le bloc.`,
+            'hot',
+            '⏱️'
+        );
     }
     
     // ===== RPE Management =====
     updateRpeDisplay(rpe) {
         const rpeDescriptions = {
-            6: { text: 'Facile • ~4 reps en réserve', emoji: '😎' },
-            7: { text: 'Modéré • ~3 reps en réserve', emoji: '🙂' },
-            8: { text: 'Série normale • tu es allé au bout proprement', emoji: '😤' },
-            9: { text: 'Très dur • ~1 rep en réserve', emoji: '🥵' },
-            10: { text: 'Échec musculaire • 0 rep en réserve', emoji: '💀' }
+            6: { text: 'Facile' },
+            7: { text: 'OK' },
+            8: { text: 'Propre' },
+            9: { text: 'Dur' },
+            10: { text: 'Échec' }
         };
         
         const desc = rpeDescriptions[rpe] || rpeDescriptions[8];
         document.getElementById('rpe-feedback').innerHTML = `
-            <span class="rpe-value">RPE ${rpe} ${desc.emoji}</span>
-            <span class="rpe-description">${desc.text}</span>
+            <span class="rpe-description">RPE ${rpe} · ${desc.text}</span>
         `;
         
-        // Update active emoji
-        document.querySelectorAll('.rpe-labels span').forEach(span => {
-            span.classList.toggle('active', parseInt(span.dataset.rpe) === rpe);
+        // Update active quick choice
+        document.querySelectorAll('.rpe-chip').forEach(chip => {
+            const isActive = parseInt(chip.dataset.rpe) === rpe;
+            chip.classList.toggle('active', isActive);
+            chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         });
         
-        // Update section border color
-        document.getElementById('rpe-section').dataset.rpe = rpe;
     }
     
     resetRpeSlider() {
@@ -6617,16 +7772,22 @@ class App {
         if (rpeSection) {
             rpeSection.dataset.touched = 'false';
         }
-        this.updateRpeDisplay(8);
+        document.querySelectorAll('.rpe-chip').forEach(chip => {
+            chip.classList.remove('active');
+            chip.setAttribute('aria-pressed', 'false');
+        });
+        document.getElementById('rpe-feedback').innerHTML = `
+            <span class="rpe-description">Optionnel</span>
+        `;
     }
     
     async saveRpeToLastSet() {
         if (this.lastCompletedSetIndex === undefined || !this.currentSlot) return;
         
         const slider = document.getElementById('rpe-slider');
-        const rpe = parseInt(slider.value);
         const rpeTouched = slider.dataset.touched === 'true';
-        const rpeSource = rpeTouched ? 'user' : 'default';
+        const rpe = rpeTouched ? parseInt(slider.value) : null;
+        const rpeSource = rpeTouched ? 'user' : null;
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const reps = this.lastCompletedSetReps;
         const weight = this.lastCompletedSetWeight;
@@ -6917,10 +8078,37 @@ class App {
     }
 
     adjustRestTimer(seconds) {
+        if (this.restOverlayReady && seconds > 0) {
+            const countdown = document.getElementById('timer-countdown');
+            this.restTimeTotal = seconds;
+            this.restTimeLeft = seconds;
+            this.restTimerEndTime = Date.now() + (seconds * 1000);
+            if (this.overlayTimerMode === 'rest') {
+                localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+                localStorage.setItem('restTimerTotalTime', String(this.restTimeTotal));
+            }
+            this.setRestOverlayReadyState(false);
+            this.updateRestOverlayContext();
+            countdown?.classList.remove('timer-done');
+            this.updateRestTimer();
+            this.restTimer = setInterval(() => this.updateRestTimer(), 100);
+            return;
+        }
+        if (!this.restTimerEndTime) return;
+
         this.restTimerEndTime = this.restTimerEndTime + (seconds * 1000);
-        localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+        if (this.overlayTimerMode === 'rest') {
+            localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+        }
         this.restTimeLeft = Math.max(0, this.restTimeLeft + seconds);
         this.restTimeTotal = Math.max(this.restTimeTotal, this.restTimeLeft);
+        if (this.overlayTimerMode === 'work' && this.cardioTimerState) {
+            this.cardioTimerState.targetMinutes = Math.max(0.1, Math.round((this.restTimeTotal / 60) * 10) / 10);
+            this.updateRestOverlayContext();
+        }
+        if (this.overlayTimerMode === 'rest') {
+            localStorage.setItem('restTimerTotalTime', String(this.restTimeTotal));
+        }
         this.updateRestTimer();
     }
 
@@ -6929,6 +8117,7 @@ class App {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const totalReps = slotData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
         const maxWeight = Math.max(...slotData.sets.map(s => s.weight || 0));
+        const isCardioExercise = this.isCardioSlot(this.currentSlot);
         const currentBestSet = slotData.sets.reduce((best, set) => {
             if (!set?.completed) return best;
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
@@ -6937,17 +8126,30 @@ class App {
         }, null);
         this.editingSetIndex = null;
 
-        document.getElementById('summary-total-reps').textContent = totalReps;
-        document.getElementById('summary-max-weight').textContent = this.isPureBodyweightSlot(this.currentSlot)
+        const summaryTotalLabel = document.querySelector('.summary-stats .stat:first-child .stat-label');
+        const summaryLoadLabel = document.querySelector('.summary-stats .stat:last-child .stat-label');
+        if (summaryTotalLabel) {
+            summaryTotalLabel.textContent = isCardioExercise ? 'Temps total' : 'Reps totales';
+        }
+        if (summaryLoadLabel) {
+            summaryLoadLabel.textContent = isCardioExercise ? 'Niveau max' : 'Charge max';
+        }
+
+        document.getElementById('summary-total-reps').textContent = isCardioExercise
+            ? `${this.formatSetInputValue(totalReps, this.currentSlot)} min`
+            : totalReps;
+        document.getElementById('summary-max-weight').textContent = isCardioExercise
+            ? this.formatSetWeight(maxWeight, this.currentSlot)
+            : (this.isPureBodyweightSlot(this.currentSlot)
             ? 'PDC'
-            : `${maxWeight} kg`;
+            : `${maxWeight} kg`);
         
         // Get comparison with last session
         const comparison = document.getElementById('summary-comparison');
         const summaryIcon = document.getElementById('summary-icon');
         const summaryTitle = document.getElementById('summary-title');
         
-        if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0) {
+        if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isCardioExercise) {
             const lastTotalReps = this.lastExerciseHistory.totalReps;
             const lastMaxWeight = this.lastExerciseHistory.maxWeight;
             const repsDiff = totalReps - lastTotalReps;
@@ -7001,6 +8203,15 @@ class App {
                 <div class="comparison-card ${comparisonClass}">
                     <span class="comparison-icon">${icon}</span>
                     <span class="comparison-text">${text}</span>
+                </div>
+            `;
+        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && isCardioExercise) {
+            summaryIcon.textContent = '✅';
+            summaryTitle.textContent = 'Bloc cardio terminé';
+            comparison.innerHTML = `
+                <div class="comparison-card neutral">
+                    <span class="comparison-icon">⏱️</span>
+                    <span class="comparison-text">Durée et niveau enregistrés. Tu peux comparer ton ressenti et ton allure sur les prochaines séances.</span>
                 </div>
             `;
         } else {
@@ -7471,6 +8682,23 @@ class App {
     // ===== Edit Sessions Sheet =====
     async showEditSessionsSheet() {
         const sessions = await db.getSessions();
+        const sessionsWithStats = await Promise.all(
+            sessions.map(async (session) => {
+                const slots = await db.getSlotsBySession(session.id);
+                const linkedTargets = new Set(
+                    slots
+                        .map((slot) => slot.supersetWith)
+                        .filter(Boolean)
+                );
+                const supersetCount = slots.filter((slot) => slot.supersetWith && !linkedTargets.has(slot.id)).length;
+
+                return {
+                    ...session,
+                    slotCount: slots.length,
+                    supersetCount
+                };
+            })
+        );
         const container = document.getElementById('edit-session-list');
         
         container.innerHTML = `
@@ -7481,17 +8709,25 @@ class App {
                     </svg>
                     Créer une séance
                 </button>
+                <p class="edit-sessions-subtitle">
+                    Appuie sur une séance pour modifier ses exercices. Glisse pour réorganiser le cycle.
+                </p>
             </div>
             <div class="sessions-reorder-list" id="sessions-reorder-list">
-                ${sessions.map((session, index) => `
+                ${sessionsWithStats.map((session, index) => `
                     <div class="session-reorder-item" data-session-id="${session.id}" data-order="${session.order}" draggable="true">
                         <div class="drag-handle">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2"/>
                             </svg>
                         </div>
-                        <div class="session-reorder-content" data-session-id="${session.id}">
+                        <div class="session-reorder-content" data-session-id="${session.id}" data-action="open-session-detail">
                             <div class="session-reorder-name">${session.name}</div>
+                            <div class="session-reorder-meta-row">
+                                <span class="session-meta-chip">${session.slotCount} exo${session.slotCount > 1 ? 's' : ''}</span>
+                                <span class="session-meta-chip">~${session.estimatedDuration || 45} min</span>
+                                ${session.supersetCount > 0 ? `<span class="session-meta-chip">${session.supersetCount} superset${session.supersetCount > 1 ? 's' : ''}</span>` : ''}
+                            </div>
                             <div class="session-reorder-meta">${index + 1}/${sessions.length} dans le cycle</div>
                         </div>
                         <button class="btn-icon-small btn-delete-session" data-session-id="${session.id}">
@@ -7512,9 +8748,8 @@ class App {
         document.getElementById('sheet-edit-sessions').classList.remove('active');
     }
 
-    // ===== Drag & Drop Sessions =====
-    initDragAndDrop() {
-        const list = document.getElementById('sessions-reorder-list');
+    // ===== Generic Drag & Drop =====
+    initSortableList({ list, itemSelector, onSave }) {
         if (!list) return;
 
         let draggedElement = null;
@@ -7522,92 +8757,116 @@ class App {
         let touchCurrentY = 0;
         let isDragging = false;
 
-        // Mouse/Drag events
+        const resolveItem = (target) => target?.closest(itemSelector);
+        const resetDraggedStyles = () => {
+            if (!draggedElement) return;
+            draggedElement.style.opacity = '1';
+            draggedElement.style.transform = '';
+            draggedElement.classList.remove('is-dragging');
+        };
+
         list.addEventListener('dragstart', (e) => {
-            if (e.target.classList.contains('session-reorder-item')) {
-                draggedElement = e.target;
-                e.target.style.opacity = '0.5';
-            }
+            const item = resolveItem(e.target);
+            if (!item) return;
+
+            draggedElement = item;
+            draggedElement.style.opacity = '0.5';
+            draggedElement.classList.add('is-dragging');
         });
 
-        list.addEventListener('dragend', (e) => {
-            if (e.target.classList.contains('session-reorder-item')) {
-                e.target.style.opacity = '1';
-            }
+        list.addEventListener('dragend', () => {
+            resetDraggedStyles();
+            draggedElement = null;
         });
 
         list.addEventListener('dragover', (e) => {
+            if (!draggedElement) return;
             e.preventDefault();
-            const afterElement = this.getDragAfterElement(list, e.clientY);
+
+            const afterElement = this.getSortableAfterElement(list, itemSelector, e.clientY);
             if (afterElement == null) {
                 list.appendChild(draggedElement);
-            } else {
+            } else if (afterElement !== draggedElement) {
                 list.insertBefore(draggedElement, afterElement);
             }
         });
 
         list.addEventListener('drop', async (e) => {
+            if (!draggedElement) return;
             e.preventDefault();
-            await this.saveSessionsOrder();
+            resetDraggedStyles();
+            draggedElement = null;
+            await onSave();
         });
 
-        // Touch events for iOS
         list.addEventListener('touchstart', (e) => {
-            const item = e.target.closest('.session-reorder-item');
-            if (item) {
-                draggedElement = item;
-                touchStartY = e.touches[0].clientY;
-                isDragging = false;
-            }
+            const item = resolveItem(e.target);
+            if (!item) return;
+
+            draggedElement = item;
+            touchStartY = e.touches[0].clientY;
+            isDragging = false;
         }, { passive: true });
 
         list.addEventListener('touchmove', (e) => {
             if (!draggedElement) return;
-            
+
             touchCurrentY = e.touches[0].clientY;
             const moveDistance = Math.abs(touchCurrentY - touchStartY);
-            
+
             if (moveDistance > 10 && !isDragging) {
                 isDragging = true;
                 draggedElement.style.opacity = '0.5';
                 draggedElement.style.transform = 'scale(1.02)';
+                draggedElement.classList.add('is-dragging');
             }
-            
-            if (isDragging) {
-                e.preventDefault();
-                const afterElement = this.getDragAfterElement(list, touchCurrentY);
-                if (afterElement == null) {
-                    list.appendChild(draggedElement);
-                } else {
-                    list.insertBefore(draggedElement, afterElement);
-                }
+
+            if (!isDragging) return;
+
+            e.preventDefault();
+            const afterElement = this.getSortableAfterElement(list, itemSelector, touchCurrentY);
+            if (afterElement == null) {
+                list.appendChild(draggedElement);
+            } else if (afterElement !== draggedElement) {
+                list.insertBefore(draggedElement, afterElement);
             }
         });
 
-        list.addEventListener('touchend', async (e) => {
+        list.addEventListener('touchend', async () => {
             if (draggedElement && isDragging) {
-                draggedElement.style.opacity = '1';
-                draggedElement.style.transform = '';
-                await this.saveSessionsOrder();
+                resetDraggedStyles();
+                draggedElement = null;
+                await onSave();
+            } else {
+                resetDraggedStyles();
+                draggedElement = null;
             }
-            draggedElement = null;
             isDragging = false;
         });
     }
 
-    getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.session-reorder-item:not(.dragging)')];
+    getSortableAfterElement(container, itemSelector, y) {
+        const draggableElements = [...container.querySelectorAll(`${itemSelector}:not(.is-dragging)`)];
 
         return draggableElements.reduce((closest, child) => {
             const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
+            const offset = y - box.top - (box.height / 2);
 
             if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
+                return { offset, element: child };
             }
+            return closest;
         }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // ===== Drag & Drop Sessions =====
+    initDragAndDrop() {
+        const list = document.getElementById('sessions-reorder-list');
+        this.initSortableList({
+            list,
+            itemSelector: '.session-reorder-item',
+            onSave: () => this.saveSessionsOrder()
+        });
     }
 
     async saveSessionsOrder() {
@@ -7628,6 +8887,143 @@ class App {
         }
 
         await this.showEditSessionsSheet();
+    }
+
+    // ===== Exercise Library =====
+    showExerciseLibrarySheet(sessionId) {
+        this.exerciseLibraryState = {
+            sessionId,
+            category: 'all',
+            query: ''
+        };
+
+        const searchInput = document.getElementById('exercise-library-search');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
+        this.renderExerciseLibraryFilters();
+        this.renderExerciseLibraryList();
+        document.getElementById('sheet-exercise-library').classList.add('active');
+
+        if (searchInput) {
+            setTimeout(() => searchInput.focus(), 50);
+        }
+    }
+
+    hideExerciseLibrarySheet() {
+        document.getElementById('sheet-exercise-library').classList.remove('active');
+        this.exerciseLibraryState = {
+            sessionId: null,
+            category: 'all',
+            query: ''
+        };
+    }
+
+    renderExerciseLibraryFilters() {
+        const container = document.getElementById('exercise-library-filters');
+        if (!container) return;
+
+        const categories = ['all', ...new Set(this.getExerciseLibrary().map(exercise => exercise.category).filter(Boolean))];
+        container.innerHTML = categories.map(category => `
+            <button
+                type="button"
+                class="exercise-library-filter ${this.exerciseLibraryState.category === category ? 'active' : ''}"
+                data-category="${category}"
+            >
+                ${this.getExerciseCategoryLabel(category)}
+            </button>
+        `).join('');
+    }
+
+    renderExerciseLibraryList() {
+        const list = document.getElementById('exercise-library-list');
+        const customBtn = document.getElementById('btn-create-custom-exercise');
+        if (!list || !customBtn) return;
+
+        const query = this.normalizeExerciseText(this.exerciseLibraryState.query || '');
+        const category = this.exerciseLibraryState.category || 'all';
+        const filtered = this.getExerciseLibrary().filter(exercise => {
+            if (category !== 'all' && exercise.category !== category) return false;
+            if (!query) return true;
+            return this.getExerciseSearchBlob(exercise).includes(query);
+        });
+
+        customBtn.disabled = !(this.exerciseLibraryState.query || '').trim();
+        customBtn.textContent = (this.exerciseLibraryState.query || '').trim()
+            ? `Créer "${(this.exerciseLibraryState.query || '').trim()}" en custom`
+            : 'Créer cet exercice en custom';
+
+        if (!filtered.length) {
+            list.innerHTML = `
+                <div class="exercise-library-empty">
+                    Aucun exercice trouvé dans la base.<br>
+                    Tape un nom libre puis crée-le en custom.
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = filtered.map(exercise => {
+            const meta = [
+                exercise.isCustom ? 'Custom' : '',
+                this.getExerciseCategoryLabel(exercise.category),
+                exercise.muscleGroup ? this.getMuscleGroupLabel(exercise.muscleGroup) : '',
+                exercise.trackingMode === 'cardio'
+                    ? this.formatSlotRepRange(exercise)
+                    : `${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}`,
+                exercise.equipment || ''
+            ].filter(Boolean);
+
+            return `
+                <button type="button" class="exercise-library-item" data-exercise-name="${exercise.name}">
+                    <div class="exercise-library-item-main">
+                        <div class="exercise-library-item-name">${exercise.name}</div>
+                        <div class="exercise-library-item-meta">
+                            ${meta.map(item => `<span class="exercise-library-item-chip">${item}</span>`).join('')}
+                        </div>
+                    </div>
+                    <span class="exercise-library-item-action">Ajouter</span>
+                </button>
+            `;
+        }).join('');
+    }
+
+    async createExerciseFromLibrary(exerciseName, { custom = false } = {}) {
+        const sessionId = this.exerciseLibraryState.sessionId;
+        if (!sessionId) return;
+
+        const trimmedName = (exerciseName || '').trim();
+        if (!trimmedName) return;
+
+        const slots = await db.getSlotsBySession(sessionId);
+        const order = slots.length;
+        const definition = custom
+            ? this.inferCustomExerciseTemplate(trimmedName, {
+                preferLibraryMatch: false,
+                allowCardioInference: false
+            })
+            : (this.findExerciseLibraryEntry(trimmedName) || this.inferCustomExerciseTemplate(trimmedName));
+        const newSlot = this.buildSlotFromExerciseDefinition(definition, sessionId, order);
+
+        if (custom) {
+            await this.persistCustomExerciseDefinition(definition);
+        }
+
+        await db.put('slots', newSlot);
+        this.hideExerciseLibrarySheet();
+
+        if (custom) {
+            const detailSheet = document.getElementById('sheet-edit-session-detail');
+            if (detailSheet?.classList.contains('active')) {
+                this.hideEditSessionDetailSheet({ preserveContext: true });
+            }
+            await this.showEditSlotSheet(newSlot.id);
+            return;
+        }
+
+        await this.showEditSessionDetailSheet(sessionId);
+        this.showCoachToast(`${newSlot.name} ajouté à la séance.`, 'hot', '➕');
     }
 
     // ===== Create Session =====
@@ -7691,202 +9087,235 @@ class App {
         const progressionMode = slot.progressionMode || (slot.bodyweightMode ? 'bodyweight' : 'load');
         const loadingProfile = slot.loadingProfile || (progressionMode === 'bodyweight' ? 'bodyweight' : 'free_weight');
         const bodyweightProfile = slot.bodyweightProfile || {};
+        const trackingMode = slot.trackingMode || this.getTrackingMode(slot);
+        const trackingConfig = this.getTrackingModeFieldConfig(trackingMode);
         
+        const openAdvanced = progressionMode !== 'load' || loadingProfile !== 'free_weight';
         form.innerHTML = `
-            <div class="form-group">
-                <label>Nom du slot</label>
-                <input type="text" id="edit-slot-name" value="${slot.name}" class="form-input">
+            <div class="edit-slot-helper">
+                Modifie rapidement l'exercice ci-dessous. Les réglages coach avancés restent disponibles si besoin.
             </div>
-            <div class="form-group">
-                <label>Exercice actif</label>
-                <input type="text" id="edit-slot-active" value="${slot.activeExercise}" class="form-input">
-            </div>
-            <div class="form-row">
+            <div class="edit-slot-block">
                 <div class="form-group">
-                    <label>Séries</label>
-                    <input type="number" id="edit-slot-sets" value="${slot.sets}" class="form-input" min="1" max="10">
+                    <label>Nom du slot</label>
+                    <input type="text" id="edit-slot-name" value="${slot.name}" class="form-input">
                 </div>
                 <div class="form-group">
-                    <label>Reps min</label>
-                    <input type="number" id="edit-slot-reps-min" value="${slot.repsMin}" class="form-input" min="1" max="50">
+                    <label>Exercice actif</label>
+                    <input type="text" id="edit-slot-active" value="${slot.activeExercise}" class="form-input" list="exercise-library-options">
+                    <small class="edit-slot-caption">Tu peux choisir un nom existant de la base ou taper un exercice custom.</small>
                 </div>
                 <div class="form-group">
-                    <label>Reps max</label>
-                    <input type="number" id="edit-slot-reps-max" value="${slot.repsMax}" class="form-input" min="1" max="50">
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Repos (secondes)</label>
-                    <input type="number" id="edit-slot-rest" value="${slot.rest}" class="form-input" min="30" max="300" step="15">
-                </div>
-                <div class="form-group">
-                    <label>RIR</label>
-                    <input type="number" id="edit-slot-rir" value="${slot.rir}" class="form-input" min="0" max="5">
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Type d'exercice</label>
-                <div class="type-selector">
-                    <button type="button" class="type-btn ${slot.type === 'compound' ? 'active' : ''}" data-type="compound">
-                        <span class="type-icon">🏋️</span>
-                        <span class="type-label">Composé</span>
-                    </button>
-                    <button type="button" class="type-btn ${slot.type === 'isolation' ? 'active' : ''}" data-type="isolation">
-                        <span class="type-icon">💪</span>
-                        <span class="type-label">Isolation</span>
-                    </button>
-                </div>
-                <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
-            </div>
-            <div class="form-group">
-                <label>Groupe musculaire principal</label>
-                <select id="edit-slot-muscle-group" class="form-input form-select">
-                    <option value="">-- Sélectionner --</option>
-                    ${MUSCLE_GROUPS.map(mg => `
-                        <option value="${mg.id}" ${slot.muscleGroup === mg.id ? 'selected' : ''}>
-                            ${mg.icon} ${mg.name}
-                        </option>
-                    `).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Mode de progression</label>
-                <select id="edit-slot-progression-mode" class="form-input form-select">
-                    <option value="load" ${progressionMode === 'load' ? 'selected' : ''}>Charge</option>
-                    <option value="capped_load" ${progressionMode === 'capped_load' ? 'selected' : ''}>Charge plafonnée</option>
-                    <option value="bodyweight" ${progressionMode === 'bodyweight' ? 'selected' : ''}>Poids du corps</option>
-                </select>
-                <small style="opacity:0.7">Force le mode "charge plafonnée" quand tu es au max de la machine. Le poids du corps est détecté automatiquement mais reste éditable.</small>
-            </div>
-            <div class="form-group">
-                <label>Profil de charge</label>
-                <select id="edit-slot-loading-profile" class="form-input form-select">
-                    <option value="free_weight" ${loadingProfile === 'free_weight' ? 'selected' : ''}>Charge libre</option>
-                    <option value="machine_stack" ${loadingProfile === 'machine_stack' ? 'selected' : ''}>Machine à stack</option>
-                    <option value="plate_stack" ${loadingProfile === 'plate_stack' ? 'selected' : ''}>Machine à plaques</option>
-                    <option value="bodyweight" ${loadingProfile === 'bodyweight' ? 'selected' : ''}>Poids du corps</option>
-                </select>
-            </div>
-            <div data-progress-section="machine">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Incrément local (kg)</label>
-                        <input type="number" id="edit-slot-increment-kg" value="${slot.incrementKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Auto">
-                    </div>
-                    <div class="form-group">
-                        <label>Incrément minimal (kg)</label>
-                        <input type="number" id="edit-slot-min-increment-kg" value="${slot.minIncrementKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="0.5 ou 1">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Charge max machine (kg)</label>
-                        <input type="number" id="edit-slot-max-load-kg" value="${slot.maxSelectableLoadKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 80">
-                    </div>
-                    <div class="form-group">
-                        <label>Pas machine (kg)</label>
-                        <input type="number" id="edit-slot-machine-step-kg" value="${slot.machineStepKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 5">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="settings-toggle-container">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-slot-cap-user-flag" ${slot.capDetection?.userFlag ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="toggle-label">Machine au max / charge plafonnée</span>
-                    </div>
-                </div>
-            </div>
-            <div data-progress-section="bodyweight">
-                <div class="form-group">
-                    <label>Famille poids du corps</label>
-                    <select id="edit-slot-bodyweight-family" class="form-input form-select">
-                        <option value="pullup" ${bodyweightProfile.family === 'pullup' ? 'selected' : ''}>Pull-up / Chin-up</option>
-                        <option value="dip" ${bodyweightProfile.family === 'dip' ? 'selected' : ''}>Dip</option>
-                        <option value="pushup" ${bodyweightProfile.family === 'pushup' ? 'selected' : ''}>Push-up</option>
-                        <option value="abs" ${bodyweightProfile.family === 'abs' ? 'selected' : ''}>Abdos</option>
-                        <option value="generic" ${!bodyweightProfile.family || bodyweightProfile.family === 'generic' ? 'selected' : ''}>Générique</option>
+                    <label>Format de suivi</label>
+                    <select id="edit-slot-tracking-mode" class="form-input form-select">
+                        <option value="strength" ${trackingMode === 'strength' ? 'selected' : ''}>Charge + reps</option>
+                        <option value="cardio" ${trackingMode === 'cardio' ? 'selected' : ''}>Durée + niveau / vitesse</option>
                     </select>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Assistance par palier (kg)</label>
-                        <input type="number" id="edit-slot-assistance-step-kg" value="${bodyweightProfile.assistanceStepKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 5">
+                        <label>Séries</label>
+                        <input type="number" id="edit-slot-sets" value="${slot.sets}" class="form-input" min="1" max="10">
                     </div>
                     <div class="form-group">
-                        <label>Variante actuelle</label>
-                        <input type="number" id="edit-slot-variant-index" value="${bodyweightProfile.currentVariantIndex ?? 0}" class="form-input" min="0" step="1">
+                        <label id="edit-slot-reps-min-label">${trackingConfig.repMinLabel}</label>
+                        <input type="number" id="edit-slot-reps-min" value="${slot.repsMin}" class="form-input" min="1" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
+                    </div>
+                    <div class="form-group">
+                        <label id="edit-slot-reps-max-label">${trackingConfig.repMaxLabel}</label>
+                        <input type="number" id="edit-slot-reps-max" value="${slot.repsMax}" class="form-input" min="1" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Tempo actuel</label>
-                        <input type="number" id="edit-slot-tempo-level" value="${bodyweightProfile.currentTempoLevel ?? 0}" class="form-input" min="0" step="1">
+                        <label id="edit-slot-rest-label">${trackingConfig.restLabel}</label>
+                        <input type="number" id="edit-slot-rest" value="${slot.rest}" class="form-input" min="0" max="300" step="15">
                     </div>
                     <div class="form-group">
-                        <label>Pause actuelle</label>
-                        <input type="number" id="edit-slot-pause-level" value="${bodyweightProfile.currentPauseLevel ?? 0}" class="form-input" min="0" step="1">
+                        <label id="edit-slot-rir-label">${trackingConfig.rirLabel}</label>
+                        <input type="number" id="edit-slot-rir" value="${slot.rir}" class="form-input" min="0" max="5">
+                    </div>
+                </div>
+                <div class="edit-slot-caption" id="edit-slot-tracking-helper" ${trackingConfig.helperText ? '' : 'hidden'}>
+                    ${trackingConfig.helperText}
+                </div>
+                <div class="form-group">
+                    <label>Type d'exercice</label>
+                    <div class="type-selector">
+                        <button type="button" class="type-btn ${slot.type === 'compound' ? 'active' : ''}" data-type="compound">
+                            <span class="type-icon">🏋️</span>
+                            <span class="type-label">Composé</span>
+                        </button>
+                        <button type="button" class="type-btn ${slot.type === 'isolation' ? 'active' : ''}" data-type="isolation">
+                            <span class="type-icon">💪</span>
+                            <span class="type-label">Isolation</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
+                </div>
+                <div class="form-group">
+                    <label>Groupe musculaire principal</label>
+                    <select id="edit-slot-muscle-group" class="form-input form-select">
+                        <option value="">-- Sélectionner --</option>
+                        ${MUSCLE_GROUPS.map(mg => `
+                            <option value="${mg.id}" ${slot.muscleGroup === mg.id ? 'selected' : ''}>
+                                ${mg.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <details class="edit-slot-advanced" ${openAdvanced ? 'open' : ''}>
+                <summary>
+                    Personnalisation avancée
+                    <span>Progression, machine, poids du corps</span>
+                </summary>
+                <div class="edit-slot-advanced-content">
+                    <div class="form-group">
+                        <label>Mode de progression</label>
+                        <select id="edit-slot-progression-mode" class="form-input form-select">
+                            <option value="load" ${progressionMode === 'load' ? 'selected' : ''}>Charge</option>
+                            <option value="capped_load" ${progressionMode === 'capped_load' ? 'selected' : ''}>Charge plafonnée</option>
+                            <option value="bodyweight" ${progressionMode === 'bodyweight' ? 'selected' : ''}>Poids du corps</option>
+                        </select>
+                        <small class="edit-slot-caption">Active "charge plafonnée" si ta machine est au max.</small>
                     </div>
                     <div class="form-group">
-                        <label>ROM actuel</label>
-                        <input type="number" id="edit-slot-rom-level" value="${bodyweightProfile.currentROMLevel ?? 0}" class="form-input" min="0" step="1">
+                        <label>Profil de charge</label>
+                        <select id="edit-slot-loading-profile" class="form-input form-select">
+                            <option value="free_weight" ${loadingProfile === 'free_weight' ? 'selected' : ''}>Charge libre</option>
+                            <option value="machine_stack" ${loadingProfile === 'machine_stack' ? 'selected' : ''}>Machine à stack</option>
+                            <option value="plate_stack" ${loadingProfile === 'plate_stack' ? 'selected' : ''}>Machine à plaques</option>
+                            <option value="bodyweight" ${loadingProfile === 'bodyweight' ? 'selected' : ''}>Poids du corps</option>
+                        </select>
                     </div>
-                </div>
-                <div class="form-group">
-                    <div class="settings-toggle-container">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-slot-allow-external-load" ${bodyweightProfile.allowExternalLoad ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="toggle-label">Autoriser le lest</span>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="settings-toggle-container">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-slot-allow-assistance" ${bodyweightProfile.allowAssistance ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="toggle-label">Autoriser l'assistance</span>
-                    </div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Consignes d'exécution</label>
-                <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${slot.instructions || ''}</textarea>
-            </div>
-            <div class="form-group">
-                <label>Pool d'exercices variantes</label>
-                <div class="pool-editor" id="pool-editor">
-                    ${slot.pool.map((ex, i) => `
-                        <div class="pool-item-edit" data-index="${i}">
-                            <input type="text" class="pool-input" value="${ex}" placeholder="Nom de l'exercice">
-                            <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${i}">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="18" y1="6" x2="6" y2="18"/>
-                                    <line x1="6" y1="6" x2="18" y2="18"/>
-                                </svg>
-                            </button>
+                    <div data-progress-section="machine">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Incrément local (kg)</label>
+                                <input type="number" id="edit-slot-increment-kg" value="${slot.incrementKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Auto">
+                            </div>
+                            <div class="form-group">
+                                <label>Incrément minimal (kg)</label>
+                                <input type="number" id="edit-slot-min-increment-kg" value="${slot.minIncrementKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="0.5 ou 1">
+                            </div>
                         </div>
-                    `).join('')}
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Charge max machine (kg)</label>
+                                <input type="number" id="edit-slot-max-load-kg" value="${slot.maxSelectableLoadKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 80">
+                            </div>
+                            <div class="form-group">
+                                <label>Pas machine (kg)</label>
+                                <input type="number" id="edit-slot-machine-step-kg" value="${slot.machineStepKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 5">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="settings-toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="edit-slot-cap-user-flag" ${slot.capDetection?.userFlag ? 'checked' : ''}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">Machine au max / charge plafonnée</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div data-progress-section="bodyweight">
+                        <div class="form-group">
+                            <label>Famille poids du corps</label>
+                            <select id="edit-slot-bodyweight-family" class="form-input form-select">
+                                <option value="pullup" ${bodyweightProfile.family === 'pullup' ? 'selected' : ''}>Pull-up / Chin-up</option>
+                                <option value="dip" ${bodyweightProfile.family === 'dip' ? 'selected' : ''}>Dip</option>
+                                <option value="pushup" ${bodyweightProfile.family === 'pushup' ? 'selected' : ''}>Push-up</option>
+                                <option value="abs" ${bodyweightProfile.family === 'abs' ? 'selected' : ''}>Abdos</option>
+                                <option value="generic" ${!bodyweightProfile.family || bodyweightProfile.family === 'generic' ? 'selected' : ''}>Générique</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Assistance par palier (kg)</label>
+                                <input type="number" id="edit-slot-assistance-step-kg" value="${bodyweightProfile.assistanceStepKg ?? ''}" class="form-input" min="0" step="0.5" placeholder="Ex: 5">
+                            </div>
+                            <div class="form-group">
+                                <label>Variante actuelle</label>
+                                <input type="number" id="edit-slot-variant-index" value="${bodyweightProfile.currentVariantIndex ?? 0}" class="form-input" min="0" step="1">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Tempo actuel</label>
+                                <input type="number" id="edit-slot-tempo-level" value="${bodyweightProfile.currentTempoLevel ?? 0}" class="form-input" min="0" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Pause actuelle</label>
+                                <input type="number" id="edit-slot-pause-level" value="${bodyweightProfile.currentPauseLevel ?? 0}" class="form-input" min="0" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label>ROM actuel</label>
+                                <input type="number" id="edit-slot-rom-level" value="${bodyweightProfile.currentROMLevel ?? 0}" class="form-input" min="0" step="1">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="settings-toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="edit-slot-allow-external-load" ${bodyweightProfile.allowExternalLoad ? 'checked' : ''}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">Autoriser le lest</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="settings-toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="edit-slot-allow-assistance" ${bodyweightProfile.allowAssistance ? 'checked' : ''}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">Autoriser l'assistance</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-ghost btn-add-pool-item" id="btn-add-pool-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    Ajouter une variante
-                </button>
+            </details>
+
+            <div class="edit-slot-block">
+                <div class="form-group">
+                    <label>Consignes d'exécution</label>
+                    <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${slot.instructions || ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Pool d'exercices variantes</label>
+                    <div class="pool-editor" id="pool-editor">
+                        ${slot.pool.map((ex, i) => `
+                            <div class="pool-item-edit" data-index="${i}">
+                                <input type="text" class="pool-input" value="${ex}" placeholder="Nom de l'exercice" list="exercise-library-options">
+                                <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${i}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"/>
+                                        <line x1="6" y1="6" x2="18" y2="18"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-add-pool-item" id="btn-add-pool-item">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Ajouter une variante
+                    </button>
+                </div>
             </div>
+
             <button class="btn btn-primary btn-large" id="btn-save-slot" data-slot-id="${slotId}">
-                Enregistrer
+                Enregistrer les changements
             </button>
         `;
 
         sheet.classList.add('active');
         this.bindPoolEditorEvents();
         this.bindTypeSelector();
+        this.bindTrackingModeEditor();
         this.bindProgressionModeEditor();
     }
     
@@ -7902,6 +9331,42 @@ class App {
             btn.classList.add('active');
             document.getElementById('edit-slot-type').value = btn.dataset.type;
         };
+    }
+
+    bindTrackingModeEditor() {
+        const trackingModeInput = document.getElementById('edit-slot-tracking-mode');
+        if (!trackingModeInput) return;
+
+        const syncTrackingUi = () => {
+            const config = this.getTrackingModeFieldConfig(trackingModeInput.value || 'strength');
+            const repsMinLabel = document.getElementById('edit-slot-reps-min-label');
+            const repsMaxLabel = document.getElementById('edit-slot-reps-max-label');
+            const restLabel = document.getElementById('edit-slot-rest-label');
+            const rirLabel = document.getElementById('edit-slot-rir-label');
+            const trackingHelper = document.getElementById('edit-slot-tracking-helper');
+            const repsMinInput = document.getElementById('edit-slot-reps-min');
+            const repsMaxInput = document.getElementById('edit-slot-reps-max');
+
+            if (repsMinLabel) repsMinLabel.textContent = config.repMinLabel;
+            if (repsMaxLabel) repsMaxLabel.textContent = config.repMaxLabel;
+            if (restLabel) restLabel.textContent = config.restLabel;
+            if (rirLabel) rirLabel.textContent = config.rirLabel;
+            if (trackingHelper) {
+                trackingHelper.hidden = !config.helperText;
+                trackingHelper.textContent = config.helperText || '';
+            }
+            if (repsMinInput) {
+                repsMinInput.step = config.repsStep;
+                repsMinInput.inputMode = config.repsInputMode;
+            }
+            if (repsMaxInput) {
+                repsMaxInput.step = config.repsStep;
+                repsMaxInput.inputMode = config.repsInputMode;
+            }
+        };
+
+        trackingModeInput.onchange = syncTrackingUi;
+        syncTrackingUi();
     }
 
     bindProgressionModeEditor() {
@@ -8060,10 +9525,12 @@ class App {
         const slot = await db.get('slots', slotId);
         if (!slot) return;
         this.normalizeSlotProgressionConfig(slot);
+        const previousTrackingMode = slot.trackingMode;
 
         // Validate inputs
         const name = document.getElementById('edit-slot-name').value.trim();
         const activeExercise = document.getElementById('edit-slot-active').value.trim();
+        const trackingMode = document.getElementById('edit-slot-tracking-mode')?.value || 'strength';
         
         if (!name || !activeExercise) {
             alert('Le nom du slot et l\'exercice actif sont obligatoires');
@@ -8072,11 +9539,17 @@ class App {
 
         slot.name = name;
         slot.activeExercise = activeExercise;
-        slot.sets = parseInt(document.getElementById('edit-slot-sets').value) || 3;
-        slot.repsMin = parseInt(document.getElementById('edit-slot-reps-min').value) || 8;
-        slot.repsMax = parseInt(document.getElementById('edit-slot-reps-max').value) || 12;
-        slot.rest = parseInt(document.getElementById('edit-slot-rest').value) || 90;
-        slot.rir = parseInt(document.getElementById('edit-slot-rir').value) || 2;
+        const parsedSets = parseInt(document.getElementById('edit-slot-sets').value, 10);
+        const parsedRepsMin = this.parseSetInputValue(document.getElementById('edit-slot-reps-min').value, { trackingMode });
+        const parsedRepsMax = this.parseSetInputValue(document.getElementById('edit-slot-reps-max').value, { trackingMode });
+        const parsedRest = parseInt(document.getElementById('edit-slot-rest').value, 10);
+        const parsedRir = parseInt(document.getElementById('edit-slot-rir').value, 10);
+
+        slot.sets = Number.isFinite(parsedSets) && parsedSets > 0 ? parsedSets : 3;
+        slot.repsMin = Number.isFinite(parsedRepsMin) && parsedRepsMin > 0 ? parsedRepsMin : 8;
+        slot.repsMax = Number.isFinite(parsedRepsMax) && parsedRepsMax > 0 ? parsedRepsMax : 12;
+        slot.rest = Number.isFinite(parsedRest) && parsedRest >= 0 ? parsedRest : 90;
+        slot.rir = Number.isFinite(parsedRir) && parsedRir >= 0 ? parsedRir : 2;
         slot.type = document.getElementById('edit-slot-type').value || 'compound';
         slot.muscleGroup = document.getElementById('edit-slot-muscle-group').value || '';
         slot.progressionMode = document.getElementById('edit-slot-progression-mode').value || 'load';
@@ -8108,6 +9581,11 @@ class App {
                 : (slot.progressionState?.primaryAxis || 'reps')
         };
         slot.instructions = document.getElementById('edit-slot-instructions').value.trim();
+        slot.trackingMode = trackingMode;
+
+        if (previousTrackingMode !== slot.trackingMode && slot.trackingMode === 'cardio' && slot.rest === 90) {
+            slot.rest = 0;
+        }
 
         slot.incrementKg = Number.isFinite(slot.incrementKg) ? slot.incrementKg : null;
         slot.minIncrementKg = Number.isFinite(slot.minIncrementKg) ? slot.minIncrementKg : null;
@@ -8135,6 +9613,8 @@ class App {
             slot.pool.unshift(slot.activeExercise);
         }
 
+        await this.persistCustomExerciseDefinition(this.buildExerciseDefinitionFromSlot(slot));
+
         await db.put('slots', slot);
         this.hideEditSlotSheet();
         
@@ -8147,9 +9627,9 @@ class App {
             this.isUnilateralMode = this.isUnilateralExercise(slot.activeExercise || slot.name);
             document.getElementById('current-exercise-name').textContent = slot.activeExercise || slot.name;
             document.getElementById('exercise-sets').textContent = slot.sets;
-            document.getElementById('exercise-reps').textContent = `${slot.repsMin}-${slot.repsMax}`;
-            document.getElementById('exercise-rest').textContent = `${slot.rest}s`;
-            document.getElementById('exercise-rir').textContent = slot.rir;
+            document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(slot);
+            document.getElementById('exercise-rest').textContent = slot.rest > 0 ? `${slot.rest}s` : '--';
+            document.getElementById('exercise-rir').textContent = this.isCardioSlot(slot) ? '--' : slot.rir;
             document.getElementById('exercise-instructions').textContent = slot.instructions || '--';
             await this.loadLogbook();
             this.renderSeries();
@@ -8171,16 +9651,23 @@ class App {
         const sheet = document.getElementById('sheet-edit-session-detail');
         const content = document.getElementById('edit-session-detail-content');
         
-        // Build superset map
-        const supersetMap = {};
-        for (const slot of slots) {
-            if (slot.supersetWith) {
-                supersetMap[slot.id] = slot.supersetWith;
-            }
-        }
+        const linkedTargets = new Set(
+            slots
+                .map((slot) => slot.supersetWith)
+                .filter(Boolean)
+        );
+        const supersetCount = slots.filter((slot) => slot.supersetWith && !linkedTargets.has(slot.id)).length;
         
         content.innerHTML = `
             <div class="edit-session-header">
+                <div class="edit-session-topbar">
+                    <button class="btn-icon-small btn-back-edit-sessions" id="btn-back-edit-sessions" aria-label="Retour aux séances">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 18l-6-6 6-6"/>
+                        </svg>
+                    </button>
+                    <span class="edit-session-topbar-title">Personnaliser la séance</span>
+                </div>
                 <div class="edit-session-title-group">
                     <input type="text" class="edit-session-name-input" id="edit-session-name" value="${session.name}" placeholder="Nom de la séance">
                     <button class="btn btn-ghost btn-save-session-name" id="btn-save-session-name" data-session-id="${sessionId}">
@@ -8189,176 +9676,112 @@ class App {
                         </svg>
                     </button>
                 </div>
-                <button class="btn btn-outline" id="btn-add-slot-to-session" data-session-id="${sessionId}">
+                <div class="edit-session-metrics">
+                    <span class="edit-session-metric-chip">${slots.length} exercice${slots.length > 1 ? 's' : ''}</span>
+                    <span class="edit-session-metric-chip">~${session.estimatedDuration || 45} min</span>
+                    ${supersetCount > 0 ? `<span class="edit-session-metric-chip">${supersetCount} superset${supersetCount > 1 ? 's' : ''}</span>` : ''}
+                </div>
+                <button class="btn btn-outline" data-action="add-slot" data-session-id="${sessionId}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
                     Ajouter un exercice
                 </button>
             </div>
-            <div class="edit-slots-detail-list" id="edit-slots-detail-list">
-                ${slots.map((slot, index) => {
-                    const isFirstInSuperset = slot.supersetWith && !Object.values(supersetMap).includes(slot.id);
-                    const isSecondInSuperset = Object.values(supersetMap).includes(slot.id);
-                    const supersetPartner = isFirstInSuperset ? slots.find(s => s.id === slot.supersetWith) : null;
-                    const supersetBadge = (isFirstInSuperset || isSecondInSuperset) 
-                        ? '<span class="superset-badge">⚡ SuperSet</span>' 
-                        : '';
-                    const cardClass = isFirstInSuperset ? 'superset-start' : (isSecondInSuperset ? 'superset-end' : '');
-                    
-                    return `
-                    <div class="edit-slot-detail-card ${cardClass}" data-slot-id="${slot.id}" data-order="${slot.order}" draggable="true">
-                        <div class="drag-handle-slot">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2"/>
-                            </svg>
-                        </div>
-                        <div class="slot-detail-content">
-                            <div class="slot-detail-header">
-                                <div>
-                                    <span class="slot-id-badge">${slot.slotId}</span>
-                                    <strong>${slot.activeExercise || slot.name}</strong>
-                                    ${supersetBadge}
+            ${slots.length === 0 ? `
+                <div class="session-edit-empty">
+                    <p>Cette séance est vide pour l'instant.</p>
+                    <button class="btn btn-primary" data-action="add-slot" data-session-id="${sessionId}">
+                        Ajouter le premier exercice
+                    </button>
+                </div>
+            ` : `
+                <div class="edit-slots-detail-list" id="edit-slots-detail-list">
+                    ${slots.map((slot, index) => {
+                        const isFirstInSuperset = Boolean(slot.supersetWith) && !linkedTargets.has(slot.id);
+                        const isSecondInSuperset = linkedTargets.has(slot.id);
+                        const supersetBadge = (isFirstInSuperset || isSecondInSuperset)
+                            ? '<span class="superset-badge">⚡ SuperSet</span>'
+                            : '';
+                        const cardClass = isFirstInSuperset ? 'superset-start' : (isSecondInSuperset ? 'superset-end' : '');
+                        const canLinkWithNext = !isSecondInSuperset && index < slots.length - 1 && !slots[index + 1].supersetWith;
+
+                        return `
+                            <div class="edit-slot-detail-card ${cardClass}" data-slot-id="${slot.id}" data-order="${slot.order}" draggable="true">
+                                <div class="drag-handle-slot">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2"/>
+                                    </svg>
                                 </div>
-                                <div class="slot-detail-actions">
-                                    ${!isSecondInSuperset && index < slots.length - 1 && !slots[index + 1].supersetWith ? `
-                                        <button class="btn-icon-small btn-link-superset ${isFirstInSuperset ? 'linked' : ''}" 
-                                                data-slot-id="${slot.id}" 
-                                                data-next-slot-id="${slots[index + 1]?.id || ''}"
-                                                title="${isFirstInSuperset ? 'Délier le superset' : 'Lier en superset avec le suivant'}">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                                            </svg>
-                                        </button>
-                                    ` : ''}
-                                    <button class="btn-icon-small btn-edit-slot-detail" data-slot-id="${slot.id}">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                        </svg>
-                                    </button>
-                                    <button class="btn-icon-small btn-delete-slot" data-slot-id="${slot.id}">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                        </svg>
-                                    </button>
+                                <div class="slot-detail-content slot-detail-main" data-action="open-slot" data-slot-id="${slot.id}">
+                                    <div class="slot-detail-header">
+                                        <div class="slot-detail-title">
+                                            <span class="slot-id-badge">${slot.slotId}</span>
+                                            <strong>${slot.activeExercise || slot.name}</strong>
+                                            ${supersetBadge}
+                                        </div>
+                                        <div class="slot-detail-actions">
+                                            ${canLinkWithNext ? `
+                                                <button class="btn-icon-small btn-link-superset ${isFirstInSuperset ? 'linked' : ''}" 
+                                                        data-slot-id="${slot.id}" 
+                                                        data-next-slot-id="${slots[index + 1]?.id || ''}"
+                                                        title="${isFirstInSuperset ? 'Délier le superset' : 'Lier en superset avec le suivant'}">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                                    </svg>
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn-icon-small btn-delete-slot" data-slot-id="${slot.id}" title="Supprimer l'exercice">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="slot-detail-metrics">
+                                        ${this.getSlotSummaryMetrics(slot)
+                                            .map(metric => `<span class="slot-detail-metric">${metric}</span>`)
+                                            .join('')}
+                                    </div>
+                                    <div class="slot-detail-hint">Appuie pour éditer cet exercice</div>
                                 </div>
                             </div>
-                            <div class="slot-detail-info">
-                                ${slot.sets} séries · ${slot.repsMin}-${slot.repsMax} reps · ${slot.rest}s repos · RIR ${slot.rir}
-                            </div>
-                        </div>
-                    </div>
-                `}).join('')}
-            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
         `;
+
+        const nameInput = document.getElementById('edit-session-name');
+        if (nameInput) {
+            nameInput.onkeydown = (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                this.saveSessionName(sessionId);
+            };
+        }
 
         this.initSlotsDragAndDrop();
         sheet.classList.add('active');
     }
 
-    hideEditSessionDetailSheet() {
+    hideEditSessionDetailSheet(options = {}) {
+        const { preserveContext = false } = options;
         document.getElementById('sheet-edit-session-detail').classList.remove('active');
-        this.editingSessionId = null;
+        if (!preserveContext) {
+            this.editingSessionId = null;
+        }
     }
 
     // ===== Drag & Drop Slots =====
     initSlotsDragAndDrop() {
         const list = document.getElementById('edit-slots-detail-list');
-        if (!list) return;
-
-        let draggedElement = null;
-        let touchStartY = 0;
-        let touchCurrentY = 0;
-        let isDragging = false;
-
-        // Mouse/Drag events
-        list.addEventListener('dragstart', (e) => {
-            if (e.target.classList.contains('edit-slot-detail-card')) {
-                draggedElement = e.target;
-                e.target.style.opacity = '0.5';
-            }
+        this.initSortableList({
+            list,
+            itemSelector: '.edit-slot-detail-card',
+            onSave: () => this.saveSlotsOrder()
         });
-
-        list.addEventListener('dragend', (e) => {
-            if (e.target.classList.contains('edit-slot-detail-card')) {
-                e.target.style.opacity = '1';
-            }
-        });
-
-        list.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const afterElement = this.getDragAfterElementSlot(list, e.clientY);
-            if (afterElement == null) {
-                list.appendChild(draggedElement);
-            } else {
-                list.insertBefore(draggedElement, afterElement);
-            }
-        });
-
-        list.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            await this.saveSlotsOrder();
-        });
-
-        // Touch events for iOS
-        list.addEventListener('touchstart', (e) => {
-            const item = e.target.closest('.edit-slot-detail-card');
-            if (item) {
-                draggedElement = item;
-                touchStartY = e.touches[0].clientY;
-                isDragging = false;
-            }
-        }, { passive: true });
-
-        list.addEventListener('touchmove', (e) => {
-            if (!draggedElement) return;
-            
-            touchCurrentY = e.touches[0].clientY;
-            const moveDistance = Math.abs(touchCurrentY - touchStartY);
-            
-            if (moveDistance > 10 && !isDragging) {
-                isDragging = true;
-                draggedElement.style.opacity = '0.5';
-                draggedElement.style.transform = 'scale(1.02)';
-            }
-            
-            if (isDragging) {
-                e.preventDefault();
-                const afterElement = this.getDragAfterElementSlot(list, touchCurrentY);
-                if (afterElement == null) {
-                    list.appendChild(draggedElement);
-                } else {
-                    list.insertBefore(draggedElement, afterElement);
-                }
-            }
-        });
-
-        list.addEventListener('touchend', async (e) => {
-            if (draggedElement && isDragging) {
-                draggedElement.style.opacity = '1';
-                draggedElement.style.transform = '';
-                await this.saveSlotsOrder();
-            }
-            draggedElement = null;
-            isDragging = false;
-        });
-    }
-
-    getDragAfterElementSlot(container, y) {
-        const draggableElements = [...container.querySelectorAll('.edit-slot-detail-card:not(.dragging)')];
-
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
     async saveSlotsOrder() {
@@ -8437,30 +9860,7 @@ class App {
     }
 
     async addSlotToSession(sessionId) {
-        const slots = await db.getSlotsBySession(sessionId);
-        const nextOrder = slots.length;
-        const nextSlotId = String.fromCharCode(65 + nextOrder);
-        
-        const newSlot = {
-            id: `${sessionId}-${Date.now()}`,
-            sessionId: sessionId,
-            slotId: nextSlotId + (nextOrder + 1),
-            name: 'Nouvel exercice',
-            order: nextOrder,
-            sets: 3,
-            repsMin: 8,
-            repsMax: 12,
-            rest: 90,
-            rir: 2,
-            instructions: '',
-            activeExercise: 'Nouvel exercice',
-            pool: ['Nouvel exercice']
-        };
-
-        this.normalizeSlotProgressionConfig(newSlot);
-
-        await db.put('slots', newSlot);
-        await this.showEditSessionDetailSheet(sessionId);
+        this.showExerciseLibrarySheet(sessionId);
     }
 
     // ===== Save Session Name =====
@@ -8702,6 +10102,12 @@ class App {
                 this.completeSet(parseInt(doneBtn.dataset.setIndex));
                 return;
             }
+
+            const cardioTimerBtn = e.target.closest('.btn-cardio-timer');
+            if (cardioTimerBtn) {
+                this.startCardioSetTimer(parseInt(cardioTimerBtn.dataset.setIndex));
+                return;
+            }
             
             const continueBtn = e.target.closest('#btn-continue-sets');
             if (continueBtn) {
@@ -8730,7 +10136,7 @@ class App {
                 if (e.target.matches('.input-weight')) {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
-                    slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                    slotData.sets[setIndex].reps = this.parseSetInputValue(e.target.value, this.currentSlot);
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -8808,12 +10214,32 @@ class App {
         };
 
         // Timer controls
-        document.getElementById('btn-timer-skip').onclick = () => this.stopRestTimer();
+        document.getElementById('btn-timer-skip').onclick = () => {
+            if (this.overlayTimerMode === 'work') {
+                this.finishCardioSetTimer({ useElapsed: false });
+                return;
+            }
+            if (this.restOverlayReady) {
+                this.dismissRestOverlay();
+                return;
+            }
+            this.stopRestTimer();
+        };
         document.getElementById('btn-timer-minus').onclick = () => this.adjustRestTimer(-15);
         document.getElementById('btn-timer-plus').onclick = () => this.adjustRestTimer(15);
-        document.getElementById('btn-timer-stop').onclick = () => this.stopRestTimer();
+        document.getElementById('btn-timer-stop').onclick = () => {
+            if (this.overlayTimerMode === 'work') {
+                this.finishCardioSetTimer({ useElapsed: true });
+                return;
+            }
+            if (this.restOverlayReady) {
+                this.dismissRestOverlay();
+                return;
+            }
+            this.stopRestTimer();
+        };
         
-        // RPE Slider
+        // RPE state
         const rpeSlider = document.getElementById('rpe-slider');
         rpeSlider.oninput = () => {
             rpeSlider.dataset.touched = 'true';
@@ -8824,10 +10250,10 @@ class App {
             this.updateRpeDisplay(parseInt(rpeSlider.value));
         };
         
-        // RPE emoji clicks
-        document.querySelectorAll('.rpe-labels span').forEach(span => {
-            span.onclick = () => {
-                const rpe = parseInt(span.dataset.rpe);
+        // RPE quick choices
+        document.querySelectorAll('.rpe-chip').forEach(chip => {
+            chip.onclick = () => {
+                const rpe = parseInt(chip.dataset.rpe);
                 rpeSlider.value = rpe;
                 rpeSlider.dataset.touched = 'true';
                 const rpeSection = document.getElementById('rpe-section');
@@ -8859,6 +10285,47 @@ class App {
         // Sheets
         document.querySelector('#sheet-change-session .sheet-backdrop').onclick = () => this.hideChangeSessionSheet();
         document.querySelector('#sheet-edit-sessions .sheet-backdrop').onclick = () => this.hideEditSessionsSheet();
+        document.querySelector('#sheet-exercise-library .sheet-backdrop').onclick = () => this.hideExerciseLibrarySheet();
+
+        const exerciseLibrarySearch = document.getElementById('exercise-library-search');
+        if (exerciseLibrarySearch) {
+            exerciseLibrarySearch.oninput = () => {
+                this.exerciseLibraryState.query = exerciseLibrarySearch.value;
+                this.renderExerciseLibraryList();
+            };
+        }
+
+        const exerciseLibraryFilters = document.getElementById('exercise-library-filters');
+        if (exerciseLibraryFilters) {
+            exerciseLibraryFilters.onclick = (e) => {
+                const filterBtn = e.target.closest('.exercise-library-filter');
+                if (!filterBtn) return;
+                this.exerciseLibraryState.category = filterBtn.dataset.category || 'all';
+                this.renderExerciseLibraryFilters();
+                this.renderExerciseLibraryList();
+            };
+        }
+
+        const exerciseLibraryList = document.getElementById('exercise-library-list');
+        if (exerciseLibraryList) {
+            exerciseLibraryList.onclick = (e) => {
+                const item = e.target.closest('.exercise-library-item');
+                if (!item) return;
+                this.createExerciseFromLibrary(item.dataset.exerciseName);
+            };
+        }
+
+        const createCustomExerciseBtn = document.getElementById('btn-create-custom-exercise');
+        if (createCustomExerciseBtn) {
+            createCustomExerciseBtn.onclick = () => {
+                const customName = (this.exerciseLibraryState.query || '').trim();
+                if (!customName) {
+                    exerciseLibrarySearch?.focus();
+                    return;
+                }
+                this.createExerciseFromLibrary(customName, { custom: true });
+            };
+        }
         
         // Edit slot sheet
         document.getElementById('sheet-edit-slot').onclick = (e) => {
@@ -8875,25 +10342,36 @@ class App {
         document.getElementById('sheet-edit-session-detail').onclick = (e) => {
             if (e.target.classList.contains('sheet-backdrop')) {
                 this.hideEditSessionDetailSheet();
+                return;
+            }
+
+            const backBtn = e.target.closest('#btn-back-edit-sessions');
+            if (backBtn) {
+                this.hideEditSessionDetailSheet();
+                this.showEditSessionsSheet();
+                return;
             }
             
             const linkBtn = e.target.closest('.btn-link-superset');
             if (linkBtn) {
                 this.toggleSuperset(linkBtn.dataset.slotId, linkBtn.dataset.nextSlotId);
-            }
-            
-            const editBtn = e.target.closest('.btn-edit-slot-detail');
-            if (editBtn) {
-                this.hideEditSessionDetailSheet();
-                this.showEditSlotSheet(editBtn.dataset.slotId);
+                return;
             }
             
             const deleteBtn = e.target.closest('.btn-delete-slot');
             if (deleteBtn) {
                 this.deleteSlot(deleteBtn.dataset.slotId);
+                return;
+            }
+
+            const editBtn = e.target.closest('.btn-edit-slot-detail') || e.target.closest('[data-action="open-slot"]');
+            if (editBtn) {
+                this.hideEditSessionDetailSheet({ preserveContext: true });
+                this.showEditSlotSheet(editBtn.dataset.slotId);
+                return;
             }
             
-            const addBtn = e.target.closest('#btn-add-slot-to-session');
+            const addBtn = e.target.closest('[data-action="add-slot"]');
             if (addBtn) {
                 this.addSlotToSession(addBtn.dataset.sessionId);
             }
@@ -8901,23 +10379,27 @@ class App {
 
         // Edit sessions list - click to edit detail
         document.getElementById('edit-session-list').onclick = (e) => {
-            const sessionContent = e.target.closest('.session-reorder-content');
-            if (sessionContent && sessionContent.dataset.sessionId) {
-                this.hideEditSessionsSheet();
-                this.showEditSessionDetailSheet(sessionContent.dataset.sessionId);
+            const addBtn = e.target.closest('#btn-add-session');
+            if (addBtn) {
+                this.createSession();
                 return;
             }
-            
+
             const deleteBtn = e.target.closest('.btn-delete-session');
             if (deleteBtn) {
                 this.deleteSession(deleteBtn.dataset.sessionId);
                 return;
             }
-            
-            const addBtn = e.target.closest('#btn-add-session');
-            if (addBtn) {
-                this.createSession();
+
+            const dragHandle = e.target.closest('.drag-handle');
+            if (dragHandle) {
                 return;
+            }
+
+            const sessionContent = e.target.closest('[data-action="open-session-detail"]');
+            if (sessionContent?.dataset.sessionId) {
+                this.hideEditSessionsSheet();
+                this.showEditSessionDetailSheet(sessionContent.dataset.sessionId);
             }
         };
         
@@ -8976,7 +10458,7 @@ class App {
         newItem.className = 'pool-item-edit';
         newItem.dataset.index = newIndex;
         newItem.innerHTML = `
-            <input type="text" class="pool-input" value="" placeholder="Nom de l'exercice">
+            <input type="text" class="pool-input" value="" placeholder="Nom de l'exercice" list="exercise-library-options">
             <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${newIndex}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
@@ -9114,19 +10596,53 @@ class App {
     }
     
     async applyExerciseChange(slot, newExerciseName, resetParams) {
+        const previousActiveExercise = slot.activeExercise;
+        const previousTrackingMode = slot.trackingMode || this.getTrackingMode(slot);
+        const definition = this.findExerciseLibraryEntry(newExerciseName) || this.inferCustomExerciseTemplate(newExerciseName);
+
         // Update active exercise
         slot.activeExercise = newExerciseName;
+        slot.trackingMode = resetParams
+            ? (definition?.trackingMode || 'strength')
+            : previousTrackingMode;
         
         // Reset parameters if requested
         if (resetParams) {
-            // Get default values from the first exercise in pool or use standard defaults
-            slot.sets = 3;
-            slot.repsMin = 8;
-            slot.repsMax = 12;
-            slot.rest = 90;
-            slot.rir = 2;
-            slot.instructions = '';
+            slot.sets = definition?.sets ?? 3;
+            slot.repsMin = definition?.repsMin ?? 8;
+            slot.repsMax = definition?.repsMax ?? 12;
+            slot.rest = definition?.rest ?? 90;
+            slot.rir = definition?.rir ?? 2;
+            slot.type = definition?.type || 'compound';
+            slot.muscleGroup = definition?.muscleGroup || '';
+            slot.instructions = definition?.instructions || '';
+
+            delete slot.progressionMode;
+            delete slot.loadingProfile;
+            delete slot.incrementKg;
+            delete slot.minIncrementKg;
+            delete slot.maxSelectableLoadKg;
+            delete slot.machineStepKg;
+            delete slot.bodyweightMode;
+            delete slot.bodyweightProfile;
+            delete slot.progressionState;
+            delete slot.capDetection;
+
+            if (definition?.progressionMode) {
+                slot.progressionMode = definition.progressionMode;
+            }
+
+            if (definition?.loadingProfile) {
+                slot.loadingProfile = definition.loadingProfile;
+            }
+
+            if (!slot.name || slot.name === previousActiveExercise) {
+                slot.name = newExerciseName;
+            }
         }
+
+        slot.pool = Array.from(new Set([newExerciseName, ...(slot.pool || [])].filter(Boolean)));
+        this.normalizeSlotProgressionConfig(slot);
         
         await db.put('slots', slot);
         
@@ -9145,9 +10661,9 @@ class App {
                 this.currentSlot = slot;
                 document.getElementById('current-exercise-name').textContent = newExerciseName;
                 document.getElementById('exercise-sets').textContent = slot.sets;
-                document.getElementById('exercise-reps').textContent = `${slot.repsMin}-${slot.repsMax}`;
-                document.getElementById('exercise-rest').textContent = `${slot.rest}s`;
-                document.getElementById('exercise-rir').textContent = slot.rir;
+                document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(slot);
+                document.getElementById('exercise-rest').textContent = slot.rest > 0 ? `${slot.rest}s` : '--';
+                document.getElementById('exercise-rir').textContent = this.isCardioSlot(slot) ? '--' : slot.rir;
                 document.getElementById('exercise-instructions').textContent = slot.instructions || '--';
                 await this.loadLogbook();
                 this.renderSeries();
@@ -10181,6 +11697,7 @@ class App {
             repsMax: normalizedSlot.repsMax || 0,
             sets: normalizedSlot.sets || 0,
             rest: normalizedSlot.rest || 0,
+            trackingMode: normalizedSlot.trackingMode || 'strength',
             progressionMode: normalizedSlot.progressionMode,
             loadingProfile: normalizedSlot.loadingProfile,
             incrementKg: normalizedSlot.incrementKg,
@@ -10231,6 +11748,8 @@ class App {
 
     normalizeSlotProgressionConfig(slot) {
         if (!slot) return slot;
+
+        slot.trackingMode ||= this.isCardioSlot(slot) ? 'cardio' : 'strength';
 
         const bodyweightConfig = this.getBodyweightAutoConfig(slot);
         const bodyweightDetected = slot.bodyweightMode === true ||
@@ -10774,6 +12293,9 @@ class App {
             .filter(([slotId, slotState]) => String(slotId) !== String(slot.id) && (slotState?.setCount || 0) > 0)
             .length;
         const isFirstExerciseWindow = completedOtherSlots === 0;
+        const currentSlotSetCount = currentSlotState.setCount || 0;
+        const hasMeaningfulLocalFatigue = currentSlotSetCount >= 3 || primaryHardSets >= 3;
+        const hasMeaningfulSessionAccumulation = completedOtherSlots >= 1 || state.setCount >= 6;
 
         let avgPrimaryFatigue = primaryFatigue.length
             ? primaryFatigue.reduce((sum, value) => sum + value, 0) / primaryFatigue.length
@@ -10803,44 +12325,45 @@ class App {
         let repsDelta = 0;
         let restAddSeconds = 0;
 
-        if (overlapScore >= 5.4 || systemicFatigue >= 7.2 || state.axialFatigue >= 5.2) {
+        if ((overlapScore >= 6.8 || systemicFatigue >= 8 || state.axialFatigue >= 6) && (hasMeaningfulLocalFatigue || hasMeaningfulSessionAccumulation)) {
             fatigueLevel = 'high';
-            loadAdjustPercent = maxPrimaryFatigue >= 5.2 ? -5 : -2.5;
-            setChange = primaryHardSets >= 5 ? -1 : 0;
-            repsDelta = -1;
-            restAddSeconds = state.axialFatigue >= 4 ? 20 : 15;
-        } else if (overlapScore >= 3.4 || systemicFatigue >= 5.2) {
+            restAddSeconds = state.axialFatigue >= 4.8 ? 20 : 15;
+        } else if ((overlapScore >= 4.6 || systemicFatigue >= 6.2 || state.axialFatigue >= 4.8) && (currentSlotSetCount >= 2 || completedOtherSlots >= 1)) {
             fatigueLevel = 'moderate';
-            loadAdjustPercent = (avgPrimaryFatigue >= 3.6 || primaryHardSets >= 4.5) ? -2.5 : 0;
-            setChange = primaryHardSets >= 7 ? -1 : 0;
-            repsDelta = maxPrimaryFatigue >= 4.2 ? -1 : 0;
-            restAddSeconds = state.axialFatigue >= 3.6 ? 15 : 10;
+            restAddSeconds = state.axialFatigue >= 4 ? 15 : 10;
         }
 
         if (isFirstExerciseWindow) {
-            // Guardrail: the first exercise should not be auto-cut after 1-2 normal sets.
+            // Guardrail: on reste très tolérant sur le premier exercice de la séance.
             setChange = 0;
-            if (currentSlotState.setCount <= 2) {
+            if (currentSlotSetCount <= 3) {
                 fatigueLevel = 'low';
                 loadAdjustPercent = 0;
                 repsDelta = 0;
-                restAddSeconds = currentSlotState.setCount >= 2 ? Math.max(restAddSeconds, 10) : 0;
+                restAddSeconds = currentSlotSetCount >= 3 ? Math.max(restAddSeconds, 10) : 0;
             }
         }
 
-        if (maxPrimaryFatigue >= 3.6) {
+        // Session fatigue is informational only. The coach no longer auto-reduces
+        // load, reps or volume from this signal because the session already contains
+        // natural fatigue from set to set.
+        loadAdjustPercent = 0;
+        setChange = 0;
+        repsDelta = 0;
+
+        if (maxPrimaryFatigue >= 4.2) {
             reasonParts.push(`fatigue locale ${Math.round(maxPrimaryFatigue * 10) / 10}`);
         }
-        if (primaryHardSets >= 4) {
+        if (primaryHardSets >= 5) {
             reasonParts.push(`${Math.round(primaryHardSets * 10) / 10} séries dures déjà faites`);
         }
-        if (systemicFatigue >= 5.5) {
+        if (systemicFatigue >= 6.2) {
             reasonParts.push('fatigue systémique en hausse');
         }
 
         const readinessScore = Math.max(
-            45,
-            Math.min(100, Math.round(100 - (overlapScore * 7) - (systemicFatigue * 3) - (state.axialFatigue * 1.5)))
+            55,
+            Math.min(100, Math.round(100 - (overlapScore * 5.5) - (systemicFatigue * 2.4) - (state.axialFatigue * 1.2)))
         );
 
         return {
@@ -10924,38 +12447,6 @@ class App {
         }
 
         if (sessionContext) {
-            if (typeof adjusted.suggestedWeight === 'number' && sessionContext.loadAdjustPercent !== 0) {
-                const baseWeight = adjusted.suggestedWeight;
-                const nextWeight = this.roundToHalf(baseWeight * (1 + (sessionContext.loadAdjustPercent / 100)));
-
-                if (nextWeight > 0 && Math.abs(nextWeight - baseWeight) >= 0.5) {
-                    adjusted.suggestedWeight = nextWeight;
-                    adjusted.weightTrend = nextWeight < baseWeight ? 'down' : nextWeight > baseWeight ? 'up' : adjusted.weightTrend;
-                    adjusted.liveLoadAdjustment = true;
-
-                    if (sessionContext.fatigueLevel === 'high' && adjusted.type === 'increase') {
-                        adjusted.type = 'maintain';
-                        adjusted.title = 'Gestion de fatigue';
-                    }
-                }
-            }
-
-            if (sessionContext.setChange < 0 && !volumeSuggestionSource) {
-                const baseSets = adjusted.suggestedSets || adjusted.deloadSets || slot.sets;
-                const nextSets = Math.max(2, Math.min(6, baseSets + sessionContext.setChange));
-                if (nextSets < baseSets) {
-                    adjusted.suggestedSets = nextSets;
-                    volumeSuggestionSource = 'fatigue';
-                }
-            }
-
-            if (sessionContext.repsDelta < 0) {
-                const setCount = adjusted.suggestedSets || slot.sets;
-                const targets = this.genTargetReps(slot.repsMin, slot.repsMax, setCount)
-                    .map(rep => Math.max(slot.repsMin, rep + sessionContext.repsDelta));
-                adjusted.suggestedReps = this.formatTargetReps(targets);
-            }
-
             if (sessionContext.restAddSeconds > 0) {
                 adjusted.restRecommendation = `${slot.rest + sessionContext.restAddSeconds}s`;
             }
@@ -10973,12 +12464,6 @@ class App {
         adjusted.contextConfidence = Math.round((((trendSummary?.confidence || 0.35) + ((sessionContext?.readinessScore || 70) / 100)) / 2) * 100) / 100;
         adjusted.sessionContext = sessionContext || null;
         adjusted.trendSummary = trendSummary || null;
-
-        if (typeof adjusted.backOffWeight === 'number' && sessionContext?.loadAdjustPercent) {
-            adjusted.backOffWeight = this.roundToHalf(
-                adjusted.backOffWeight * (1 + (sessionContext.loadAdjustPercent / 100))
-            );
-        }
 
         return adjusted;
     }
@@ -11003,15 +12488,10 @@ class App {
     }
 
     async refreshLiveCoachingAfterSet() {
-        if (!this.currentSlot || this.isSupersetMode || this.isUnilateralMode) return;
+        if (!this.currentSlot || this.isSupersetMode || this.isUnilateralMode || this.isCardioSlot(this.currentSlot)) return;
 
         await this.refreshWorkoutCoachingState();
         this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
-
-        const nextWeight = this.currentCoachingAdvice?.suggestedWeight;
-        if (this.nextSetSuggestedWeight == null && typeof nextWeight === 'number' && this.currentCoachingAdvice?.liveLoadAdjustment) {
-            this.nextSetSuggestedWeight = nextWeight;
-        }
 
         await this.showCoachingAdvice();
         this.renderSeries();
@@ -11025,6 +12505,13 @@ class App {
         const fatiguePill = document.getElementById('coaching-fatigue-pill');
         const fatigueInfoBtn = document.getElementById('btn-coach-fatigue-info');
         if (!this.currentSlot) {
+            adviceCard.style.display = 'none';
+            if (metaRow) metaRow.style.display = 'none';
+            if (decisionCard) decisionCard.style.display = 'none';
+            return;
+        }
+
+        if (this.isCardioSlot(this.currentSlot)) {
             adviceCard.style.display = 'none';
             if (metaRow) metaRow.style.display = 'none';
             if (decisionCard) decisionCard.style.display = 'none';
@@ -11074,6 +12561,7 @@ class App {
         }
 
         const weightLabelEl = document.getElementById('coaching-suggested-weight-label');
+        const weightReferenceEl = document.getElementById('coaching-suggested-weight-reference');
         if (weightLabelEl) {
             weightLabelEl.textContent = currentSlot.progressionMode === 'bodyweight'
                 ? currentSlot.bodyweightProfile?.allowAssistance
@@ -11086,6 +12574,11 @@ class App {
         
         // Update suggested weight with trend arrow
         document.getElementById('coaching-suggested-weight').textContent = this.formatSuggestedWeightDisplay(advice);
+        if (weightReferenceEl) {
+            const referenceText = this.getSuggestedWeightReferenceNote(advice, currentSlot);
+            weightReferenceEl.textContent = referenceText;
+            weightReferenceEl.style.display = referenceText ? 'block' : 'none';
+        }
         
         const trendEl = document.getElementById('coaching-weight-trend');
         const displayTrend = advice.weightTrend === 'neutral' ? 'same' : (advice.weightTrend || 'same');

@@ -2,20 +2,1069 @@
 
 // Liste des groupes musculaires disponibles
 const MUSCLE_GROUPS = [
-    { id: 'pectoraux', name: 'Pectoraux', icon: '🫁' },
-    { id: 'dos', name: 'Dos', icon: '🔙' },
-    { id: 'epaules', name: 'Épaules', icon: '🎯' },
-    { id: 'biceps', name: 'Biceps', icon: '💪' },
-    { id: 'triceps', name: 'Triceps', icon: '🦾' },
-    { id: 'avant-bras', name: 'Avant-bras', icon: '🤜' },
-    { id: 'quadriceps', name: 'Quadriceps', icon: '🦵' },
-    { id: 'ischio-jambiers', name: 'Ischio-jambiers', icon: '🦿' },
-    { id: 'mollets', name: 'Mollets', icon: '🦶' },
-    { id: 'fessiers', name: 'Fessiers', icon: '🍑' },
-    { id: 'abdominaux', name: 'Abdominaux', icon: '🎽' },
-    { id: 'lombaires', name: 'Lombaires', icon: '⬇️' },
-    { id: 'trapèzes', name: 'Trapèzes', icon: '🔺' },
-    { id: 'coiffe', name: 'Coiffe des rotateurs', icon: '🔄' }
+    { id: 'pectoraux', name: 'Pectoraux', iconKey: 'muscle-pectoraux' },
+    { id: 'dos', name: 'Dos', iconKey: 'muscle-dos' },
+    { id: 'epaules', name: 'Épaules', iconKey: 'muscle-epaules' },
+    { id: 'biceps', name: 'Biceps', iconKey: 'muscle-biceps' },
+    { id: 'triceps', name: 'Triceps', iconKey: 'muscle-triceps' },
+    { id: 'avant-bras', name: 'Avant-bras', iconKey: 'muscle-avant-bras' },
+    { id: 'quadriceps', name: 'Quadriceps', iconKey: 'muscle-quadriceps' },
+    { id: 'ischio-jambiers', name: 'Ischio-jambiers', iconKey: 'muscle-ischio' },
+    { id: 'mollets', name: 'Mollets', iconKey: 'muscle-mollets' },
+    { id: 'fessiers', name: 'Fessiers', iconKey: 'muscle-fessiers' },
+    { id: 'abdominaux', name: 'Abdominaux', iconKey: 'muscle-abdominaux' },
+    { id: 'lombaires', name: 'Lombaires', iconKey: 'muscle-lombaires' },
+    { id: 'trapèzes', name: 'Trapèzes', iconKey: 'muscle-trapezes' },
+    { id: 'coiffe', name: 'Coiffe des rotateurs', iconKey: 'muscle-coiffe' }
+];
+
+const APP_ICON_SVGS = {
+    'muscle-default': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 5.5C9 4.12 10.12 3 11.5 3h1C13.88 3 15 4.12 15 5.5V8l2 2v7.5A2.5 2.5 0 0 1 14.5 20h-5A2.5 2.5 0 0 1 7 17.5V10l2-2V5.5Z"/>
+        <path d="M9.5 11.5h5M9.5 15.5h5"/>
+    </svg>`,
+    'muscle-pectoraux': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 4.5c0-1.1.9-2 2-2s2 .9 2 2V7l3 2.5v7.5A2 2 0 0 1 15 19H9a2 2 0 0 1-2-2V9.5L10 7V4.5Z"/>
+        <path d="M8.5 10.5 12 13l3.5-2.5"/>
+        <path d="M8.8 10.8 10 15.5M15.2 10.8 14 15.5"/>
+    </svg>`,
+    'muscle-dos': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2v3l2.5 2.5V17a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7L9 7.5v-3Z"/>
+        <path d="M12 7v10"/>
+        <path d="M8.8 10.5 12 12l3.2-1.5"/>
+        <path d="M9.3 15 12 16.5 14.7 15"/>
+    </svg>`,
+    'muscle-epaules': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 9a4 4 0 0 1 8 0"/>
+        <path d="M6 12c0-1.66 1.34-3 3-3h1.5L12 11l1.5-2H15a3 3 0 0 1 3 3v4H6v-4Z"/>
+        <path d="M8 8.5 6 10.5M16 8.5l2 2"/>
+    </svg>`,
+    'muscle-biceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 15c.4-2.7 2.1-4 4.2-4H14l1.2 1.4c1.6 0 2.8 1.2 2.8 2.8 0 2.1-1.7 3.8-3.8 3.8H9.8A2.8 2.8 0 0 1 7 16.2V12"/>
+        <path d="M10.5 11V8.5c0-1.1.9-2 2-2h1"/>
+        <path d="M7 12h2.2"/>
+    </svg>`,
+    'muscle-triceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 7.5V6a2 2 0 0 1 2-2h1"/>
+        <path d="M9 7.5 7.5 12v4.2A2.8 2.8 0 0 0 10.3 19H15a3 3 0 0 0 3-3c0-1.6-1.3-2.9-2.9-2.9h-2.3L11 10.5"/>
+        <path d="M11 10.5 9 7.5"/>
+    </svg>`,
+    'muscle-avant-bras': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 6.5 7.5 11v5.5A2.5 2.5 0 0 0 10 19h5"/>
+        <path d="M9 6.5h4l2 2.5V14a2 2 0 0 1-2 2h-2.5"/>
+        <path d="M15 19v-3.5"/>
+        <path d="M17 19v-4"/>
+    </svg>`,
+    'muscle-quadriceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 4h4v4l1.5 4.5-1.7 6.5H10l-1.7-6.5L10 8V4Z"/>
+        <path d="M10.5 9.5h3"/>
+        <path d="M10 13h4"/>
+    </svg>`,
+    'muscle-ischio': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 4h4v4l1.5 4.5-1.7 6.5H10l-1.7-6.5L10 8V4Z"/>
+        <path d="M9.5 9.5 12 11l2.5-1.5"/>
+        <path d="M10 14.5 12 16l2-1.5"/>
+    </svg>`,
+    'muscle-mollets': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 4h4v4.2l-.8 2.8 1.8 2.2-1.6 5.8H10.6L9 13.2l1.8-2.2L10 8.2V4Z"/>
+        <path d="M10.2 14h3.6"/>
+        <path d="M10.7 16.8h2.6"/>
+    </svg>`,
+    'muscle-fessiers': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 5h6v4.5l1.5 2V16a3 3 0 0 1-3 3H10.5a3 3 0 0 1-3-3v-4.5L9 9.5V5Z"/>
+        <path d="M12 10v8"/>
+        <path d="M8.7 12c1 .6 2.1.9 3.3.9 1.2 0 2.3-.3 3.3-.9"/>
+    </svg>`,
+    'muscle-abdominaux': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2V8l2 2.5V17a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.5L9 8V4.5Z"/>
+        <path d="M10.2 9.8h3.6M10.2 13h3.6M10.2 16.2h3.6"/>
+        <path d="M12 9.8v6.4"/>
+    </svg>`,
+    'muscle-lombaires': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2V8l2 2.5V17a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.5L9 8V4.5Z"/>
+        <path d="M9.5 15h5"/>
+        <path d="M10.5 12.5h3"/>
+        <path d="M8.5 16.8 12 18l3.5-1.2"/>
+    </svg>`,
+    'muscle-trapezes': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 6.5c0-2.2 1.8-4 4-4s4 1.8 4 4"/>
+        <path d="M7 10.5 9.5 8H14.5L17 10.5V16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-5.5Z"/>
+        <path d="M9.5 8 12 11l2.5-3"/>
+    </svg>`,
+    'muscle-coiffe': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.5 12a3.5 3.5 0 1 1 3.5 3.5"/>
+        <path d="M12 8.5h3.5A3.5 3.5 0 1 1 12 12"/>
+        <path d="M6 15.5 8.5 13M18 8.5 15.5 11"/>
+    </svg>`,
+    'recovery-checkin': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>
+        <circle cx="12" cy="12" r="3.5"/>
+    </svg>`,
+    'recovery-info': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 10v5"/>
+        <path d="M12 7h.01"/>
+    </svg>`,
+    'recovery-fresh': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>
+        <circle cx="12" cy="12" r="4"/>
+    </svg>`,
+    'recovery-ready': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="m8.5 12 2.2 2.2L15.8 9"/>
+    </svg>`,
+    'recovery-sore': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 3 6 14h5l-1 7 8-12h-5l0-6Z"/>
+    </svg>`,
+    'recovery-exhausted': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 7v5"/>
+        <path d="M12 16h.01"/>
+    </svg>`,
+    'recovery-supercompensation': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V6"/>
+        <path d="m7 11 5-5 5 5"/>
+        <path d="M6 19h12"/>
+    </svg>`,
+    'recovery-refuel': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 13a7 7 0 1 0 2-4.9"/>
+        <path d="M5 5v4h4"/>
+        <path d="M12 8v4l3 2"/>
+    </svg>`,
+    'recovery-repair': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.5 4a5 5 0 0 0-4.7 6.7l-5.1 5.1a1.5 1.5 0 0 0 2.1 2.1l5.1-5.1A5 5 0 1 0 14.5 4Z"/>
+    </svg>`
+};
+
+function escapeIconLabel(label = '') {
+    return String(label)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function renderAppIcon(iconKey, options = {}) {
+    const {
+        className = '',
+        size = 20,
+        label = ''
+    } = options;
+    const svg = APP_ICON_SVGS[iconKey] || APP_ICON_SVGS['muscle-default'];
+    const classes = ['app-icon', className].filter(Boolean).join(' ');
+    const aria = label
+        ? `role="img" aria-label="${escapeIconLabel(label)}"`
+        : 'aria-hidden="true"';
+    return `<span class="${classes}" style="--icon-size:${size}px" ${aria}>${svg}</span>`;
+}
+
+function getMuscleGroupMeta(muscleId) {
+    return MUSCLE_GROUPS.find(group => group.id === muscleId) || {
+        id: muscleId,
+        name: muscleId,
+        iconKey: 'muscle-default'
+    };
+}
+
+function renderMuscleIcon(muscleId, options = {}) {
+    const group = getMuscleGroupMeta(muscleId);
+    return renderAppIcon(group.iconKey, {
+        label: group.name,
+        ...options
+    });
+}
+
+function createExerciseLibraryEntry(config) {
+    const variants = Array.isArray(config.variants) ? config.variants.filter(Boolean) : [];
+    const aliases = Array.isArray(config.aliases) ? config.aliases.filter(Boolean) : [];
+
+    return {
+        name: config.name,
+        category: config.category || 'fullbody',
+        muscleGroup: config.muscleGroup || '',
+        type: config.type || 'compound',
+        equipment: config.equipment || '',
+        sets: config.sets ?? 3,
+        repsMin: config.repsMin ?? 8,
+        repsMax: config.repsMax ?? 12,
+        rest: config.rest ?? 90,
+        rir: config.rir ?? 2,
+        instructions: config.instructions || '',
+        trackingMode: config.trackingMode || 'strength',
+        progressionMode: config.progressionMode || null,
+        loadingProfile: config.loadingProfile || null,
+        aliases,
+        pool: [config.name, ...variants]
+    };
+}
+
+const EXERCISE_LIBRARY = [
+    createExerciseLibraryEntry({
+        name: 'Développé couché barre',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 5,
+        repsMax: 8,
+        rest: 150,
+        instructions: 'Omoplates serrées, trajectoire contrôlée, pieds ancrés.',
+        variants: ['Développé couché haltères', 'Développé machine convergente'],
+        aliases: ['bench press', 'barbell bench press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé couché haltères',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'haltères',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        instructions: 'Descente contrôlée, poitrine sortie, poussée fluide.',
+        variants: ['Développé couché barre', 'Développé machine convergente'],
+        aliases: ['dumbbell bench press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé incliné barre',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        instructions: 'Inclinaison modérée, focus haut des pectoraux.',
+        variants: ['Développé incliné haltères', 'Développé incliné machine'],
+        aliases: ['incline bench press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé incliné haltères',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Trajectoire naturelle, contrôle en bas, poussée propre.',
+        variants: ['Développé incliné barre', 'Développé incliné machine'],
+        aliases: ['incline dumbbell press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé machine convergente',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Garde les épaules basses et contrôle le retour.',
+        variants: ['Développé couché barre', 'Développé couché haltères'],
+        aliases: ['chest press machine', 'hammer strength chest press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé décliné machine',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Reste gainé et cherche la contraction en fin de poussée.',
+        variants: ['Dips pecs', 'Développé couché barre']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Écarté poulie vis-à-vis',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        instructions: 'Étirement contrôlé, légère flexion des coudes, squeeze au centre.',
+        variants: ['Écarté haltères', 'Pec deck'],
+        aliases: ['cable fly', 'crossover']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Écarté haltères',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'isolation',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        instructions: 'Amplitude douce, ne casse pas les poignets.',
+        variants: ['Écarté poulie vis-à-vis', 'Pec deck'],
+        aliases: ['dumbbell fly']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Pec deck',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Cherche la contraction sans hausser les épaules.',
+        variants: ['Écarté poulie vis-à-vis', 'Écarté haltères']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Pompes',
+        category: 'pectoraux',
+        muscleGroup: 'pectoraux',
+        type: 'compound',
+        equipment: 'poids du corps',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 20,
+        rest: 60,
+        rir: 1,
+        progressionMode: 'bodyweight',
+        loadingProfile: 'bodyweight',
+        instructions: 'Corps gainé, poitrine vers le sol, extension complète.',
+        variants: ['Pompes déclinées', 'Pompes diamant'],
+        aliases: ['push up', 'push-up']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Tractions',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'poids du corps',
+        sets: 3,
+        repsMin: 5,
+        repsMax: 10,
+        rest: 120,
+        progressionMode: 'bodyweight',
+        loadingProfile: 'bodyweight',
+        instructions: 'Tire les coudes vers les hanches, contrôle la descente.',
+        variants: ['Tractions assistées', 'Tirage vertical prise large'],
+        aliases: ['pull up', 'pull-up', 'pullup', 'tractions pronation']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Tractions assistées',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 6,
+        repsMax: 12,
+        rest: 90,
+        progressionMode: 'bodyweight',
+        loadingProfile: 'bodyweight',
+        instructions: 'Réduis l’assistance progressivement et garde une amplitude complète.',
+        variants: ['Tractions', 'Tirage vertical prise neutre'],
+        aliases: ['assisted pull up', 'assisted chin up']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Tirage vertical prise large',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Poitrine sortie, tire vers le haut du torse, évite l’élan.',
+        variants: ['Tirage vertical prise neutre', 'Tractions assistées'],
+        aliases: ['lat pulldown']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Tirage vertical prise neutre',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Conduis les coudes vers les côtes et garde le buste stable.',
+        variants: ['Tirage vertical prise large', 'Tractions assistées'],
+        aliases: ['neutral grip pulldown']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Rowing barre',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        instructions: 'Buste fixé, tirage vers le nombril, contrôle total.',
+        variants: ['Rowing haltère unilatéral', 'Rowing poitrine appuyée'],
+        aliases: ['barbell row', 'bent over row']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Rowing haltère unilatéral',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'haltère',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 75,
+        instructions: 'Tire le coude haut et près du corps, sans tourner le buste.',
+        variants: ['Rowing barre', 'Rowing poitrine appuyée'],
+        aliases: ['one arm dumbbell row', 'single arm row']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Rowing poulie assise',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Ramène les poignées vers l’abdomen, poitrine haute.',
+        variants: ['Rowing poitrine appuyée', 'Rowing barre'],
+        aliases: ['seated row', 'cable row']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Rowing poitrine appuyée',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Appui ferme sur le banc, tirage régulier, aucun élan.',
+        variants: ['Rowing poulie assise', 'Rowing haltère unilatéral'],
+        aliases: ['chest supported row']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Pullover poulie',
+        category: 'dos',
+        muscleGroup: 'dos',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Bras presque tendus, omoplates basses, grand étirement.',
+        variants: ['Pullover haltère', 'Tirage vertical prise large']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé militaire',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        instructions: 'Gainage fort, trajectoire verticale, tête qui passe sous la barre.',
+        variants: ['Shoulder press machine', 'Développé haltères épaules'],
+        aliases: ['overhead press', 'shoulder press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Développé haltères épaules',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'compound',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Épaules basses, mouvement propre, amplitude contrôlée.',
+        variants: ['Développé militaire', 'Shoulder press machine'],
+        aliases: ['dumbbell shoulder press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Shoulder press machine',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Presse verticale contrôlée, omoplates stables.',
+        variants: ['Développé militaire', 'Développé haltères épaules']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Élévation latérale',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'isolation',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 60,
+        rir: 1,
+        instructions: 'Monte dans le plan de l’épaule, poignets neutres, contrôle en descente.',
+        variants: ['Élévation latérale poulie', 'Oiseau poulie'],
+        aliases: ['lateral raise']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Élévation latérale poulie',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Tension continue, amplitude propre, sans élan.',
+        variants: ['Élévation latérale', 'Oiseau poulie'],
+        aliases: ['cable lateral raise']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Oiseau poulie',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Tire avec l’arrière d’épaule, pas avec les trapèzes.',
+        variants: ['Reverse pec deck', 'Face pull'],
+        aliases: ['rear delt fly', 'reverse cable fly']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Face pull',
+        category: 'epaules',
+        muscleGroup: 'epaules',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 18,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Coude haut, rotation externe, mouvement propre.',
+        variants: ['Oiseau poulie', 'Reverse pec deck']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl barre EZ',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'barre',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Coudes fixes, montée sans élan, descente contrôlée.',
+        variants: ['Curl haltères', 'Curl poulie basse']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl haltères',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 75,
+        instructions: 'Supination complète, contrôle du tempo.',
+        variants: ['Curl barre EZ', 'Curl incliné haltères']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl incliné haltères',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Laisse le bras s’étirer en bas, épaule stable.',
+        variants: ['Curl barre EZ', 'Curl pupitre machine']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl marteau',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 75,
+        instructions: 'Prise neutre, poignet solide, amplitude complète.',
+        variants: ['Curl haltères', 'Curl corde marteau'],
+        aliases: ['hammer curl']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl pupitre machine',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 75,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Ne décolle pas le bras du pupitre, squeeze en haut.',
+        variants: ['Curl incliné haltères', 'Curl poulie basse'],
+        aliases: ['preacher curl machine']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Curl poulie basse',
+        category: 'bras',
+        muscleGroup: 'biceps',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Tension constante, aucun élan de buste.',
+        variants: ['Curl barre EZ', 'Curl pupitre machine'],
+        aliases: ['cable curl']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Extension triceps poulie haute',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 75,
+        loadingProfile: 'machine_stack',
+        instructions: 'Coudes collés, extension complète, retour maîtrisé.',
+        variants: ['Pushdown corde', 'Extension nuque haltère'],
+        aliases: ['triceps pushdown']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Pushdown corde',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Sépare la corde en bas sans bouger les coudes.',
+        variants: ['Extension triceps poulie haute', 'Barre au front'],
+        aliases: ['rope pushdown', 'triceps rope pushdown']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Barre au front',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'isolation',
+        equipment: 'barre',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Descente vers le front ou derrière la tête, coudes fixes.',
+        variants: ['Pushdown corde', 'Extension nuque haltère'],
+        aliases: ['skull crusher']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Extension nuque haltère',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'isolation',
+        equipment: 'haltère',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 75,
+        instructions: 'Cherche l’étirement, garde les coudes serrés.',
+        variants: ['Barre au front', 'Extension triceps poulie haute'],
+        aliases: ['overhead triceps extension']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Dips machine',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        loadingProfile: 'machine_stack',
+        instructions: 'Garde le buste stable et pousse jusqu’à l’extension.',
+        variants: ['Dips poids du corps', 'Pushdown corde']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Dips poids du corps',
+        category: 'bras',
+        muscleGroup: 'triceps',
+        type: 'compound',
+        equipment: 'poids du corps',
+        sets: 3,
+        repsMin: 6,
+        repsMax: 12,
+        rest: 120,
+        progressionMode: 'bodyweight',
+        loadingProfile: 'bodyweight',
+        instructions: 'Descends proprement, épaules basses, extension complète.',
+        variants: ['Dips machine', 'Pushdown corde'],
+        aliases: ['dips']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Squat',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 5,
+        repsMax: 8,
+        rest: 150,
+        instructions: 'Tronc gainé, genoux suivis, profondeur maîtrisée.',
+        variants: ['Hack squat', 'Presse à cuisses'],
+        aliases: ['back squat']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Hack squat',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        loadingProfile: 'machine_stack',
+        instructions: 'Contrôle la descente et pousse au milieu du pied.',
+        variants: ['Squat', 'Presse à cuisses']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Presse à cuisses',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'compound',
+        equipment: 'machine',
+        sets: 4,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 120,
+        loadingProfile: 'plate_stack',
+        instructions: 'Amplitude contrôlée, bas du dos collé, poussée fluide.',
+        variants: ['Hack squat', 'Fentes marchées'],
+        aliases: ['leg press']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Fentes marchées',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'compound',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 16,
+        rest: 90,
+        instructions: 'Grand pas, buste haut, genou contrôlé.',
+        variants: ['Split squat bulgare', 'Presse à cuisses'],
+        aliases: ['walking lunges']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Split squat bulgare',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'compound',
+        equipment: 'haltères',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 90,
+        instructions: 'Descente verticale, appui stable, amplitude franche.',
+        variants: ['Fentes marchées', 'Hack squat'],
+        aliases: ['bulgarian split squat']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Leg extension',
+        category: 'jambes',
+        muscleGroup: 'quadriceps',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Pause légère en haut, descente lente, pas d’élan.'
+    }),
+    createExerciseLibraryEntry({
+        name: 'Leg curl allongé',
+        category: 'jambes',
+        muscleGroup: 'ischio-jambiers',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 10,
+        repsMax: 15,
+        rest: 60,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Garde le bassin calé et contrôle la négative.',
+        variants: ['Soulevé de terre roumain', 'Hip thrust'],
+        aliases: ['lying leg curl']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Soulevé de terre roumain',
+        category: 'jambes',
+        muscleGroup: 'ischio-jambiers',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 6,
+        repsMax: 10,
+        rest: 120,
+        instructions: 'Hanches en arrière, tibias quasi fixes, grand étirement ischios.',
+        variants: ['Hip thrust', 'Leg curl allongé'],
+        aliases: ['romanian deadlift', 'rdl']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Hip thrust',
+        category: 'jambes',
+        muscleGroup: 'fessiers',
+        type: 'compound',
+        equipment: 'barre',
+        sets: 4,
+        repsMin: 8,
+        repsMax: 12,
+        rest: 120,
+        instructions: 'Verrouille les fessiers en haut, menton rentré, tibias verticaux.',
+        variants: ['Soulevé de terre roumain', 'Split squat bulgare']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Mollets debout machine',
+        category: 'jambes',
+        muscleGroup: 'mollets',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 4,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 45,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Étirement complet en bas, pointe forte en haut.',
+        aliases: ['standing calf raise']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Mollets assis machine',
+        category: 'jambes',
+        muscleGroup: 'mollets',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 4,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 45,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Pause courte en haut, contrôle total en bas.',
+        aliases: ['seated calf raise']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Crunch machine',
+        category: 'abdominaux',
+        muscleGroup: 'abdominaux',
+        type: 'isolation',
+        equipment: 'machine',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 45,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Enroule la colonne, souffle fort, amplitude contrôlée.',
+        aliases: ['abdominal crunch machine']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Cable crunch',
+        category: 'abdominaux',
+        muscleGroup: 'abdominaux',
+        type: 'isolation',
+        equipment: 'poulie',
+        sets: 3,
+        repsMin: 12,
+        repsMax: 20,
+        rest: 45,
+        rir: 1,
+        loadingProfile: 'machine_stack',
+        instructions: 'Enroule le buste, hanches fixes, contrôle tout le long.'
+    }),
+    createExerciseLibraryEntry({
+        name: 'Relevé de jambes suspendu',
+        category: 'abdominaux',
+        muscleGroup: 'abdominaux',
+        type: 'compound',
+        equipment: 'poids du corps',
+        sets: 3,
+        repsMin: 8,
+        repsMax: 15,
+        rest: 60,
+        progressionMode: 'bodyweight',
+        loadingProfile: 'bodyweight',
+        instructions: 'Monte sans balancer, rétroversion du bassin en haut.',
+        aliases: ['hanging leg raise']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Tapis de course',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 10,
+        repsMax: 30,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Note la vitesse ou l’inclinaison dans la charge si tu veux la suivre.',
+        aliases: ['treadmill', 'course', 'marche inclinée']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Rameur',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 8,
+        repsMax: 20,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Tu peux mettre un niveau, une allure ou des watts dans la charge.',
+        aliases: ['rower', 'rowing erg', 'erg']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Vélo assis',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 10,
+        repsMax: 30,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau ou résistance si tu veux la conserver.',
+        aliases: ['bike', 'stationary bike', 'vélo']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Vélo spinning',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 10,
+        repsMax: 30,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut servir de résistance.',
+        aliases: ['spin bike']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Vélo elliptique',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 10,
+        repsMax: 30,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau si tu veux le suivre.',
+        aliases: ['elliptique', 'elliptical']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Stair climber',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 8,
+        repsMax: 20,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau ou vitesse.',
+        aliases: ['stairmaster', 'escalier']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Air bike',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 8,
+        repsMax: 20,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Charge = intensité / niveau si tu la suis.',
+        aliases: ['assault bike']
+    }),
+    createExerciseLibraryEntry({
+        name: 'Ski erg',
+        category: 'cardio',
+        equipment: 'cardio',
+        sets: 1,
+        repsMin: 8,
+        repsMax: 20,
+        rest: 0,
+        rir: 3,
+        trackingMode: 'cardio',
+        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau, allure ou watts.',
+        aliases: ['skierg']
+    })
 ];
 
 // Paramètres de périodisation par défaut
@@ -165,33 +1214,41 @@ const VOLUME_ADJUSTMENT_MATRIX = {
 const LMS_SCALE = {
     0: {
         label: 'Frais',
-        emoji: '💪',
+        iconKey: 'recovery-fresh',
         description: 'Aucune courbature, muscle prêt',
         interpretation: 'Récupération complète. Tissu prêt pour stimulus maximal.',
         mrvStatus: 'below_mrv'
     },
     1: {
         label: 'Prêt',
-        emoji: '👍',
+        iconKey: 'recovery-ready',
         description: 'Légère raideur, disparaît à l\'échauffement',
         interpretation: 'Timing optimal. Remodelage tissulaire probablement terminé.',
         mrvStatus: 'at_mav'
     },
     2: {
         label: 'Courbaturé',
-        emoji: '😬',
+        iconKey: 'recovery-sore',
         description: 'Douleur distincte, persiste à l\'échauffement',
         interpretation: 'Récupération incomplète. Dommages encore en réparation.',
         mrvStatus: 'approaching_mrv'
     },
     3: {
         label: 'Épuisé',
-        emoji: '🤕',
+        iconKey: 'recovery-exhausted',
         description: 'Douloureux au toucher ou au mouvement',
         interpretation: 'Échec de récupération. Dommages excessifs.',
         mrvStatus: 'exceeded_mrv'
     }
 };
+
+function renderRecoveryIcon(score, options = {}) {
+    const level = LMS_SCALE[score];
+    return renderAppIcon(level?.iconKey || 'recovery-ready', {
+        label: level?.label || 'Récupération',
+        ...options
+    });
+}
 
 // Volume modifiers based on LMS score and performance trend
 // Key insight: LMS modulates MRV dynamically, not linearly

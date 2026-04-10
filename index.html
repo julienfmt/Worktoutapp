@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="streak-score.css">
 </head>
@@ -330,6 +330,7 @@
                                     <span id="coaching-suggested-weight">--</span>
                                     <span class="coaching-weight-trend" id="coaching-weight-trend"></span>
                                 </div>
+                                <span class="coaching-suggestion-subnote" id="coaching-suggested-weight-reference" style="display: none;"></span>
                             </div>
                             <div class="coaching-suggestion coaching-suggestion-reps">
                                 <span class="coaching-suggestion-label">Reps cible</span>
@@ -664,48 +665,110 @@
             </main>
 
             <!-- Timer Overlay -->
-            <div class="timer-overlay" id="timer-overlay">
+            <div class="timer-overlay" id="timer-overlay" data-theme="iris" data-motion="float" data-ornament="sparkles">
                 <div class="timer-content">
+                    <div class="timer-stage" id="timer-stage">
+                        <span class="timer-stage-badge" id="timer-stage-badge">Repos</span>
+                        <p class="timer-stage-copy" id="timer-stage-copy"></p>
+                    </div>
+
+                    <div class="timer-context-card" id="timer-context-card">
+                        <div class="timer-context-header">
+                            <span class="timer-context-kicker">Prochaine série</span>
+                            <span class="timer-context-progress" id="timer-context-progress">2/4</span>
+                        </div>
+                        <div class="timer-context-title" id="timer-context-title">Exercice</div>
+                        <div class="timer-context-metrics" id="timer-context-metrics"></div>
+                        <p class="timer-context-note" id="timer-context-note"></p>
+                    </div>
+
                     <div class="timer-ring">
+                        <div class="timer-ring-ornaments" aria-hidden="true">
+                            <span class="timer-ornament timer-ornament-1"></span>
+                            <span class="timer-ornament timer-ornament-2"></span>
+                            <span class="timer-ornament timer-ornament-3"></span>
+                            <span class="timer-ornament timer-ornament-4"></span>
+                            <span class="timer-ornament timer-ornament-5"></span>
+                            <span class="timer-ornament timer-ornament-6"></span>
+                        </div>
+                        <div class="timer-ring-core-fx" aria-hidden="true">
+                            <span class="timer-core-orb timer-core-orb-1"></span>
+                            <span class="timer-core-orb timer-core-orb-2"></span>
+                            <span class="timer-core-orb timer-core-orb-3"></span>
+                        </div>
                         <svg class="timer-ring-svg" viewBox="0 0 200 200">
                             <circle class="timer-ring-bg" cx="100" cy="100" r="90" />
                             <circle class="timer-ring-progress" id="timer-ring-progress" cx="100" cy="100" r="90" />
                         </svg>
                         <div class="timer-ring-inner">
-                            <div class="timer-label">Repos</div>
+                            <div class="timer-label" id="timer-label">Repos</div>
                             <div class="timer-countdown" id="timer-countdown">90</div>
                         </div>
                     </div>
                     
-                    <!-- RPE Slider ludique -->
-                    <div class="rpe-section" id="rpe-section">
-                        <div class="rpe-question">Comment était cette série ?</div>
-                        <div class="rpe-slider-container">
-                            <input type="range" id="rpe-slider" class="rpe-slider" min="6" max="10" step="1" value="8">
-                            <div class="rpe-labels">
-                                <span data-rpe="6">😎</span>
-                                <span data-rpe="7">🙂</span>
-                                <span data-rpe="8">😤</span>
-                                <span data-rpe="9">🥵</span>
-                                <span data-rpe="10">💀</span>
-                            </div>
+                    <div class="rpe-section" id="rpe-section" data-touched="false">
+                        <div class="rpe-header">
+                            <div class="rpe-question">RPE</div>
+                        </div>
+                        <input type="range" id="rpe-slider" class="rpe-slider" min="6" max="10" step="1" value="8" hidden>
+                        <div class="rpe-choices" id="rpe-choices">
+                            <button type="button" class="rpe-chip" data-rpe="6">
+                                <span class="rpe-chip-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16">
+                                        <circle cx="8" cy="8" r="4.5"></circle>
+                                        <circle cx="11.5" cy="4.5" r="1" fill="currentColor" stroke="none"></circle>
+                                    </svg>
+                                </span>
+                                <span class="rpe-chip-label">Facile</span>
+                            </button>
+                            <button type="button" class="rpe-chip" data-rpe="7">
+                                <span class="rpe-chip-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16">
+                                        <path d="M4 8.2l2.2 2.2L12 4.8"></path>
+                                    </svg>
+                                </span>
+                                <span class="rpe-chip-label">OK</span>
+                            </button>
+                            <button type="button" class="rpe-chip" data-rpe="8">
+                                <span class="rpe-chip-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16">
+                                        <path d="M8 2.5l1.4 3.1L12.5 7 9.4 8.4 8 11.5 6.6 8.4 3.5 7l3.1-1.4L8 2.5z"></path>
+                                    </svg>
+                                </span>
+                                <span class="rpe-chip-label">Propre</span>
+                            </button>
+                            <button type="button" class="rpe-chip" data-rpe="9">
+                                <span class="rpe-chip-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16">
+                                        <path d="M3.5 10.5l2.4-3 2 2 4-5"></path>
+                                    </svg>
+                                </span>
+                                <span class="rpe-chip-label">Dur</span>
+                            </button>
+                            <button type="button" class="rpe-chip" data-rpe="10">
+                                <span class="rpe-chip-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 16 16">
+                                        <path d="M5 5l6 6M11 5l-6 6"></path>
+                                    </svg>
+                                </span>
+                                <span class="rpe-chip-label">Échec</span>
+                            </button>
                         </div>
                         <div class="rpe-feedback" id="rpe-feedback">
-                            <span class="rpe-value">RPE 8</span>
-                            <span class="rpe-description">Série normale • tu es allé au bout proprement</span>
+                            <span class="rpe-description">Optionnel</span>
                         </div>
                     </div>
                     
                     <div class="timer-controls">
-                        <button class="btn btn-timer" id="btn-timer-minus">-15s</button>
-                        <button class="btn btn-timer-skip" id="btn-timer-skip">Passer</button>
-                        <button class="btn btn-timer" id="btn-timer-plus">+15s</button>
+                        <button class="btn btn-timer" id="btn-timer-minus" type="button">-15s</button>
+                        <button class="btn btn-timer-skip" id="btn-timer-skip" type="button">Passer</button>
+                        <button class="btn btn-timer" id="btn-timer-plus" type="button">+15s</button>
                     </div>
-                    <button class="btn btn-timer-stop" id="btn-timer-stop">
+                    <button class="btn btn-timer-stop" id="btn-timer-stop" type="button">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                             <rect x="6" y="6" width="12" height="12" rx="2"/>
                         </svg>
-                        Arrêter le timer
+                        <span id="btn-timer-stop-label">Arrêter le timer</span>
                     </button>
                 </div>
             </div>
@@ -778,6 +841,30 @@
                 <div class="sheet-handle"></div>
                 <div id="edit-session-detail-content">
                     <!-- Contenu généré dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Bibliothèque d'exercices -->
+        <div class="bottom-sheet" id="sheet-exercise-library">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large">
+                <div class="sheet-handle"></div>
+                <h3>Ajouter un exercice</h3>
+                <div class="exercise-library-toolbar">
+                    <input type="text" id="exercise-library-search" class="form-input" placeholder="Rechercher un exercice, une machine, un appareil...">
+                    <p class="exercise-library-helper">Choisis dans la base ou tape un nom libre pour créer un exercice custom.</p>
+                </div>
+                <div class="exercise-library-filters" id="exercise-library-filters">
+                    <!-- Catégories générées dynamiquement -->
+                </div>
+                <div class="exercise-library-custom">
+                    <button class="btn btn-outline" id="btn-create-custom-exercise" type="button">
+                        Créer cet exercice en custom
+                    </button>
+                </div>
+                <div class="exercise-library-list" id="exercise-library-list">
+                    <!-- Exercices générés dynamiquement -->
                 </div>
             </div>
         </div>
@@ -1084,7 +1171,7 @@
             <div class="sheet-content sheet-content-large">
                 <div class="sheet-handle"></div>
                 <div class="lms-header">
-                    <h3>🔬 Check-in Récupération</h3>
+                    <h3><span class="lms-title-icon"></span>Check-in Récupération</h3>
                     <p class="lms-subtitle">Comment se sentent tes muscles aujourd'hui ?</p>
                 </div>
                 
@@ -1093,7 +1180,7 @@
                 </div>
                 
                 <div class="lms-info-card">
-                    <div class="lms-info-icon">💡</div>
+                    <div class="lms-info-icon"></div>
                     <div class="lms-info-text">
                         <strong>À quoi ça sert ?</strong>
                         <p>Le coach adapte surtout ses suggestions selon ta récupération. Le plan de base de la séance reste ta référence.</p>
@@ -1125,7 +1212,7 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-adaptation">
                 <div class="adaptation-header">
-                    <span class="adaptation-icon" id="adaptation-icon">🚀</span>
+                    <span class="adaptation-icon" id="adaptation-icon"></span>
                     <h3 id="adaptation-title">Prêt pour progresser !</h3>
                 </div>
                 <div class="adaptation-bar-container">
@@ -1153,6 +1240,7 @@
     <script src="db.js"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
+    <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
