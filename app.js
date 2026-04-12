@@ -649,7 +649,7 @@ class App {
                 nextLabel: 'Suivant'
             },
             profile: {
-                title: 'Créer ton programme et tes paramètres',
+                title: 'Crée ton programme',
                 nextLabel: 'Suivant'
             },
             program: {
@@ -682,6 +682,7 @@ class App {
 
         this.updateOnboardingGoalChips(objective);
         this.updateInstallInstructions();
+        this.updateOnboardingWeeklyGoalUI(goal);
         this.renderOnboardingStep();
 
         modal.classList.add('active');
@@ -694,22 +695,69 @@ class App {
 
     updateInstallInstructions() {
         const platform = this.getInstallPlatform();
-        const description = document.getElementById('onboarding-install-description');
         const grid = document.getElementById('onboarding-install-grid');
 
-        if (!description || !grid) return;
+        if (!grid) return;
 
-        if (platform === 'ios') {
-            description.textContent = 'Sur iPhone, passe bien par Safari puis ajoute l’app à l’écran d’accueil. C’est ce qui donne le comportement le plus proche d’une vraie application.';
-        } else if (platform === 'android') {
-            description.textContent = 'Sur Android, installe l’app depuis le navigateur pour l’ouvrir comme une vraie application et garder un accès direct sur l’écran d’accueil.';
-        } else {
-            description.textContent = 'Sur mobile, installe l’app sur l’écran d’accueil pour un accès plus simple et un stockage local plus fiable.';
+        const iosCard = grid.querySelector('.onboarding-install-card-ios');
+        const androidCard = grid.querySelector('.onboarding-install-card-android');
+
+        grid.querySelectorAll('.onboarding-install-card').forEach((card) => {
+            card.style.order = '';
+            card.classList.remove('is-priority');
+        });
+
+        if (platform === 'android') {
+            if (androidCard) {
+                androidCard.style.order = '-1';
+                androidCard.classList.add('is-priority');
+            }
+        } else if (platform === 'ios') {
+            iosCard?.classList.add('is-priority');
+        }
+    }
+
+    updateOnboardingWeeklyGoalUI(value) {
+        const goal = Math.max(1, Math.min(7, parseInt(value, 10) || 3));
+        const progress = (goal - 1) / 6;
+        const lightness = 88 - (progress * 36);
+        const saturation = 52 + (progress * 28);
+        const accent = `hsl(244 ${saturation}% ${lightness}%)`;
+        const accentMid = `hsl(246 ${Math.max(44, saturation - 8)}% ${Math.min(94, lightness + 12)}%)`;
+        const accentSoft = `hsl(248 100% ${Math.min(98, lightness + 15)}%)`;
+        const accentGlow = `hsl(244 ${Math.min(96, saturation + 6)}% ${Math.max(40, lightness - 4)}% / ${0.14 + (progress * 0.22)})`;
+        const accentBorder = `hsl(244 ${Math.min(92, saturation + 4)}% ${Math.max(46, lightness - 2)}% / 0.24)`;
+        const captions = [
+            'Départ en douceur',
+            'Rythme tranquille',
+            'Bon rythme',
+            'Très solide',
+            'Ça monte fort',
+            'Gros rythme',
+            'Mode machine'
+        ];
+
+        const card = document.getElementById('onboarding-weekly-card');
+        const valueBadge = document.getElementById('onboarding-weekly-goal-value');
+        const caption = document.getElementById('onboarding-weekly-goal-caption');
+        const meter = document.getElementById('onboarding-weekly-meter');
+
+        if (valueBadge) valueBadge.textContent = goal;
+        if (caption) caption.textContent = captions[goal - 1] || captions[2];
+
+        if (card) {
+            card.style.setProperty('--onboarding-goal-accent', accent);
+            card.style.setProperty('--onboarding-goal-mid', accentMid);
+            card.style.setProperty('--onboarding-goal-soft', accentSoft);
+            card.style.setProperty('--onboarding-goal-glow', accentGlow);
+            card.style.setProperty('--onboarding-goal-border', accentBorder);
         }
 
-        grid.querySelectorAll('.onboarding-install-card').forEach((card, index) => {
-            card.style.order = platform === 'android' && index === 0 ? '2' : '';
-        });
+        if (meter) {
+            meter.querySelectorAll('span').forEach((dot, index) => {
+                dot.classList.toggle('active', index < goal);
+            });
+        }
     }
 
     renderOnboardingStep() {
@@ -828,21 +876,27 @@ class App {
     }
 
     async copyOnboardingPrompt() {
-        const saved = await this.saveOnboardingProfile();
-        if (!saved) return;
+        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
+        if (!objective) {
+            document.getElementById('onboarding-objective')?.focus();
+            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
+            return;
+        }
 
-        const prompt = this.buildChatProgramPrompt();
+        const prompt = this.buildChatProgramPrompt({ objective, weeklyGoal });
         const copied = await this.copyTextToClipboard(prompt);
 
         if (copied) {
-            this.showCoachToast('Prompt copié. Colle-le dans ChatGPT, récupère le fichier ou le bloc JSON, puis importe-le.', 'hot', '📋');
+            await db.setSetting('trainingObjective', objective);
+            await db.setSetting('weeklyGoal', weeklyGoal);
+            this.showCoachToast('Prompt copié. Colle-le dans ChatGPT, réponds aux questions, puis importe le fichier.', 'hot', '📋');
         } else {
-            alert(prompt);
+            this.showCoachToast('Copie impossible. Réessaie en restant appuyé puis colle dans ChatGPT.', 'warning', '📋');
         }
     }
 
-    buildChatProgramPrompt() {
-        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
+    buildChatProgramPrompt(profile = null) {
+        const { objective, weeklyGoal } = profile || this.getOnboardingProfileValues();
         const muscleIds = MUSCLE_GROUPS.map(group => group.id).join(', ');
         const examplePayload = {
             format: 'worktout-program-v1',
@@ -967,11 +1021,29 @@ class App {
 
         const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.setAttribute('readonly', '');
         textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
+        textarea.style.top = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.padding = '0';
+        textarea.style.border = '0';
+        textarea.style.opacity = '0.01';
+        textarea.style.fontSize = '16px';
+        textarea.setAttribute('aria-hidden', 'true');
         document.body.appendChild(textarea);
+        textarea.focus();
         textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        if (window.getSelection && document.createRange) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(textarea);
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+            textarea.setSelectionRange(0, textarea.value.length);
+        }
 
         let copied = false;
         try {
@@ -12370,7 +12442,7 @@ class App {
         const onboardingGoalInput = document.getElementById('onboarding-weekly-goal');
         if (onboardingGoalInput) {
             onboardingGoalInput.oninput = (e) => {
-                document.getElementById('onboarding-weekly-goal-value').textContent = e.target.value;
+                this.updateOnboardingWeeklyGoalUI(e.target.value);
             };
         }
 

@@ -835,26 +835,22 @@
 
                     <div class="onboarding-body">
                         <section class="onboarding-panel active" id="onboarding-panel-install" data-step="install">
-                            <div class="onboarding-hero-card">
-                                <div class="onboarding-hero-icon">📲</div>
-                                <div>
-                                    <h3>Ajoute l'app à ton écran d'accueil</h3>
-                                    <p id="onboarding-install-description">
-                                        Installe la PWA pour garder tes données plus proprement et lancer l'app comme une vraie appli.
-                                    </p>
-                                </div>
-                            </div>
-
                             <div class="onboarding-install-grid" id="onboarding-install-grid">
-                                <div class="onboarding-install-card">
-                                    <div class="onboarding-install-label">iPhone / iPad</div>
+                                <div class="onboarding-install-card onboarding-install-card-ios">
+                                    <div class="onboarding-install-platform">
+                                        <div class="onboarding-install-label">iPhone / iPad</div>
+                                        <span class="onboarding-install-pill">Safari</span>
+                                    </div>
                                     <p>1. Clique sur le bouton partager <span aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" style="display:inline-block; vertical-align:-0.15em;"><path d="M12 3v10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.5 6.5 12 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 10.5v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>.</p>
                                     <p>2. Appuie sur la flèche vers le bas qui dit "Voir plus".</p>
                                     <p>3. Appuie sur le <strong>+</strong> "Sur l'écran d'accueil".</p>
                                     <p>4. Appuie sur "Ajouter" et c'est bon.</p>
                                 </div>
-                                <div class="onboarding-install-card">
-                                    <div class="onboarding-install-label">Android</div>
+                                <div class="onboarding-install-card onboarding-install-card-android">
+                                    <div class="onboarding-install-platform">
+                                        <div class="onboarding-install-label">Android</div>
+                                        <span class="onboarding-install-pill">Chrome</span>
+                                    </div>
                                     <p>1. Ouvre l'app dans Chrome ou le navigateur de ton téléphone.</p>
                                     <p>2. Ouvre le menu du navigateur en haut à droite.</p>
                                     <p>3. Choisis "Installer l'application" ou "Ajouter à l'écran d'accueil".</p>
@@ -863,16 +859,11 @@
                             </div>
 
                             <div class="onboarding-tip">
-                                Si l'app est déjà installée, cette étape sera sautée automatiquement. Si tu ne vois pas l'option, vérifie que l'app est bien ouverte dans un navigateur mobile classique.
+                                Si l'app est déjà installée, cette étape se saute toute seule. Si tu ne vois pas l'option, ouvre l'app dans le navigateur de ton téléphone.
                             </div>
                         </section>
 
                         <section class="onboarding-panel" id="onboarding-panel-profile" data-step="profile">
-                            <div class="onboarding-section-head">
-                                <h3>Créer ton programme et tes paramètres</h3>
-                                <p>Définis d'abord ton objectif et ton rythme hebdo.</p>
-                            </div>
-
                             <div class="form-group">
                                 <label for="onboarding-objective">Ton objectif principal</label>
                                 <input
@@ -881,9 +872,6 @@
                                     class="form-input"
                                     placeholder="Ex: prise de masse, reprise, recomposition, force..."
                                 >
-                                <p class="onboarding-field-helper">
-                                    Aujourd'hui, ce champ sert surtout à cadrer la création initiale du programme et le prompt ChatGPT. Il ne change pas encore directement le coach pendant la séance.
-                                </p>
                             </div>
 
                             <div class="onboarding-goal-chips" id="onboarding-goal-chips">
@@ -894,65 +882,73 @@
                                 <button type="button" class="onboarding-chip" data-value="Force">Force</button>
                             </div>
 
-                            <div class="onboarding-weekly-card">
+                            <div class="onboarding-weekly-card" id="onboarding-weekly-card">
                                 <div class="onboarding-weekly-head">
                                     <div>
                                         <div class="onboarding-install-label">Nombre de séances par semaine</div>
-                                        <p>Ce réglage pilote le streak et sert aussi à préparer le programme importé ou généré avec ChatGPT.</p>
+                                        <p id="onboarding-weekly-goal-caption">Bon rythme</p>
                                     </div>
                                     <div class="onboarding-weekly-value" id="onboarding-weekly-goal-value">3</div>
                                 </div>
+                                <div class="onboarding-weekly-meter" id="onboarding-weekly-meter" aria-hidden="true">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
                                 <input type="range" id="onboarding-weekly-goal" min="1" max="7" value="3">
                                 <div class="onboarding-weekly-scale">
-                                    <span>1</span>
-                                    <span>4</span>
-                                    <span>7</span>
+                                    <span>Cool</span>
+                                    <span>Solide</span>
+                                    <span>Max</span>
                                 </div>
                             </div>
                         </section>
 
                         <section class="onboarding-panel" id="onboarding-panel-program" data-step="program">
-                            <div class="onboarding-section-head">
-                                <h3>Créer ta première séance</h3>
-                                <p>Choisis la manière la plus simple pour construire ton programme.</p>
-                            </div>
-
                             <div class="onboarding-choice-grid">
                                 <button type="button" class="onboarding-choice-card" id="btn-onboarding-import">
-                                    <div class="onboarding-choice-icon">📥</div>
+                                    <div class="onboarding-choice-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24">
+                                            <path d="M12 4v10"></path>
+                                            <path d="M8 10l4 4 4-4"></path>
+                                            <path d="M4 16.5v1a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-1"></path>
+                                        </svg>
+                                    </div>
                                     <div class="onboarding-choice-copy">
-                                        <div class="onboarding-choice-title">Importer un fichier</div>
-                                        <p>Importe un backup ou un programme JSON déjà prêt.</p>
+                                        <div class="onboarding-choice-title">Importer</div>
+                                        <p>Importe un programme déjà tout fait.</p>
                                     </div>
                                 </button>
 
                                 <button type="button" class="onboarding-choice-card" id="btn-onboarding-manual">
-                                    <div class="onboarding-choice-icon">🛠️</div>
+                                    <div class="onboarding-choice-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24">
+                                            <path d="M4 20l4.5-1 9-9a2.12 2.12 0 1 0-3-3l-9 9L4 20z"></path>
+                                            <path d="M13.5 7.5l3 3"></path>
+                                        </svg>
+                                    </div>
                                     <div class="onboarding-choice-copy">
                                         <div class="onboarding-choice-title">Créer manuellement</div>
-                                        <p>On te crée une première séance vide et tu la remplis dans l'éditeur.</p>
+                                        <p>Crée ton programme pas à pas dans l'app.</p>
                                     </div>
                                 </button>
 
                                 <button type="button" class="onboarding-choice-card" id="btn-onboarding-chat">
-                                    <div class="onboarding-choice-icon">💬</div>
+                                    <div class="onboarding-choice-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24">
+                                            <title>OpenAI icon</title>
+                                            <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"></path>
+                                        </svg>
+                                    </div>
                                     <div class="onboarding-choice-copy">
-                                        <div class="onboarding-choice-title">Demander à Chat</div>
-                                        <p>Copie un message prêt à l'emploi, colle-le dans ChatGPT, réponds à 2 questions simples, puis récupère le programme à importer.</p>
+                                        <div class="onboarding-choice-title">Demander à ChatGPT</div>
+                                        <p>Colle le message dans ChatGPT et il te crée un programme compatible avec l'app.</p>
                                     </div>
                                 </button>
-                            </div>
-
-                            <div class="onboarding-chat-helper" id="onboarding-chat-helper">
-                                <div class="onboarding-chat-helper-title">Comment ça marche</div>
-                                <p>
-                                    Le bouton "Demander à Chat" copie un prompt détaillé. Tu le colles dans ChatGPT, ChatGPT te demande d'abord
-                                    combien de séances tu veux faire, quel type de répartition tu veux et quelles machines tu as dans ta salle, puis il te propose un brouillon avant l'export final.
-                                </p>
-                                <p>
-                                    Une fois que tu valides le programme, il doit te fournir un vrai fichier <strong>programme-muscu.json</strong> à télécharger ou, sinon,
-                                    un bloc JSON prêt à enregistrer, puis tu l'importes dans l'app avec le bouton Importer.
-                                </p>
                             </div>
                         </section>
                     </div>
