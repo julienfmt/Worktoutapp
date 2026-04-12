@@ -523,6 +523,10 @@ class App {
         };
         this.homeChartsFrame = null;
         this.challengeRevealTimeout = null;
+        this.pendingImportContext = 'default';
+        this.onboardingVisible = false;
+        this.onboardingStepOrder = ['install', 'profile', 'program'];
+        this.currentOnboardingStepIndex = 0;
     }
 
     async init() {
@@ -548,9 +552,619 @@ class App {
         await this.updateStorageInfo();
         setInterval(() => this.updateStorageInfo(), 5000);
         await this.renderHome();
-        
-        // Check for pending session to resume
-        await this.checkPendingSession();
+
+        const onboardingShown = await this.maybeStartOnboarding();
+        if (!onboardingShown) {
+            await this.checkPendingSession();
+        }
+    }
+
+    async maybeStartOnboarding() {
+        const onboardingCompleted = await db.getSetting('onboardingCompleted');
+        if (onboardingCompleted === true) return false;
+
+        const sessions = await db.getSessions();
+        const history = await db.getAll('workoutHistory');
+
+        if (sessions.length > 0 || history.length > 0) {
+            await db.setSetting('onboardingCompleted', true);
+            return false;
+        }
+
+        await this.showOnboarding();
+        return true;
+    }
+
+    isAppInstalled() {
+        const standaloneMedia = window.matchMedia?.('(display-mode: standalone)')?.matches;
+        const iosStandalone = window.navigator.standalone === true;
+        return Boolean(standaloneMedia || iosStandalone);
+    }
+
+    getInstallPlatform() {
+        const ua = navigator.userAgent || '';
+        if (/iphone|ipad|ipod/i.test(ua)) return 'ios';
+        if (/android/i.test(ua)) return 'android';
+        return 'desktop';
+    }
+
+    getOnboardingStepMeta(stepId) {
+        const labels = {
+            install: {
+                title: 'Installe l\'app',
+                nextLabel: 'Suivant'
+            },
+            profile: {
+                title: 'Créer ton programme et tes paramètres',
+                nextLabel: 'Suivant'
+            },
+            program: {
+                title: 'Créer ta première séance',
+                nextLabel: ''
+            }
+        };
+
+        return labels[stepId] || labels.profile;
+    }
+
+    async showOnboarding() {
+        const goal = (await db.getSetting('weeklyGoal')) ?? 3;
+        const objective = (await db.getSetting('trainingObjective')) ?? '';
+        const installed = this.isAppInstalled();
+        const stepOrder = installed ? ['profile', 'program'] : ['install', 'profile', 'program'];
+        const modal = document.getElementById('modal-onboarding');
+
+        this.onboardingVisible = true;
+        this.onboardingStepOrder = stepOrder;
+        this.currentOnboardingStepIndex = 0;
+
+        const goalInput = document.getElementById('onboarding-weekly-goal');
+        const goalValue = document.getElementById('onboarding-weekly-goal-value');
+        const objectiveInput = document.getElementById('onboarding-objective');
+
+        if (goalInput) goalInput.value = goal;
+        if (goalValue) goalValue.textContent = goal;
+        if (objectiveInput) objectiveInput.value = objective;
+
+        this.updateOnboardingGoalChips(objective);
+        this.updateInstallInstructions();
+        this.renderOnboardingStep();
+
+        modal.classList.add('active');
+    }
+
+    hideOnboarding() {
+        this.onboardingVisible = false;
+        document.getElementById('modal-onboarding').classList.remove('active');
+    }
+
+    updateInstallInstructions() {
+        const platform = this.getInstallPlatform();
+        const description = document.getElementById('onboarding-install-description');
+        const grid = document.getElementById('onboarding-install-grid');
+
+        if (!description || !grid) return;
+
+        if (platform === 'ios') {
+            description.textContent = 'Sur iPhone, passe bien par Safari puis ajoute l’app à l’écran d’accueil. C’est ce qui donne le comportement le plus proche d’une vraie application.';
+        } else if (platform === 'android') {
+            description.textContent = 'Sur Android, installe l’app depuis le navigateur pour l’ouvrir comme une vraie application et garder un accès direct sur l’écran d’accueil.';
+        } else {
+            description.textContent = 'Sur mobile, installe l’app sur l’écran d’accueil pour un accès plus simple et un stockage local plus fiable.';
+        }
+
+        grid.querySelectorAll('.onboarding-install-card').forEach((card, index) => {
+            card.style.order = platform === 'android' && index === 0 ? '2' : '';
+        });
+    }
+
+    renderOnboardingStep() {
+        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex] || 'profile';
+        const meta = this.getOnboardingStepMeta(currentStep);
+        const total = this.onboardingStepOrder.length;
+
+        document.querySelectorAll('.onboarding-panel').forEach((panel) => {
+            panel.classList.toggle('active', panel.dataset.step === currentStep);
+        });
+
+        const title = document.getElementById('onboarding-title');
+        if (title) title.textContent = meta.title;
+
+        const badge = document.getElementById('onboarding-step-badge');
+        if (badge) badge.textContent = `Étape ${this.currentOnboardingStepIndex + 1}/${total}`;
+
+        const backBtn = document.getElementById('btn-onboarding-back');
+        if (backBtn) {
+            backBtn.style.visibility = this.currentOnboardingStepIndex === 0 ? 'hidden' : 'visible';
+        }
+
+        const skipBtn = document.getElementById('btn-onboarding-skip');
+        if (skipBtn) {
+            const isProgramStep = currentStep === 'program';
+            skipBtn.style.display = isProgramStep ? 'inline-flex' : 'none';
+        }
+
+        const nextBtn = document.getElementById('btn-onboarding-next');
+        if (nextBtn) {
+            const isProgramStep = currentStep === 'program';
+            nextBtn.style.display = isProgramStep ? 'none' : 'inline-flex';
+            nextBtn.textContent = meta.nextLabel;
+        }
+
+        const stepper = document.getElementById('onboarding-stepper');
+        if (stepper) {
+            stepper.style.gridTemplateColumns = `repeat(${Math.max(total, 1)}, minmax(0, 1fr))`;
+            stepper.innerHTML = this.onboardingStepOrder.map((stepId, index) => `
+                <span class="onboarding-stepper-dot ${index === this.currentOnboardingStepIndex ? 'active' : ''}" data-step="${stepId}"></span>
+            `).join('');
+        }
+    }
+
+    updateOnboardingGoalChips(activeValue = '') {
+        const normalized = (activeValue || '').trim().toLowerCase();
+        document.querySelectorAll('#onboarding-goal-chips .onboarding-chip').forEach((chip) => {
+            chip.classList.toggle('active', chip.dataset.value.trim().toLowerCase() === normalized);
+        });
+    }
+
+    getOnboardingProfileValues() {
+        const weeklyGoalValue = parseInt(document.getElementById('onboarding-weekly-goal')?.value || '3', 10);
+        return {
+            objective: (document.getElementById('onboarding-objective')?.value || '').trim(),
+            weeklyGoal: Number.isFinite(weeklyGoalValue) ? weeklyGoalValue : 3
+        };
+    }
+
+    async saveOnboardingProfile() {
+        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
+
+        if (!objective) {
+            document.getElementById('onboarding-objective')?.focus();
+            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
+            return false;
+        }
+
+        await db.setSetting('trainingObjective', objective);
+        await db.setSetting('weeklyGoal', weeklyGoal);
+        return true;
+    }
+
+    async nextOnboardingStep() {
+        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex];
+        if (currentStep === 'profile') {
+            const saved = await this.saveOnboardingProfile();
+            if (!saved) return;
+        }
+
+        if (this.currentOnboardingStepIndex < this.onboardingStepOrder.length - 1) {
+            this.currentOnboardingStepIndex += 1;
+            this.renderOnboardingStep();
+        }
+    }
+
+    previousOnboardingStep() {
+        if (this.currentOnboardingStepIndex === 0) return;
+        this.currentOnboardingStepIndex -= 1;
+        this.renderOnboardingStep();
+    }
+
+    async completeOnboarding({ refreshHome = true } = {}) {
+        await db.setSetting('onboardingCompleted', true);
+        this.hideOnboarding();
+
+        if (refreshHome) {
+            await this.renderHome();
+        }
+    }
+
+    async skipOnboardingProgramStep() {
+        await this.completeOnboarding({ refreshHome: true });
+    }
+
+    async startOnboardingManualCreation() {
+        const saved = await this.saveOnboardingProfile();
+        if (!saved) return;
+
+        await this.completeOnboarding({ refreshHome: true });
+        await this.createSession({
+            name: 'Séance 1',
+            openEditor: true,
+            refreshHome: true
+        });
+    }
+
+    async copyOnboardingPrompt() {
+        const saved = await this.saveOnboardingProfile();
+        if (!saved) return;
+
+        const prompt = this.buildChatProgramPrompt();
+        const copied = await this.copyTextToClipboard(prompt);
+
+        if (copied) {
+            this.showCoachToast('Prompt copié. Colle-le dans ChatGPT, récupère le fichier ou le bloc JSON, puis importe-le.', 'hot', '📋');
+        } else {
+            alert(prompt);
+        }
+    }
+
+    buildChatProgramPrompt() {
+        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
+        const muscleIds = MUSCLE_GROUPS.map(group => group.id).join(', ');
+        const examplePayload = {
+            format: 'worktout-program-v1',
+            profile: {
+                objective: objective || 'Prise de masse',
+                weeklyGoal: weeklyGoal || 3
+            },
+            sessions: [
+                {
+                    name: 'Push',
+                    estimatedDuration: 70,
+                    slots: [
+                        {
+                            name: 'Développé couché barre',
+                            sets: 4,
+                            repsMin: 6,
+                            repsMax: 8,
+                            rest: 150,
+                            rir: 2,
+                            type: 'compound',
+                            muscleGroup: 'pectoraux',
+                            instructions: 'Omoplates serrées, trajectoire contrôlée, pieds ancrés.',
+                            pool: [
+                                'Développé couché barre',
+                                'Développé couché haltères',
+                                'Développé machine convergente'
+                            ],
+                            trackingMode: 'strength'
+                        }
+                    ]
+                }
+            ]
+        };
+
+        return [
+            'Tu es un coach expert en musculation et hypertrophie. Tu dois créer un programme exploitable par une application de suivi appelée Worktout / Muscu.',
+            '',
+            'Contexte utilisateur déjà connu :',
+            `- objectif principal: ${objective || 'à préciser avec l’utilisateur'}`,
+            `- objectif de séances par semaine actuellement prévu: ${weeklyGoal || 3}`,
+            '',
+            'Déroulé obligatoire :',
+            '1. Commence par poser exactement 3 questions, en français clair et simple.',
+            '2. Question 1: "Combien de séances par semaine veux-tu faire ?"',
+            '3. Question 2: "Quel type de répartition veux-tu entre tes séances ?".',
+            '4. Explique cette question très simplement avec des exemples pour débutant :',
+            '- "full body" = tout le corps à chaque séance',
+            '- "haut / bas" = une séance haut du corps et une séance bas du corps',
+            '- "push / pull / jambes" = une séance poussée, une séance tirage, une séance jambes',
+            '- si la personne ne sait pas, propose-lui directement l’organisation la plus simple et la plus adaptée à son nombre de séances.',
+            '5. Question 3: "Quelles machines, appareils et accessoires sont disponibles dans ta salle ?".',
+            '6. Donne des exemples simples pour aider : barre, haltères, banc, cage à squat, poulies, presse à cuisses, leg curl, leg extension, machine convergente, tirage vertical, rameur, tapis, vélo, etc.',
+            '7. Si l’utilisateur a déjà donné une de ces infos, reformule-la brièvement et demande confirmation plutôt que de l’inventer.',
+            '8. Après ses réponses, ne génère PAS tout de suite le JSON final.(explique bien que tu le feras juste après cette étape',
+            '9. Commence par proposer un brouillon lisible en texte avec :',
+            '- la liste des séances prévues',
+            '- les exercices principaux de chaque séance',
+            '- les éventuelles substitutions si certaines machines ne sont pas disponibles',
+            '- une question explicite pour savoir si l’utilisateur veut changer des exercices, la répartition ou le matériel utilisé',
+            '10. Si l’utilisateur demande des modifications, ajuste le brouillon puis redemande validation.',
+            '11. Quand l’utilisateur confirme que tout est bon, demande une dernière confirmation de type : "OK, est-ce qu’on est prêt à exporter le fichier pour l’import dans l’application ?".',
+            '12. C’est seulement après cette confirmation finale que tu génères le JSON définitif. GENERE LE EN FILE. PAS DANS LE CHAT. REFLECHIS BIEN EN LE FAISANT',
+            '',
+            'Important sur la forme de réponse :',
+            '- Réponds pour une personne non initiée.',
+            '- Utilise des mots simples.',
+            '- Si tu emploies un mot technique, explique-le tout de suite.',
+            '- Le brouillon intermédiaire doit être en texte simple, pas en JSON.',
+            '',
+            'Contraintes de sortie :',
+            '- Au moment de l’export final, commence par un mini paragraphe ultra court qui explique comment récupérer le fichier pour l’import.',
+            '- Tu dois absolument essayer de fournir un vrai fichier téléchargeable nommé "programme-muscu.json".',
+            '- Si ton interface le permet, crée un vrai bouton ou une vraie pièce jointe de téléchargement pour ce fichier JSON.',
+            '- Si vraiment tu ne peux pas joindre de fichier, dis-le clairement et fournis uniquement le contenu dans un unique bloc ```json``` pour qu’il puisse être copié dans un fichier .json ou .txt.',
+            '- N’ajoute aucun commentaire dans le JSON.',
+            '- Pas de virgules finales.',
+            '- Le JSON doit être directement importable.',
+            '',
+            'Schéma JSON attendu :',
+            JSON.stringify(examplePayload, null, 2),
+            '',
+            'Règles de construction du JSON :',
+            '- "format" doit toujours valoir "worktout-program-v1".',
+            '- "profile.objective" doit résumer l’objectif principal.',
+            '- "profile.weeklyGoal" doit être un entier entre 1 et 7.',
+            '- "sessions" est un tableau de séances ordonnées.',
+            '- Chaque séance doit avoir "name", "estimatedDuration" et "slots".',
+            '- Chaque slot doit avoir au minimum: "name", "sets", "repsMin", "repsMax", "rest", "rir", "type", "trackingMode".',
+            '- "type" doit être "compound" ou "isolation".',
+            '- "trackingMode" doit être "strength" sauf pour un vrai exercice cardio, dans ce cas "cardio".',
+            `- "muscleGroup" doit idéalement utiliser l’un de ces ids: ${muscleIds}.`,
+            '- "pool" doit contenir le nom principal en premier puis 1 à 3 variantes proches quand c’est pertinent.',
+            '- Les temps de repos doivent être réalistes.',
+            '- Le programme doit être crédible pour une vraie pratique de musculation.',
+            '',
+            'Texte de récupération / import à afficher avant le JSON :',
+            '- Si tu peux joindre un fichier : "Télécharge le fichier programme-muscu.json ci-joint avec le bouton de téléchargement, puis dans l’application touche Importer et sélectionne ce fichier."',
+            '- Si tu ne peux pas joindre de fichier : "Copie le bloc JSON ci-dessous dans un fichier nommé programme-muscu.json ou programme-muscu.txt, enregistre-le sur ton appareil, puis dans l’application touche Importer et sélectionne ce fichier."',
+            '',
+            'Important :',
+            '- SORT LE FICHIER EN FILE DIRECTEMENT',
+            '- EXPLIQUE BIEN LES ETAPES A LUTILSATEUR EN LUI EXPLIQUANT QUAND TU VAS EXPORTER LE FICHIER ECT',
+            '- Ne renvoie jamais un autre format.',
+            '- N’envoie jamais de pseudo-code.',
+            '- Le bloc json doit être auto-suffisant.',
+            '- Le nombre de séances proposé doit correspondre au rythme hebdo final validé avec l’utilisateur.',
+            '- Le choix des exercices doit être compatible avec le matériel réellement présent dans la salle.',
+            '- Le résultat final doit être facile à enregistrer localement pour être importé dans l’application.',
+            '- Ta priorité finale est d’obtenir un vrai fichier téléchargeable ou, à défaut, un JSON immédiatement enregistrable.'
+        ].join('\n');
+    }
+
+    async copyTextToClipboard(text) {
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (error) {
+                console.warn('Clipboard API non disponible:', error);
+            }
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (error) {
+            console.warn('Fallback copy impossible:', error);
+        }
+
+        document.body.removeChild(textarea);
+        return copied;
+    }
+
+    extractImportJsonText(rawText) {
+        const text = (rawText || '').trim();
+        if (!text) {
+            throw new Error('Le fichier est vide.');
+        }
+
+        try {
+            JSON.parse(text);
+            return text;
+        } catch (error) {
+            const fencedMatch = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+            if (fencedMatch?.[1]) {
+                return fencedMatch[1].trim();
+            }
+
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                return text.slice(firstBrace, lastBrace + 1);
+            }
+
+            throw error;
+        }
+    }
+
+    isBackupImportPayload(data) {
+        return Array.isArray(data?.sessions) &&
+            Array.isArray(data?.slots) &&
+            (
+                Array.isArray(data?.settings) ||
+                Array.isArray(data?.workoutHistory) ||
+                Array.isArray(data?.setHistory) ||
+                Array.isArray(data?.currentWorkout) ||
+                data?.exportDate ||
+                data?.version
+            );
+    }
+
+    normalizeProgramImport(data) {
+        const source = data?.program && Array.isArray(data.program.sessions)
+            ? data.program
+            : data;
+        const sessions = Array.isArray(source?.sessions) ? source.sessions : [];
+
+        if (!sessions.length) {
+            throw new Error('Aucune séance détectée dans le fichier.');
+        }
+
+        const weeklyGoalRaw = source?.profile?.weeklyGoal ?? data?.profile?.weeklyGoal ?? data?.weeklyGoal;
+        const objectiveRaw = source?.profile?.objective ?? data?.profile?.objective ?? data?.objective;
+        const weeklyGoal = parseInt(weeklyGoalRaw, 10);
+        const objective = typeof objectiveRaw === 'string' ? objectiveRaw.trim() : '';
+        const timestamp = Date.now();
+        const normalizedSessions = [];
+        const normalizedSlots = [];
+        const sessionIdMap = new Map();
+
+        const coercePositiveInt = (value, fallback) => {
+            const parsed = parseInt(value, 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+        };
+
+        const coerceNonNegativeInt = (value, fallback) => {
+            const parsed = parseInt(value, 10);
+            return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+        };
+
+        sessions.forEach((session, sessionIndex) => {
+            const sessionName = (session?.name || session?.title || `Séance ${sessionIndex + 1}`).trim();
+            const sessionId = `session-${timestamp}-${sessionIndex + 1}`;
+            const estimatedDuration = coercePositiveInt(session?.estimatedDuration, 45);
+
+            normalizedSessions.push({
+                id: sessionId,
+                name: sessionName,
+                order: sessionIndex,
+                estimatedDuration
+            });
+
+            if (session?.id) {
+                sessionIdMap.set(session.id, sessionId);
+            }
+
+            const rawSlots = Array.isArray(session?.slots) ? session.slots : [];
+            rawSlots.forEach((rawSlot, slotIndex) => {
+                const exerciseName = String(
+                    rawSlot?.name ||
+                    rawSlot?.exercise ||
+                    rawSlot?.exerciseName ||
+                    rawSlot?.title ||
+                    ''
+                ).trim();
+
+                if (!exerciseName) return;
+
+                const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
+                    allowCardioInference: true
+                });
+
+                const definition = {
+                    ...inferred,
+                    name: exerciseName,
+                    sets: coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
+                    repsMin: coercePositiveInt(rawSlot?.repsMin, inferred?.repsMin ?? 8),
+                    repsMax: coercePositiveInt(rawSlot?.repsMax, inferred?.repsMax ?? 12),
+                    rest: coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
+                    rir: coerceNonNegativeInt(rawSlot?.rir, inferred?.rir ?? 2),
+                    type: rawSlot?.type === 'isolation' ? 'isolation' : (inferred?.type || 'compound'),
+                    muscleGroup: rawSlot?.muscleGroup || inferred?.muscleGroup || '',
+                    instructions: rawSlot?.instructions || inferred?.instructions || '',
+                    trackingMode: rawSlot?.trackingMode === 'cardio' ? 'cardio' : (inferred?.trackingMode || 'strength'),
+                    progressionMode: rawSlot?.progressionMode || inferred?.progressionMode || null,
+                    loadingProfile: rawSlot?.loadingProfile || inferred?.loadingProfile || null,
+                    pool: Array.isArray(rawSlot?.pool) && rawSlot.pool.length
+                        ? rawSlot.pool.map(item => String(item).trim()).filter(Boolean)
+                        : (inferred?.pool || [exerciseName])
+                };
+
+                const slot = this.buildSlotFromExerciseDefinition(definition, sessionId, slotIndex);
+                slot.name = String(rawSlot?.activeExercise || exerciseName).trim();
+                slot.activeExercise = slot.name;
+                slot.pool = Array.from(new Set([slot.activeExercise, ...(definition.pool || [])].filter(Boolean)));
+                slot.instructions = definition.instructions;
+                slot.muscleGroup = definition.muscleGroup;
+                slot.type = definition.type;
+                slot.trackingMode = definition.trackingMode;
+                slot.progressionMode = definition.progressionMode;
+                slot.loadingProfile = definition.loadingProfile;
+                slot.sets = definition.sets;
+                slot.repsMin = definition.repsMin;
+                slot.repsMax = definition.repsMax;
+                slot.rest = definition.rest;
+                slot.rir = definition.rir;
+                this.normalizeSlotProgressionConfig(slot);
+                normalizedSlots.push(slot);
+            });
+        });
+
+        if (!normalizedSlots.length && Array.isArray(source?.slots)) {
+            source.slots.forEach((rawSlot, slotIndex) => {
+                const sourceSessionId = rawSlot?.sessionId;
+                const targetSessionId = sessionIdMap.get(sourceSessionId) || normalizedSessions[0]?.id;
+                if (!targetSessionId) return;
+
+                const sessionSlotIndex = normalizedSlots.filter(slot => slot.sessionId === targetSessionId).length;
+                const exerciseName = String(
+                    rawSlot?.name ||
+                    rawSlot?.exercise ||
+                    rawSlot?.exerciseName ||
+                    rawSlot?.title ||
+                    ''
+                ).trim();
+
+                if (!exerciseName) return;
+
+                const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
+                    allowCardioInference: true
+                });
+
+                const slot = this.buildSlotFromExerciseDefinition({
+                    ...inferred,
+                    name: exerciseName,
+                    sets: coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
+                    repsMin: coercePositiveInt(rawSlot?.repsMin, inferred?.repsMin ?? 8),
+                    repsMax: coercePositiveInt(rawSlot?.repsMax, inferred?.repsMax ?? 12),
+                    rest: coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
+                    rir: coerceNonNegativeInt(rawSlot?.rir, inferred?.rir ?? 2),
+                    type: rawSlot?.type === 'isolation' ? 'isolation' : (inferred?.type || 'compound'),
+                    muscleGroup: rawSlot?.muscleGroup || inferred?.muscleGroup || '',
+                    instructions: rawSlot?.instructions || inferred?.instructions || '',
+                    trackingMode: rawSlot?.trackingMode === 'cardio' ? 'cardio' : (inferred?.trackingMode || 'strength'),
+                    progressionMode: rawSlot?.progressionMode || inferred?.progressionMode || null,
+                    loadingProfile: rawSlot?.loadingProfile || inferred?.loadingProfile || null,
+                    pool: Array.isArray(rawSlot?.pool) && rawSlot.pool.length
+                        ? rawSlot.pool.map(item => String(item).trim()).filter(Boolean)
+                        : (inferred?.pool || [exerciseName])
+                }, targetSessionId, sessionSlotIndex);
+
+                slot.name = String(rawSlot?.activeExercise || exerciseName).trim();
+                slot.activeExercise = slot.name;
+                slot.pool = Array.from(new Set([slot.activeExercise, ...(rawSlot?.pool || inferred?.pool || [])].filter(Boolean)));
+                this.normalizeSlotProgressionConfig(slot);
+                normalizedSlots.push(slot);
+            });
+        }
+
+        if (!normalizedSlots.length) {
+            throw new Error('Aucun exercice détecté dans le programme.');
+        }
+
+        return {
+            objective,
+            weeklyGoal: Number.isFinite(weeklyGoal) ? Math.max(1, Math.min(7, weeklyGoal)) : null,
+            sessions: normalizedSessions,
+            slots: normalizedSlots
+        };
+    }
+
+    async importProgramData(data) {
+        const normalized = this.normalizeProgramImport(data);
+        const existingSettings = await db.getAll('settings');
+        const settingsMap = new Map(existingSettings.map((item) => [item.key, item.value]));
+
+        settingsMap.set('trainingObjective', normalized.objective || settingsMap.get('trainingObjective') || '');
+        settingsMap.set('weeklyGoal', normalized.weeklyGoal || settingsMap.get('weeklyGoal') || 3);
+        settingsMap.set('onboardingCompleted', true);
+        settingsMap.set('nextSessionIndex', 0);
+        settingsMap.set('xp', 0);
+        settingsMap.set('lastWorkoutDate', null);
+        settingsMap.set('streakCount', 0);
+        settingsMap.set('shieldCount', 0);
+        settingsMap.set('weekProtected', false);
+        settingsMap.set('lastWeekCheck', new Date().toISOString());
+        settingsMap.set('streakSystemInitialized', true);
+        settingsMap.set('lastStreakNotification', null);
+        settingsMap.set('cycleStartDate', new Date().toISOString());
+
+        const payload = {
+            sessions: normalized.sessions,
+            slots: normalized.slots,
+            workoutHistory: [],
+            setHistory: [],
+            settings: Array.from(settingsMap.entries()).map(([key, value]) => ({ key, value })),
+            currentWorkout: [],
+            exportDate: new Date().toISOString(),
+            version: 1
+        };
+
+        const counts = await db.importData(payload);
+        return {
+            ...counts,
+            mode: 'program',
+            objective: normalized.objective || settingsMap.get('trainingObjective') || '',
+            weeklyGoal: settingsMap.get('weeklyGoal') || 3
+        };
     }
     
     // ===== Session Persistence =====
@@ -820,16 +1434,26 @@ class App {
             document.getElementById('session-slots').textContent = `${slots.length} exercices`;
             
             this.currentSession = nextSession;
+            document.getElementById('btn-start-session').disabled = false;
+            document.getElementById('btn-change-session').disabled = false;
+        } else {
+            document.getElementById('session-name').textContent = 'Crée ta première séance';
+            document.getElementById('session-duration').textContent = 'Configure ton programme';
+            document.getElementById('session-slots').textContent = '0 exercice';
+            document.getElementById('last-session-info').textContent = 'Dernière séance : --';
+            document.getElementById('btn-start-session').disabled = true;
+            document.getElementById('btn-change-session').disabled = true;
+            this.currentSession = null;
         }
 
         // Last session info
-        if (history.length > 0) {
+        if (history.length > 0 && nextSession) {
             const lastWorkout = history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
             const lastSession = await db.get('sessions', lastWorkout.sessionId);
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
             const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
             document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSession?.name || 'Inconnue'}, ${daysText}`;
-        } else {
+        } else if (nextSession) {
             document.getElementById('last-session-info').textContent = 'Dernière séance : --';
         }
 
@@ -9707,6 +10331,12 @@ class App {
                 if (slotData.setsRight) totalSets += slotData.setsRight.filter(set => set && set.completed).length;
             }
             const sessionName = this.currentSession.name;
+            const finishRecap = await this.buildSessionFinishRecap({
+                workoutId,
+                totalSets,
+                durationMinutes: duration,
+                stimulusScore
+            });
 
             await db.clearCurrentWorkout();
             this.currentWorkout = null;
@@ -9714,7 +10344,7 @@ class App {
             this.supersetSlot = null;
             this.editingSetIndex = null;
 
-            await this.showStimulusScoreAnimation(stimulusScore);
+            await this.showStimulusScoreAnimation(stimulusScore, finishRecap);
 
             gamification.celebrateWorkoutComplete(sessionName, {
                 totalSets,
@@ -9813,7 +10443,7 @@ class App {
         };
     }
     
-    async showStimulusScoreAnimation(score) {
+    async showStimulusScoreAnimation(score, recap = null) {
         return new Promise((resolve) => {
             // Create overlay
             const overlay = document.createElement('div');
@@ -9838,34 +10468,104 @@ class App {
                 emoji = '🎯';
                 message = 'Marge de progression';
             }
+
+            const heroMetrics = Array.isArray(recap?.heroMetrics) ? recap.heroMetrics : [];
+            const comparisonTone = recap?.comparison?.tone || 'neutral';
+            const comparisonText = recap?.comparison?.text
+                ? this.escapeHtml(recap.comparison.text)
+                : 'Séance bien enregistrée.';
+            const positiveRows = Array.isArray(recap?.positiveRows) ? recap.positiveRows : [];
+            const cautionRows = Array.isArray(recap?.cautionRows) ? recap.cautionRows : [];
+            const stableRows = Array.isArray(recap?.stableRows) ? recap.stableRows : [];
+            const focusRows = positiveRows.length > 0 ? positiveRows : stableRows.slice(0, 2);
+            const topMusclesText = recap?.topMuscles?.length
+                ? `Zones les plus stimulées: ${recap.topMuscles.map(name => this.escapeHtml(name)).join(' · ')}`
+                : 'Les zones dominantes apparaîtront au fil de tes prochaines séances.';
+            const summaryLine = recap?.summaryLine
+                ? this.escapeHtml(recap.summaryLine)
+                : 'Séance enregistrée.';
+
+            const heroMetricsHtml = heroMetrics.length
+                ? heroMetrics.map(metric => `
+                    <div class="stimulus-metric-card">
+                        <div class="stimulus-metric-label">${this.escapeHtml(metric.label)}</div>
+                        <div class="stimulus-metric-value">${this.escapeHtml(metric.value)}</div>
+                        <div class="stimulus-metric-note">${this.escapeHtml(metric.note)}</div>
+                    </div>
+                `).join('')
+                : '';
+
+            const renderTrendRows = (rows, emptyMessage, tone = 'positive') => {
+                if (!rows.length) {
+                    return `<div class="stimulus-panel-empty">${this.escapeHtml(emptyMessage)}</div>`;
+                }
+
+                return rows.map(row => `
+                    <div class="stimulus-trend-row">
+                        <div class="stimulus-trend-main">
+                            <div class="stimulus-trend-name">${this.escapeHtml(row.label)}</div>
+                            <div class="stimulus-trend-note">${this.escapeHtml(row.headline)}</div>
+                        </div>
+                        <div class="stimulus-trend-pill ${tone}">
+                            ${this.escapeHtml(this.buildSessionTrendIndicator(row))}
+                        </div>
+                    </div>
+                `).join('');
+            };
             
             overlay.innerHTML = `
-                <div class="stimulus-score-content">
-                    <div class="stimulus-score-emoji">${emoji}</div>
-                    <div class="stimulus-score-label">Stimulus Score</div>
-                    <div class="stimulus-score-value ${quality}">
-                        <span class="score-number">0</span>
-                    </div>
-                    <div class="stimulus-score-message">${message}</div>
-                    <div class="stimulus-score-details">
-                        <div class="score-detail">
-                            <span class="detail-value">${score.hardSets}</span>
-                            <span class="detail-label">Hard Sets</span>
+                <div class="stimulus-score-shell">
+                    <div class="stimulus-score-content">
+                        <div class="stimulus-score-header">
+                            <div class="stimulus-score-header-copy">
+                                <div class="stimulus-score-kicker">Séance terminée</div>
+                                <div class="stimulus-score-message">${message}</div>
+                                <div class="stimulus-score-summary">${summaryLine}</div>
+                            </div>
+                            <div class="stimulus-score-emoji">${emoji}</div>
                         </div>
-                        ${score.prBonus > 0 ? `
-                        <div class="score-detail pr">
-                            <span class="detail-value">+${score.prBonus}</span>
-                            <span class="detail-label">PR Bonus</span>
+
+                        <div class="stimulus-score-hero">
+                            <div class="stimulus-score-value ${quality}">
+                                <span class="score-number">0</span>
+                            </div>
+                            <div class="stimulus-score-hero-copy">
+                                <div class="stimulus-score-label">Stimulus Score</div>
+                                <div class="stimulus-score-hero-note">Mesure rapide de la qualité du stimulus et de l'effort utile.</div>
+                            </div>
                         </div>
+
+                        ${heroMetricsHtml ? `
+                            <div class="stimulus-metrics-grid">
+                                ${heroMetricsHtml}
+                            </div>
                         ` : ''}
-                        ${score.dangerSets > 0 ? `
-                        <div class="score-detail danger">
-                            <span class="detail-value">-${score.dangerSets * 2}</span>
-                            <span class="detail-label">RPE 10 Compound</span>
+
+                        <div class="stimulus-score-comparison ${comparisonTone}">
+                            ${comparisonText}
                         </div>
-                        ` : ''}
+
+                        <div class="stimulus-score-panels">
+                            <div class="stimulus-score-panel">
+                                <div class="stimulus-score-panel-title">Les points forts</div>
+                                ${renderTrendRows(
+                                    focusRows,
+                                    'Les tendances positives ressortiront dès que tu cumules un peu plus d’historique.'
+                                )}
+                            </div>
+                            <div class="stimulus-score-panel">
+                                <div class="stimulus-score-panel-title">À surveiller</div>
+                                ${renderTrendRows(
+                                    cautionRows,
+                                    'Aucun signal faible détecté sur cette séance.',
+                                    'warning'
+                                )}
+                            </div>
+                        </div>
+
+                        <div class="stimulus-score-footer-note">${topMusclesText}</div>
+                        <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
                     </div>
-                    <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
                 </div>
             `;
             
@@ -10316,25 +11016,40 @@ class App {
     }
 
     // ===== Create Session =====
-    async createSession() {
+    async createSession(options = {}) {
         const sessions = await db.getSessions();
         const newOrder = sessions.length;
-        
+        const {
+            name = 'Nouvelle séance',
+            openEditor = true,
+            refreshHome = false
+        } = options;
+
         const newSession = {
             id: `session-${Date.now()}`,
-            name: 'Nouvelle séance',
+            name,
             order: newOrder,
             estimatedDuration: 45
         };
 
         await db.put('sessions', newSession);
+
+        if (refreshHome) {
+            await this.renderHome();
+        }
+
+        if (!openEditor) {
+            return newSession;
+        }
+
         await this.showEditSessionsSheet();
-        
-        // Ouvrir directement l'édition de la nouvelle séance
+
         setTimeout(() => {
             this.hideEditSessionsSheet();
             this.showEditSessionDetailSheet(newSession.id);
         }, 100);
+
+        return newSession;
     }
 
     // ===== Delete Session =====
@@ -11350,21 +12065,41 @@ class App {
         URL.revokeObjectURL(url);
     }
 
-    async importData(file) {
+    async importData(file, options = {}) {
         try {
             const text = await file.text();
-            const data = JSON.parse(text);
-            const counts = await db.importData(data);
+            const jsonText = this.extractImportJsonText(text);
+            const data = JSON.parse(jsonText);
+            const isBackup = this.isBackupImportPayload(data);
+            const counts = isBackup
+                ? await db.importData(data)
+                : await this.importProgramData(data);
+
             await this.renderHome();
-            
-            const msg = `✅ Import terminé avec succès!\n\n` +
-                `• ${counts.sessions} séances\n` +
-                `• ${counts.slots} exercices\n` +
-                `• ${counts.workouts} entraînements\n` +
-                `• ${counts.sets} séries\n` +
-                `• ${counts.settings} paramètres\n` +
-                `• ${counts.currentWorkout} séance en cours`;
-            
+
+            if (options.fromOnboarding) {
+                await this.completeOnboarding({ refreshHome: false });
+            }
+
+            if (isBackup && counts.currentWorkout > 0) {
+                await this.checkPendingSession();
+            }
+
+            const msg = counts.mode === 'program'
+                ? `✅ Programme importé avec succès !\n\n` +
+                    `• ${counts.sessions} séances\n` +
+                    `• ${counts.slots} exercices\n` +
+                    `• Objectif : ${counts.objective || 'non précisé'}\n` +
+                    `• Séances / semaine : ${counts.weeklyGoal}\n\n` +
+                    `L'historique a été réinitialisé pour repartir sur ce nouveau programme.`
+                : `✅ Import terminé avec succès!\n\n` +
+                    `• ${counts.sessions} séances\n` +
+                    `• ${counts.slots} exercices\n` +
+                    `• ${counts.workouts} entraînements\n` +
+                    `• ${counts.sets} séries\n` +
+                    `• ${counts.settings} paramètres\n` +
+                    `• ${counts.currentWorkout} séance en cours`;
+
             alert(msg);
         } catch (e) {
             alert('Erreur lors de l\'import: ' + e.message);
@@ -11401,6 +12136,7 @@ class App {
         };
         
         document.getElementById('btn-import').onclick = () => {
+            this.pendingImportContext = 'default';
             document.getElementById('import-file').click();
         };
 
@@ -11412,9 +12148,49 @@ class App {
         
         document.getElementById('import-file').onchange = (e) => {
             if (e.target.files[0]) {
-                this.importData(e.target.files[0]);
+                const fromOnboarding = this.pendingImportContext === 'onboarding';
+                this.importData(e.target.files[0], { fromOnboarding });
             }
+            this.pendingImportContext = 'default';
+            e.target.value = '';
         };
+
+        document.getElementById('btn-onboarding-next').onclick = () => this.nextOnboardingStep();
+        document.getElementById('btn-onboarding-back').onclick = () => this.previousOnboardingStep();
+        document.getElementById('btn-onboarding-skip').onclick = () => this.skipOnboardingProgramStep();
+        document.getElementById('btn-onboarding-import').onclick = async () => {
+            const saved = await this.saveOnboardingProfile();
+            if (!saved) return;
+            this.pendingImportContext = 'onboarding';
+            document.getElementById('import-file').click();
+        };
+        document.getElementById('btn-onboarding-manual').onclick = () => this.startOnboardingManualCreation();
+        document.getElementById('btn-onboarding-chat').onclick = () => this.copyOnboardingPrompt();
+
+        const onboardingGoalInput = document.getElementById('onboarding-weekly-goal');
+        if (onboardingGoalInput) {
+            onboardingGoalInput.oninput = (e) => {
+                document.getElementById('onboarding-weekly-goal-value').textContent = e.target.value;
+            };
+        }
+
+        const onboardingObjectiveInput = document.getElementById('onboarding-objective');
+        if (onboardingObjectiveInput) {
+            onboardingObjectiveInput.oninput = (e) => this.updateOnboardingGoalChips(e.target.value);
+        }
+
+        const onboardingGoalChips = document.getElementById('onboarding-goal-chips');
+        if (onboardingGoalChips) {
+            onboardingGoalChips.onclick = (e) => {
+                const chip = e.target.closest('.onboarding-chip');
+                if (!chip) return;
+                const objectiveInput = document.getElementById('onboarding-objective');
+                if (objectiveInput) {
+                    objectiveInput.value = chip.dataset.value || '';
+                    this.updateOnboardingGoalChips(objectiveInput.value);
+                }
+            };
+        }
 
         // Session screen
         document.getElementById('btn-back-home').onclick = () => this.showQuitSessionModal();
@@ -13436,11 +14212,12 @@ class App {
         return this.getSlotTargetState(slot, slotData).activeTargetSets;
     }
 
-    async getExerciseWorkoutHistory(exerciseId) {
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+    buildWorkoutsFromSetHistory(setHistory = []) {
         const workoutGroups = {};
 
-        for (const set of allSetHistory) {
+        for (const set of setHistory) {
+            if (!set?.workoutId) continue;
+
             if (!workoutGroups[set.workoutId]) {
                 workoutGroups[set.workoutId] = {
                     date: set.date,
@@ -13487,6 +14264,259 @@ class App {
         }
 
         return Object.values(workoutGroups).sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+
+    async getExerciseWorkoutHistory(exerciseId) {
+        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        return this.buildWorkoutsFromSetHistory(allSetHistory);
+    }
+
+    buildWorkoutAggregateFromSets(sets = [], slotMap = new Map()) {
+        let totalVolume = 0;
+        let totalReps = 0;
+        let totalSets = 0;
+        let totalCardioMinutes = 0;
+        const explicitRpeValues = [];
+        const estimatedRpeValues = [];
+        const exercisedSlots = new Set();
+
+        for (const set of sets) {
+            if (!set) continue;
+
+            const slot = slotMap.get(set.slotId);
+            const reps = Number(set.reps || 0);
+            const weight = Number(set.weight || 0);
+            totalSets += 1;
+            exercisedSlots.add(String(set.slotId));
+
+            if (slot && this.isCardioSlot(slot)) {
+                totalCardioMinutes += Math.max(0, reps);
+                continue;
+            }
+
+            totalReps += Math.max(0, reps);
+            if (weight > 0 && reps > 0) {
+                totalVolume += this.getSetLoadedVolume(set, slot);
+            }
+
+            const rpe = this.getStatsRpe(set, slot);
+            if (rpe != null) {
+                if (this.hasExplicitRpe(set)) {
+                    explicitRpeValues.push(rpe);
+                } else {
+                    estimatedRpeValues.push(rpe);
+                }
+            }
+        }
+
+        const rpeSample = explicitRpeValues.length ? explicitRpeValues : estimatedRpeValues;
+        const avgRpe = rpeSample.length
+            ? rpeSample.reduce((sum, value) => sum + value, 0) / rpeSample.length
+            : null;
+
+        return {
+            totalVolume,
+            totalReps,
+            totalSets,
+            totalCardioMinutes,
+            exerciseCount: exercisedSlots.size,
+            avgRpe,
+            avgRpeSource: explicitRpeValues.length ? 'RPE saisis' : (estimatedRpeValues.length ? 'RPE estimé' : 'sans RPE')
+        };
+    }
+
+    getMuscleDisplayName(muscleId) {
+        return MUSCLE_GROUPS.find(group => group.id === muscleId)?.name || muscleId;
+    }
+
+    buildSessionComparisonMessage(currentStats, previousStats, sessionName) {
+        if (!previousStats || previousStats.totalSets === 0) {
+            return {
+                tone: 'neutral',
+                text: `Première séance ${sessionName} enregistrée sur ce format.`
+            };
+        }
+
+        const volumeDelta = this.percentChange(currentStats.totalVolume, previousStats.totalVolume);
+        if (Number.isFinite(volumeDelta) && Math.abs(volumeDelta) >= 8) {
+            return {
+                tone: volumeDelta > 0 ? 'positive' : 'warning',
+                text: `${this.formatPercentDelta(volumeDelta)} de volume chargé vs ta dernière ${sessionName}.`
+            };
+        }
+
+        const setDelta = currentStats.totalSets - previousStats.totalSets;
+        if (Math.abs(setDelta) >= 2) {
+            return {
+                tone: setDelta > 0 ? 'positive' : 'neutral',
+                text: `${setDelta > 0 ? '+' : ''}${setDelta} série${Math.abs(setDelta) > 1 ? 's' : ''} par rapport à la dernière ${sessionName}.`
+            };
+        }
+
+        const repDelta = currentStats.totalReps - previousStats.totalReps;
+        if (Math.abs(repDelta) >= 4) {
+            return {
+                tone: repDelta > 0 ? 'positive' : 'neutral',
+                text: `${repDelta > 0 ? '+' : ''}${repDelta} reps totales vs ta dernière ${sessionName}.`
+            };
+        }
+
+        return {
+            tone: 'neutral',
+            text: `Séance dans la continuité de ta dernière ${sessionName}.`
+        };
+    }
+
+    buildSessionTrendIndicator(row) {
+        if (row.deltaPct == null || !Number.isFinite(row.deltaPct)) {
+            return row.trend === 'improved' ? 'En hausse' : row.trend === 'regressed' ? 'À surveiller' : 'Stable';
+        }
+
+        return `${this.formatPercentDelta(row.deltaPct)} e1RM`;
+    }
+
+    async buildSessionFinishRecap({ workoutId, totalSets, durationMinutes, stimulusScore }) {
+        const sessionSlots = await db.getSlotsBySession(this.currentSession.id);
+        const slotMap = new Map(sessionSlots.map(slot => [slot.id, slot]));
+        const workoutSets = await db.getByIndex('setHistory', 'workoutId', workoutId);
+        const currentStats = this.buildWorkoutAggregateFromSets(workoutSets, slotMap);
+        const completedSlots = new Set(workoutSets.map(set => String(set.slotId)));
+        const totalExercises = sessionSlots.length;
+        const completedExercises = completedSlots.size;
+        const completionRate = totalExercises > 0 ? completedExercises / totalExercises : 0;
+        const muscleStimulus = new Map();
+        const trendRows = [];
+        let recordCount = 0;
+
+        for (const set of workoutSets) {
+            const slot = slotMap.get(set.slotId);
+            if (!slot || this.isCardioSlot(slot)) continue;
+
+            const rpe = this.getStatsRpe(set, slot) ?? 8;
+            const effectiveScore = this.calculateEffectiveVolumeScore(set.reps, rpe, set.weight, null);
+            const contributions = this.getExerciseMuscleContributions(slot.activeExercise || slot.name);
+            contributions.forEach(({ muscleId, weight }) => {
+                muscleStimulus.set(muscleId, (muscleStimulus.get(muscleId) || 0) + (effectiveScore * weight));
+            });
+        }
+
+        for (const slot of sessionSlots) {
+            if (!completedSlots.has(String(slot.id)) || this.isCardioSlot(slot)) continue;
+
+            const slotHistorySets = await db.getByIndex('setHistory', 'slotId', slot.id);
+            const workouts = this.buildWorkoutsFromSetHistory(slotHistorySets);
+            if (!workouts.length) continue;
+
+            const latest = workouts[0];
+            const previous = workouts[1] || null;
+            const trendSummary = this.buildExerciseTrendSummary(workouts, slot);
+            const currentTopE1RM = Math.max(...latest.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0);
+            const previousTopE1RM = previous
+                ? Math.max(...previous.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0)
+                : 0;
+            const previousPeakE1RM = Math.max(
+                0,
+                ...workouts.slice(1).map(workout => Math.max(...workout.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0))
+            );
+            const targetSetCount = Math.max(latest.targetSetCount || latest.sets.length, 1);
+            const targetArray = this.genTargetReps(slot.repsMin, slot.repsMax, targetSetCount);
+            const targetHits = latest.sets.reduce((count, set, index) => {
+                return count + ((set.reps || 0) >= (targetArray[index] || slot.repsMax) ? 1 : 0);
+            }, 0);
+            const targetHitRate = targetSetCount ? targetHits / targetSetCount : 0;
+
+            if (currentTopE1RM > previousPeakE1RM * 1.002 && previousPeakE1RM > 0) {
+                recordCount += 1;
+            }
+
+            trendRows.push({
+                label: slot.activeExercise || slot.name,
+                trend: trendSummary.trend,
+                headline: trendSummary.headline,
+                deltaPct: previousTopE1RM > 0 ? ((currentTopE1RM - previousTopE1RM) / previousTopE1RM) * 100 : null,
+                currentTopE1RM,
+                targetHitRate,
+                confidence: trendSummary.confidence || 0,
+                score: (trendSummary.e1rmDelta || 0) + (trendSummary.targetDelta || 0)
+            });
+        }
+
+        const positiveRows = trendRows
+            .filter(row => row.trend === 'improved')
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3);
+        const cautionRows = trendRows
+            .filter(row => row.trend === 'regressed')
+            .sort((a, b) => a.score - b.score)
+            .slice(0, 3);
+        const stableRows = trendRows
+            .filter(row => row.trend === 'stable')
+            .sort((a, b) => b.targetHitRate - a.targetHitRate)
+            .slice(0, 2);
+
+        const topMuscles = Array.from(muscleStimulus.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([muscleId]) => this.getMuscleDisplayName(muscleId));
+
+        const sessionHistory = await db.getByIndex('workoutHistory', 'sessionId', this.currentSession.id);
+        const previousSession = sessionHistory
+            .filter(workout => workout.id !== workoutId)
+            .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+        const previousStats = previousSession
+            ? this.buildWorkoutAggregateFromSets(await db.getByIndex('setHistory', 'workoutId', previousSession.id), slotMap)
+            : null;
+        const comparison = this.buildSessionComparisonMessage(currentStats, previousStats, this.currentSession.name);
+
+        const heroMetrics = [
+            {
+                label: 'Durée',
+                value: `${durationMinutes} min`,
+                note: `${completedExercises}/${totalExercises || completedExercises} exercices terminés`
+            },
+            {
+                label: 'Séries',
+                value: `${totalSets}`,
+                note: `${currentStats.totalReps} reps totales`
+            },
+            {
+                label: currentStats.totalVolume > 0 ? 'Volume' : 'Cardio',
+                value: currentStats.totalVolume > 0
+                    ? `${this.formatVolume(currentStats.totalVolume)} kg`
+                    : `${this.formatOneDecimal(currentStats.totalCardioMinutes)} min`,
+                note: currentStats.totalVolume > 0 ? 'charge totale déplacée' : 'durée cumulée'
+            },
+            {
+                label: recordCount > 0 ? 'Records' : 'Intensité',
+                value: recordCount > 0
+                    ? `${recordCount}`
+                    : (currentStats.avgRpe == null ? '--' : `RPE ${this.formatOneDecimal(currentStats.avgRpe)}`),
+                note: recordCount > 0 ? 'nouveau(x) meilleur(s) signal(aux)' : currentStats.avgRpeSource
+            }
+        ];
+
+        let summaryLine = completionRate >= 0.99
+            ? 'Séance complétée proprement.'
+            : `${completedExercises}/${totalExercises} exercices validés.`;
+        if (topMuscles.length > 0) {
+            summaryLine += ` Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}.`;
+        }
+
+        return {
+            heroMetrics,
+            summaryLine,
+            comparison,
+            positiveRows,
+            cautionRows,
+            stableRows,
+            topMuscles,
+            recordCount,
+            avgRpe: currentStats.avgRpe,
+            completionRate,
+            totalVolume: currentStats.totalVolume,
+            totalReps: currentStats.totalReps,
+            stimulusScore: stimulusScore.total
+        };
     }
 
     buildExerciseTrendSummary(workouts, slot) {

@@ -148,7 +148,7 @@
                             </svg>
                             Importer
                         </button>
-                        <input type="file" id="import-file" accept=".json" hidden>
+                        <input type="file" id="import-file" accept=".json,.txt" hidden>
                     </div>
                 </div>
 
@@ -814,6 +814,154 @@
                     <button class="btn btn-primary btn-large" id="btn-back-to-session">
                         Retour à la séance
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Onboarding -->
+        <div class="modal modal-onboarding" id="modal-onboarding">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content onboarding-modal-content">
+                <div class="onboarding-shell">
+                    <div class="onboarding-progress-row">
+                        <div>
+                            <div class="onboarding-kicker">Premier lancement</div>
+                            <h2 id="onboarding-title">Installe l'app</h2>
+                        </div>
+                        <div class="onboarding-step-badge" id="onboarding-step-badge">Étape 1/3</div>
+                    </div>
+
+                    <div class="onboarding-stepper" id="onboarding-stepper"></div>
+
+                    <div class="onboarding-body">
+                        <section class="onboarding-panel active" id="onboarding-panel-install" data-step="install">
+                            <div class="onboarding-hero-card">
+                                <div class="onboarding-hero-icon">📲</div>
+                                <div>
+                                    <h3>Ajoute l'app à ton écran d'accueil</h3>
+                                    <p id="onboarding-install-description">
+                                        Installe la PWA pour garder tes données plus proprement et lancer l'app comme une vraie appli.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="onboarding-install-grid" id="onboarding-install-grid">
+                                <div class="onboarding-install-card">
+                                    <div class="onboarding-install-label">iPhone / iPad</div>
+                                    <p>1. Ouvre l'app dans Safari.</p>
+                                    <p>2. Touche le bouton Partager en bas de l'écran.</p>
+                                    <p>3. Fais défiler puis choisis "Sur l'écran d'accueil".</p>
+                                    <p>4. Valide avec "Ajouter". L'app apparaîtra comme une vraie app sur ton téléphone.</p>
+                                </div>
+                                <div class="onboarding-install-card">
+                                    <div class="onboarding-install-label">Android</div>
+                                    <p>1. Ouvre l'app dans Chrome ou le navigateur de ton téléphone.</p>
+                                    <p>2. Ouvre le menu du navigateur en haut à droite.</p>
+                                    <p>3. Choisis "Installer l'application" ou "Ajouter à l'écran d'accueil".</p>
+                                    <p>4. Confirme pour avoir l'app directement sur l'écran d'accueil.</p>
+                                </div>
+                            </div>
+
+                            <div class="onboarding-tip">
+                                Si l'app est déjà installée, cette étape sera sautée automatiquement. Si tu ne vois pas l'option, vérifie que l'app est bien ouverte dans un navigateur mobile classique.
+                            </div>
+                        </section>
+
+                        <section class="onboarding-panel" id="onboarding-panel-profile" data-step="profile">
+                            <div class="onboarding-section-head">
+                                <h3>Créer ton programme et tes paramètres</h3>
+                                <p>Définis d'abord ton objectif et ton rythme hebdo.</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="onboarding-objective">Ton objectif principal</label>
+                                <input
+                                    type="text"
+                                    id="onboarding-objective"
+                                    class="form-input"
+                                    placeholder="Ex: prise de masse, reprise, recomposition, force..."
+                                >
+                                <p class="onboarding-field-helper">
+                                    Aujourd'hui, ce champ sert surtout à cadrer la création initiale du programme et le prompt ChatGPT. Il ne change pas encore directement le coach pendant la séance.
+                                </p>
+                            </div>
+
+                            <div class="onboarding-goal-chips" id="onboarding-goal-chips">
+                                <button type="button" class="onboarding-chip" data-value="Prise de masse">Prise de masse</button>
+                                <button type="button" class="onboarding-chip" data-value="Perte de gras">Perte de gras</button>
+                                <button type="button" class="onboarding-chip" data-value="Recomposition">Recomposition</button>
+                                <button type="button" class="onboarding-chip" data-value="Reprise">Reprise</button>
+                                <button type="button" class="onboarding-chip" data-value="Force">Force</button>
+                            </div>
+
+                            <div class="onboarding-weekly-card">
+                                <div class="onboarding-weekly-head">
+                                    <div>
+                                        <div class="onboarding-install-label">Nombre de séances par semaine</div>
+                                        <p>Ce réglage pilote le streak et sert aussi à préparer le programme importé ou généré avec ChatGPT.</p>
+                                    </div>
+                                    <div class="onboarding-weekly-value" id="onboarding-weekly-goal-value">3</div>
+                                </div>
+                                <input type="range" id="onboarding-weekly-goal" min="1" max="7" value="3">
+                                <div class="onboarding-weekly-scale">
+                                    <span>1</span>
+                                    <span>4</span>
+                                    <span>7</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="onboarding-panel" id="onboarding-panel-program" data-step="program">
+                            <div class="onboarding-section-head">
+                                <h3>Créer ta première séance</h3>
+                                <p>Choisis la manière la plus simple pour construire ton programme.</p>
+                            </div>
+
+                            <div class="onboarding-choice-grid">
+                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-import">
+                                    <div class="onboarding-choice-icon">📥</div>
+                                    <div class="onboarding-choice-copy">
+                                        <div class="onboarding-choice-title">Importer un fichier</div>
+                                        <p>Importe un backup ou un programme JSON déjà prêt.</p>
+                                    </div>
+                                </button>
+
+                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-manual">
+                                    <div class="onboarding-choice-icon">🛠️</div>
+                                    <div class="onboarding-choice-copy">
+                                        <div class="onboarding-choice-title">Créer manuellement</div>
+                                        <p>On te crée une première séance vide et tu la remplis dans l'éditeur.</p>
+                                    </div>
+                                </button>
+
+                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-chat">
+                                    <div class="onboarding-choice-icon">💬</div>
+                                    <div class="onboarding-choice-copy">
+                                        <div class="onboarding-choice-title">Demander à Chat</div>
+                                        <p>Copie un message prêt à l'emploi, colle-le dans ChatGPT, réponds à 2 questions simples, puis récupère le programme à importer.</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <div class="onboarding-chat-helper" id="onboarding-chat-helper">
+                                <div class="onboarding-chat-helper-title">Comment ça marche</div>
+                                <p>
+                                    Le bouton "Demander à Chat" copie un prompt détaillé. Tu le colles dans ChatGPT, ChatGPT te demande d'abord
+                                    combien de séances tu veux faire, quel type de répartition tu veux et quelles machines tu as dans ta salle, puis il te propose un brouillon avant l'export final.
+                                </p>
+                                <p>
+                                    Une fois que tu valides le programme, il doit te fournir un vrai fichier <strong>programme-muscu.json</strong> à télécharger ou, sinon,
+                                    un bloc JSON prêt à enregistrer, puis tu l'importes dans l'app avec le bouton Importer.
+                                </p>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div class="onboarding-actions">
+                        <button class="btn btn-secondary" id="btn-onboarding-back" type="button">Retour</button>
+                        <button class="btn btn-outline" id="btn-onboarding-skip" type="button">Ignorer</button>
+                        <button class="btn btn-primary btn-large" id="btn-onboarding-next" type="button">Suivant</button>
+                    </div>
                 </div>
             </div>
         </div>

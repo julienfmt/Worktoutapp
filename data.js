@@ -2200,30 +2200,54 @@ const INITIAL_SLOTS = [
 
 async function initializeData() {
     const sessions = await db.getSessions();
-    
-    if (sessions.length === 0) {
-        console.log('Initializing default data...');
-        
-        for (const session of INITIAL_SESSIONS) {
-            await db.put('sessions', session);
+    const workoutHistory = await db.getAll('workoutHistory');
+    const hasExistingData = sessions.length > 0 || workoutHistory.length > 0;
+    const appDataInitialized = await db.getSetting('appDataInitialized');
+
+    if (appDataInitialized) {
+        if (await db.getSetting('onboardingCompleted') == null) {
+            await db.setSetting('onboardingCompleted', hasExistingData);
         }
-        
-        for (const slot of INITIAL_SLOTS) {
-            await db.put('slots', slot);
+        if (await db.getSetting('trainingObjective') == null) {
+            await db.setSetting('trainingObjective', '');
         }
-        
-        // Set initial next session
-        await db.setSetting('nextSessionIndex', 0);
-        await db.setSetting('xp', 0);
-        await db.setSetting('lastWorkoutDate', null);
-        
-        // Streak system settings
-        await db.setSetting('streakCount', 0);
-        await db.setSetting('shieldCount', 0);
-        await db.setSetting('weekProtected', false);
-        await db.setSetting('weeklyGoal', 3);
-        await db.setSetting('lastWeekCheck', new Date().toISOString());
-        
-        console.log('Default data initialized!');
+        return;
     }
+
+    console.log('Initializing app settings...');
+
+    if (await db.getSetting('nextSessionIndex') == null) {
+        await db.setSetting('nextSessionIndex', 0);
+    }
+    if (await db.getSetting('xp') == null) {
+        await db.setSetting('xp', 0);
+    }
+    if (await db.getSetting('lastWorkoutDate') == null) {
+        await db.setSetting('lastWorkoutDate', null);
+    }
+
+    if (await db.getSetting('streakCount') == null) {
+        await db.setSetting('streakCount', 0);
+    }
+    if (await db.getSetting('shieldCount') == null) {
+        await db.setSetting('shieldCount', 0);
+    }
+    if (await db.getSetting('weekProtected') == null) {
+        await db.setSetting('weekProtected', false);
+    }
+    if (await db.getSetting('weeklyGoal') == null) {
+        await db.setSetting('weeklyGoal', 3);
+    }
+    if (await db.getSetting('lastWeekCheck') == null) {
+        await db.setSetting('lastWeekCheck', new Date().toISOString());
+    }
+    if (await db.getSetting('trainingObjective') == null) {
+        await db.setSetting('trainingObjective', '');
+    }
+    if (await db.getSetting('onboardingCompleted') == null) {
+        await db.setSetting('onboardingCompleted', hasExistingData);
+    }
+    await db.setSetting('appDataInitialized', true);
+
+    console.log('App settings initialized!');
 }
