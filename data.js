@@ -166,14 +166,6 @@ function getMuscleGroupMeta(muscleId) {
     };
 }
 
-function renderMuscleIcon(muscleId, options = {}) {
-    const group = getMuscleGroupMeta(muscleId);
-    return renderAppIcon(group.iconKey, {
-        label: group.name,
-        ...options
-    });
-}
-
 function createExerciseLibraryEntry(config) {
     const variants = Array.isArray(config.variants) ? config.variants.filter(Boolean) : [];
     const aliases = Array.isArray(config.aliases) ? config.aliases.filter(Boolean) : [];

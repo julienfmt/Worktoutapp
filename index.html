@@ -215,7 +215,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.3</span>
+                    <span class="app-version">v4.4</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -1146,6 +1146,19 @@
             </div>
         </div>
 
+        <div class="modal" id="modal-app-dialog">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-app-dialog">
+                <div class="app-dialog-icon" id="app-dialog-icon">ℹ️</div>
+                <h3 id="app-dialog-title">Information</h3>
+                <div class="app-dialog-message" id="app-dialog-message"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="btn-app-dialog-cancel">Annuler</button>
+                    <button class="btn btn-primary" id="btn-app-dialog-confirm">OK</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Bottom Sheet Paramètres -->
         <div class="bottom-sheet" id="sheet-settings">
             <div class="sheet-backdrop"></div>
@@ -1264,9 +1277,9 @@
                             <line x1="10" y1="11" x2="10" y2="17"/>
                             <line x1="14" y1="11" x2="14" y2="17"/>
                         </svg>
-                        Nettoyage automatique
+                        Nettoyage des anciennes données
                     </h4>
-                    <p class="settings-description">Les séances de plus de 90 jours sont automatiquement nettoyées (les meilleures performances sont conservées pour les tendances)</p>
+                    <p class="settings-description">Le nettoyage automatique est désactivé par défaut. Tu peux lancer un nettoyage manuel des séances de plus de 90 jours, sans perdre les meilleures performances utiles aux tendances.</p>
                     <button class="btn btn-secondary" id="btn-manual-cleanup" style="margin-top: 10px;">
                         🧹 Nettoyer maintenant
                     </button>

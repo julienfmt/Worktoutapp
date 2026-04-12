@@ -1,11 +1,12 @@
 // ===== IndexedDB Database Layer =====
 const DB_NAME = 'MuscuDB';
 const DB_VERSION = 1;
+const IMPORT_STORE_NAMES = ['sessions', 'slots', 'workoutHistory', 'setHistory', 'settings', 'currentWorkout'];
 
 // Storage management configuration
 const STORAGE_CONFIG = {
     OLD_DATA_THRESHOLD_DAYS: 90,  // Delete detailed data older than 90 days
-    CLEANUP_ON_INIT: true,         // Run cleanup on app initialization
+    CLEANUP_ON_INIT: false,        // Leave cleanup opt-in until the UX is explicit
     PRESERVE_ESSENTIAL_DATA: true  // Keep e1RM history and volume trends
 };
 
@@ -241,6 +242,82 @@ class Database {
         return info;
     }
 
+    normalizeImportCollections(data) {
+        return {
+            sessions: Array.isArray(data?.sessions) ? data.sessions : [],
+            slots: Array.isArray(data?.slots) ? data.slots : [],
+            workoutHistory: Array.isArray(data?.workoutHistory) ? data.workoutHistory : [],
+            setHistory: Array.isArray(data?.setHistory) ? data.setHistory : [],
+            settings: Array.isArray(data?.settings) ? data.settings : [],
+            currentWorkout: Array.isArray(data?.currentWorkout) ? data.currentWorkout : []
+        };
+    }
+
+    validateImportData(data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('Données invalides');
+        }
+
+        const collections = this.normalizeImportCollections(data);
+        const { sessions, slots, workoutHistory, setHistory, settings, currentWorkout } = collections;
+
+        if (!Array.isArray(data.sessions) || !Array.isArray(data.slots)) {
+            throw new Error('Le fichier doit contenir au minimum les tableaux sessions et slots.');
+        }
+
+        const ensureObjects = (items, label, predicate) => {
+            items.forEach((item, index) => {
+                if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                    throw new Error(`${label} #${index + 1} invalide.`);
+                }
+
+                if (typeof predicate === 'function') {
+                    const errorMessage = predicate(item);
+                    if (errorMessage) {
+                        throw new Error(`${label} #${index + 1}: ${errorMessage}`);
+                    }
+                }
+            });
+        };
+
+        ensureObjects(sessions, 'Séance importée', (session) => {
+            if (!session.id) return 'id manquant';
+            if (typeof session.name !== 'string' || !session.name.trim()) return 'nom manquant';
+            return null;
+        });
+
+        ensureObjects(slots, 'Exercice importé', (slot) => {
+            if (!slot.id) return 'id manquant';
+            if (!slot.sessionId) return 'sessionId manquant';
+            if (typeof slot.name !== 'string' || !slot.name.trim()) return 'nom manquant';
+            return null;
+        });
+
+        ensureObjects(workoutHistory, 'Séance historique', (workout) => {
+            if (!workout.sessionId) return 'sessionId manquant';
+            if (!workout.date) return 'date manquante';
+            return null;
+        });
+
+        ensureObjects(setHistory, 'Série historique', (set) => {
+            if (!set.slotId) return 'slotId manquant';
+            if (!set.date) return 'date manquante';
+            return null;
+        });
+
+        ensureObjects(settings, 'Paramètre importé', (setting) => {
+            if (!setting.key) return 'clé manquante';
+            return null;
+        });
+
+        ensureObjects(currentWorkout, 'Séance en cours', (workout) => {
+            if (!workout.id) return 'id manquant';
+            return null;
+        });
+
+        return collections;
+    }
+
     // Storage cleanup - Remove old detailed workout data while preserving essential trends
     async cleanupOldData() {
         const thresholdDate = new Date();
@@ -381,6 +458,14 @@ class Database {
         const oldWorkouts = await this.getOldWorkoutCount();
         return oldWorkouts > 0;
     }
+
+    async shouldRunCleanupOnInit() {
+        if (!STORAGE_CONFIG.CLEANUP_ON_INIT) {
+            return false;
+        }
+
+        return this.shouldCleanup();
+    }
     
     // Count workouts older than threshold
     async getOldWorkoutCount() {
@@ -408,57 +493,65 @@ class Database {
 
     // Import data (with validation)
     async importData(data) {
-        if (!data || typeof data !== 'object') {
-            throw new Error('Données invalides');
-        }
-        
+        const collections = this.validateImportData(data);
         console.log('📥 Import des données...');
-        
-        // Clear existing data
-        await this.clear('sessions');
-        await this.clear('slots');
-        await this.clear('workoutHistory');
-        await this.clear('setHistory');
-        await this.clear('settings');
-        await this.clear('currentWorkout');
 
-        // Import new data with counts
-        let counts = {
-            sessions: 0,
-            slots: 0,
-            workouts: 0,
-            sets: 0,
-            settings: 0,
-            currentWorkout: 0
+        const counts = {
+            sessions: collections.sessions.length,
+            slots: collections.slots.length,
+            workouts: collections.workoutHistory.length,
+            sets: collections.setHistory.length,
+            settings: collections.settings.length,
+            currentWorkout: collections.currentWorkout.length
         };
-        
-        for (const session of (data.sessions || [])) {
-            await this.put('sessions', session);
-            counts.sessions++;
-        }
-        for (const slot of (data.slots || [])) {
-            await this.put('slots', slot);
-            counts.slots++;
-        }
-        for (const workout of (data.workoutHistory || [])) {
-            await this.put('workoutHistory', workout);
-            counts.workouts++;
-        }
-        for (const set of (data.setHistory || [])) {
-            await this.put('setHistory', set);
-            counts.sets++;
-        }
-        for (const setting of (data.settings || [])) {
-            await this.put('settings', setting);
-            counts.settings++;
-        }
-        for (const current of (data.currentWorkout || [])) {
-            await this.put('currentWorkout', current);
-            counts.currentWorkout++;
-        }
-        
-        console.log('✅ Import terminé:', counts);
-        return counts;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(IMPORT_STORE_NAMES, 'readwrite');
+            let settled = false;
+
+            const finishWithError = (error) => {
+                if (settled) return;
+                settled = true;
+                reject(error instanceof Error ? error : new Error('Import interrompu'));
+            };
+
+            transaction.onerror = () => finishWithError(transaction.error || new Error('Import interrompu'));
+            transaction.onabort = () => finishWithError(transaction.error || new Error('Import annulé'));
+            transaction.oncomplete = () => {
+                if (settled) return;
+                settled = true;
+                console.log('✅ Import terminé:', counts);
+                resolve(counts);
+            };
+
+            try {
+                IMPORT_STORE_NAMES.forEach((storeName) => {
+                    transaction.objectStore(storeName).clear();
+                });
+
+                collections.sessions.forEach((session) => {
+                    transaction.objectStore('sessions').put(session);
+                });
+                collections.slots.forEach((slot) => {
+                    transaction.objectStore('slots').put(slot);
+                });
+                collections.workoutHistory.forEach((workout) => {
+                    transaction.objectStore('workoutHistory').put(workout);
+                });
+                collections.setHistory.forEach((set) => {
+                    transaction.objectStore('setHistory').put(set);
+                });
+                collections.settings.forEach((setting) => {
+                    transaction.objectStore('settings').put(setting);
+                });
+                collections.currentWorkout.forEach((workout) => {
+                    transaction.objectStore('currentWorkout').put(workout);
+                });
+            } catch (error) {
+                transaction.abort();
+                finishWithError(error);
+            }
+        });
     }
 }
 

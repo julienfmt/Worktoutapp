@@ -521,12 +521,16 @@ class App {
             history: [],
             setHistory: []
         };
+        this.homeDataSnapshot = this.createEmptyHomeDataSnapshot();
         this.homeChartsFrame = null;
         this.challengeRevealTimeout = null;
         this.pendingImportContext = 'default';
         this.onboardingVisible = false;
         this.onboardingStepOrder = ['install', 'profile', 'program'];
         this.currentOnboardingStepIndex = 0;
+        this.storageInfoRefreshIntervalMs = 60000;
+        this.storageInfoRefreshTimer = null;
+        this.activeAppDialogResolver = null;
     }
 
     async init() {
@@ -535,7 +539,7 @@ class App {
         
         // Automatic storage cleanup on startup
         try {
-            const shouldCleanup = await db.shouldCleanup();
+            const shouldCleanup = await db.shouldRunCleanupOnInit();
             if (shouldCleanup) {
                 console.log('🧹 Nettoyage automatique du stockage...');
                 await db.cleanupOldData();
@@ -549,14 +553,64 @@ class App {
         this.renderExerciseLibraryDatalist();
         this.bindEvents();
         this.setupVisibilityHandler();
-        await this.updateStorageInfo();
-        setInterval(() => this.updateStorageInfo(), 5000);
+        await this.refreshStorageIndicators();
+        this.startStorageInfoRefreshLoop();
         await this.renderHome();
 
         const onboardingShown = await this.maybeStartOnboarding();
         if (!onboardingShown) {
             await this.checkPendingSession();
         }
+    }
+
+    createEmptyHomeDataSnapshot() {
+        return {
+            sessions: [],
+            slots: [],
+            history: [],
+            setHistory: [],
+            isHydrated: false
+        };
+    }
+
+    async refreshHomeDataSnapshot() {
+        const [sessions, slots, history, setHistory] = await Promise.all([
+            db.getSessions(),
+            db.getAll('slots'),
+            db.getAll('workoutHistory'),
+            db.getAll('setHistory')
+        ]);
+
+        const snapshot = { sessions, slots, history, setHistory, isHydrated: true };
+        this.homeDataSnapshot = snapshot;
+        this.homeChartData = snapshot;
+        return snapshot;
+    }
+
+    async resolveHomeDataSnapshot(snapshot = null) {
+        const source = snapshot || this.homeDataSnapshot;
+        if (
+            source &&
+            Array.isArray(source.sessions) &&
+            Array.isArray(source.slots) &&
+            Array.isArray(source.history) &&
+            Array.isArray(source.setHistory) &&
+            source.isHydrated === true
+        ) {
+            return source;
+        }
+
+        return this.refreshHomeDataSnapshot();
+    }
+
+    getSlotsForSessionFromSnapshot(sessionId, snapshot = this.homeDataSnapshot) {
+        if (!sessionId || !Array.isArray(snapshot?.slots)) {
+            return [];
+        }
+
+        return snapshot.slots
+            .filter((slot) => slot.sessionId === sessionId)
+            .sort((a, b) => a.order - b.order);
     }
 
     async maybeStartOnboarding() {
@@ -1280,19 +1334,147 @@ class App {
         this.currentWorkout = null;
         await this.renderHome();
     }
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    formatDialogMessage(message) {
+        return this.escapeHtml(message).replace(/\n/g, '<br>');
+    }
+
+    getDialogVariantConfig(variant = 'info') {
+        switch (variant) {
+            case 'success':
+                return { icon: '✅', confirmClass: 'btn btn-primary' };
+            case 'warning':
+                return { icon: '⚠️', confirmClass: 'btn btn-primary' };
+            case 'danger':
+                return { icon: '❌', confirmClass: 'btn btn-danger' };
+            default:
+                return { icon: 'ℹ️', confirmClass: 'btn btn-primary' };
+        }
+    }
+
+    async showAppDialog({
+        title = 'Information',
+        message = '',
+        variant = 'info',
+        confirmText = 'OK',
+        cancelText = 'Annuler',
+        showCancel = false
+    } = {}) {
+        const modal = document.getElementById('modal-app-dialog');
+        const titleEl = document.getElementById('app-dialog-title');
+        const messageEl = document.getElementById('app-dialog-message');
+        const iconEl = document.getElementById('app-dialog-icon');
+        const confirmBtn = document.getElementById('btn-app-dialog-confirm');
+        const cancelBtn = document.getElementById('btn-app-dialog-cancel');
+        const backdrop = modal?.querySelector('.modal-backdrop');
+
+        if (!modal || !titleEl || !messageEl || !iconEl || !confirmBtn || !cancelBtn || !backdrop) {
+            if (showCancel) {
+                return confirm(message);
+            }
+            alert(message);
+            return true;
+        }
+
+        if (this.activeAppDialogResolver) {
+            this.activeAppDialogResolver(false);
+        }
+
+        const { icon, confirmClass } = this.getDialogVariantConfig(variant);
+        titleEl.textContent = title;
+        messageEl.innerHTML = this.formatDialogMessage(message);
+        iconEl.textContent = icon;
+        confirmBtn.textContent = confirmText;
+        confirmBtn.className = confirmClass;
+        cancelBtn.textContent = cancelText;
+        cancelBtn.style.display = showCancel ? '' : 'none';
+        modal.classList.add('active');
+
+        return new Promise((resolve) => {
+            const finish = (result) => {
+                if (this.activeAppDialogResolver !== finish) return;
+                this.activeAppDialogResolver = null;
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                backdrop.removeEventListener('click', onCancel);
+                modal.classList.remove('active');
+                resolve(result);
+            };
+
+            const onConfirm = () => finish(true);
+            const onCancel = () => finish(false);
+
+            this.activeAppDialogResolver = finish;
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            backdrop.addEventListener('click', onCancel);
+        });
+    }
+
+    showAppAlert(message, options = {}) {
+        return this.showAppDialog({
+            ...options,
+            message,
+            showCancel: false
+        });
+    }
+
+    showAppConfirm(message, options = {}) {
+        return this.showAppDialog({
+            ...options,
+            message,
+            showCancel: true
+        });
+    }
+
+    startStorageInfoRefreshLoop() {
+        if (this.storageInfoRefreshTimer) {
+            clearInterval(this.storageInfoRefreshTimer);
+        }
+
+        this.storageInfoRefreshTimer = setInterval(() => {
+            this.refreshStorageIndicators().catch((error) => {
+                console.error('Erreur lors du rafraîchissement du stockage:', error);
+            });
+        }, this.storageInfoRefreshIntervalMs);
+    }
+
+    async refreshStorageIndicators({ includeSettings = false } = {}) {
+        await this.updateStorageInfo();
+
+        const settingsOpen = document.getElementById('sheet-settings')?.classList.contains('active');
+        if (includeSettings || settingsOpen) {
+            await this.updateStorageStats();
+        }
+    }
     
     async updateStorageInfo() {
         try {
             const storageInfo = await db.getStorageInfo();
             const storageElement = document.getElementById('storage-info');
+
+            if (!storageElement) return;
             
-            if (storageInfo.quota && storageInfo.usage) {
+            if (storageInfo.quota && storageInfo.usage != null) {
                 const usedMB = (storageInfo.usage / 1024 / 1024).toFixed(2);
                 const quotaMB = (storageInfo.quota / 1024 / 1024).toFixed(2);
                 const percentUsed = Math.round((storageInfo.usage / storageInfo.quota) * 100);
                 
                 const persistStatus = storageInfo.isPersisted ? '✅' : '⚠️';
                 storageElement.textContent = `${persistStatus} ${usedMB}MB / ${quotaMB}MB (${percentUsed}%)`;
+            } else {
+                storageElement.textContent = storageInfo.isPersisted
+                    ? '✅ Stockage persistant actif'
+                    : '⚠️ Stockage navigateur';
             }
         } catch (error) {
             console.error('Erreur lors de la mise à jour des informations de stockage:', error);
@@ -1304,12 +1486,24 @@ class App {
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 this.onAppResume();
+                this.refreshStorageIndicators().catch((error) => {
+                    console.error('Erreur de reprise stockage:', error);
+                });
             }
         });
         
         // Also handle page focus (alternative event)
         window.addEventListener('focus', () => {
             this.onAppResume();
+            this.refreshStorageIndicators().catch((error) => {
+                console.error('Erreur de focus stockage:', error);
+            });
+        });
+
+        window.addEventListener('online', () => {
+            this.refreshStorageIndicators().catch((error) => {
+                console.error('Erreur de reprise réseau:', error);
+            });
         });
     }
     
@@ -1420,9 +1614,11 @@ class App {
             }, 500);
         }
         
-        const sessions = await db.getSessions();
-        const history = await db.getAll('workoutHistory');
-        const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
+        const [homeData, storedIndex] = await Promise.all([
+            this.refreshHomeDataSnapshot(),
+            db.getSetting('nextSessionIndex')
+        ]);
+        const { sessions, history } = homeData;
         const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex);
         const nextSession = sessions[nextIndex];
         
@@ -1430,7 +1626,7 @@ class App {
             document.getElementById('session-name').textContent = nextSession.name;
             document.getElementById('session-duration').textContent = `~${nextSession.estimatedDuration} min`;
             
-            const slots = await db.getSlotsBySession(nextSession.id);
+            const slots = this.getSlotsForSessionFromSnapshot(nextSession.id, homeData);
             document.getElementById('session-slots').textContent = `${slots.length} exercices`;
             
             this.currentSession = nextSession;
@@ -1448,7 +1644,7 @@ class App {
 
         // Last session info
         if (history.length > 0 && nextSession) {
-            const lastWorkout = history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+            const lastWorkout = [...history].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
             const lastSession = await db.get('sessions', lastWorkout.sessionId);
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
             const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
@@ -1463,7 +1659,7 @@ class App {
         await this.renderStreakSystem();
 
         // Render stats
-        await this.renderStats();
+        await this.renderStats(homeData);
     }
 
     getLocalDateKey(dateValue) {
@@ -2055,15 +2251,10 @@ class App {
     }
 
     // ===== Stats Section =====
-    async renderStats() {
-        const history = await db.getAll('workoutHistory');
-        const setHistory = await db.getAll('setHistory');
-        const slots = await db.getAll('slots');
-        this.homeChartData = {
-            history,
-            setHistory,
-            slots
-        };
+    async renderStats(homeData = null) {
+        const snapshotData = await this.resolveHomeDataSnapshot(homeData);
+        const { history, setHistory, slots } = snapshotData;
+        this.homeChartData = snapshotData;
 
         const snapshot = await this.buildStatsSnapshot(history, setHistory, slots);
 
@@ -2074,7 +2265,7 @@ class App {
         this.renderMotivationMessage(history, snapshot.thisMonthWorkouts, snapshot.totalLoadedVolume);
         this.renderAdvancedStats(snapshot);
         this.scheduleHomeChartsRender();
-        await this.renderMuscleStats();
+        await this.renderMuscleStats(snapshotData);
     }
 
     getStatsRangeStart(days, now = new Date()) {
@@ -2501,12 +2692,13 @@ class App {
         `;
     }
     
-    async renderMuscleStats() {
+    async renderMuscleStats(homeData = null) {
         const container = document.getElementById('muscle-stats-grid');
         if (!container) return;
         
-        const volumeByMuscle = await this.getWeeklyVolumeByMuscle();
-        const slots = await db.getAll('slots');
+        const snapshotData = await this.resolveHomeDataSnapshot(homeData);
+        const volumeByMuscle = await this.getWeeklyVolumeByMuscle(snapshotData);
+        const slots = snapshotData.slots || [];
         
         // Get unique muscle groups from slots that have been used
         const usedMuscleGroups = new Set();
@@ -2588,7 +2780,6 @@ class App {
                 <div class="muscle-stat-item ${statusClass}">
                     <div class="muscle-stat-header">
                         <span class="muscle-stat-name">
-                            ${renderMuscleIcon(muscleId, { className: 'muscle-stat-icon', size: 18 })}
                             <span>${muscleInfo.name}</span>
                         </span>
                         ${statusLabel ? `<span class="muscle-stat-status">${statusLabel}</span>` : ''}
@@ -3086,10 +3277,11 @@ class App {
     }
 
     // ===== Volume Tracker =====
-    async getWeeklyVolumeByMuscle() {
+    async getWeeklyVolumeByMuscle(homeData = null) {
         const { start, end } = streakEngine.getWeekBounds();
-        const setHistory = await db.getAll('setHistory');
-        const slots = await db.getAll('slots');
+        const snapshotData = await this.resolveHomeDataSnapshot(homeData);
+        const setHistory = snapshotData.setHistory || [];
+        const slots = snapshotData.slots || [];
         
         const slotMap = {};
         for (const slot of slots) {
@@ -3893,7 +4085,6 @@ class App {
             muscleItem.dataset.muscle = muscleId;
             muscleItem.innerHTML = `
                 <div class="lms-muscle-name">
-                    ${renderMuscleIcon(muscleId, { className: 'lms-muscle-icon', size: 22 })}
                     <span class="lms-muscle-label">${info.name}</span>
                 </div>
                 <div class="lms-slider-container">
@@ -12076,6 +12267,7 @@ class App {
                 : await this.importProgramData(data);
 
             await this.renderHome();
+            await this.refreshStorageIndicators({ includeSettings: true });
 
             if (options.fromOnboarding) {
                 await this.completeOnboarding({ refreshHome: false });
@@ -12100,9 +12292,17 @@ class App {
                     `• ${counts.settings} paramètres\n` +
                     `• ${counts.currentWorkout} séance en cours`;
 
-            alert(msg);
+            await this.showAppAlert(msg, {
+                title: counts.mode === 'program' ? 'Programme importé' : 'Import terminé',
+                variant: 'success',
+                confirmText: 'Parfait'
+            });
         } catch (e) {
-            alert('Erreur lors de l\'import: ' + e.message);
+            await this.showAppAlert(`Erreur lors de l'import:\n\n${e.message}`, {
+                title: 'Import impossible',
+                variant: 'danger',
+                confirmText: 'Fermer'
+            });
         }
     }
 
@@ -13012,10 +13212,10 @@ class App {
             // Update cleanup status
             const statusElement = document.getElementById('cleanup-status');
             if (oldWorkoutCount > 0) {
-                statusElement.textContent = `${oldWorkoutCount} séance(s) de plus de 90 jours peuvent être nettoyées`;
+                statusElement.textContent = `${oldWorkoutCount} séance(s) de plus de 90 jours peuvent être nettoyées manuellement.`;
                 statusElement.style.color = '#f59e0b';
             } else {
-                statusElement.textContent = 'Aucune donnée ancienne à nettoyer';
+                statusElement.textContent = 'Aucune donnée ancienne à nettoyer. Le nettoyage reste manuel par défaut.';
                 statusElement.style.color = '#22c55e';
             }
         } catch (error) {
@@ -13027,13 +13227,23 @@ class App {
         const oldWorkoutCount = await db.getOldWorkoutCount();
         
         if (oldWorkoutCount === 0) {
-            alert('Aucune donnée ancienne à nettoyer.');
+            await this.showAppAlert('Aucune donnée ancienne à nettoyer.', {
+                title: 'Nettoyage',
+                variant: 'info',
+                confirmText: 'OK'
+            });
             return;
         }
         
         const confirmMsg = `Vous allez nettoyer ${oldWorkoutCount} séance(s) de plus de 90 jours.\n\nLes meilleures performances seront conservées pour les tendances.\n\nContinuer ?`;
         
-        if (!confirm(confirmMsg)) return;
+        const confirmed = await this.showAppConfirm(confirmMsg, {
+            title: 'Nettoyer les anciennes données ?',
+            variant: 'warning',
+            confirmText: 'Nettoyer',
+            cancelText: 'Annuler'
+        });
+        if (!confirmed) return;
         
         try {
             document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyage en cours...';
@@ -13041,17 +13251,25 @@ class App {
             
             const result = await db.cleanupOldData();
             
-            await this.updateStorageStats();
+            await this.refreshStorageIndicators({ includeSettings: true });
             
             const msg = `✅ Nettoyage terminé!\n\n` +
                 `• ${result.deletedWorkouts} séances supprimées\n` +
                 `• ${result.deletedSets} séries supprimées\n` +
                 `• ${result.preservedWorkouts} séances conservées (données essentielles)`;
             
-            alert(msg);
+            await this.showAppAlert(msg, {
+                title: 'Nettoyage terminé',
+                variant: 'success',
+                confirmText: 'Super'
+            });
         } catch (error) {
             console.error('Erreur lors du nettoyage:', error);
-            alert('Erreur lors du nettoyage: ' + error.message);
+            await this.showAppAlert(`Erreur lors du nettoyage:\n\n${error.message}`, {
+                title: 'Nettoyage impossible',
+                variant: 'danger',
+                confirmText: 'Fermer'
+            });
         } finally {
             document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyer maintenant';
             document.getElementById('btn-manual-cleanup').disabled = false;

@@ -3602,6 +3602,22 @@ body {
     margin-bottom: 24px;
 }
 
+.modal-app-dialog {
+    max-width: 380px;
+}
+
+.app-dialog-icon {
+    font-size: 34px;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+
+.app-dialog-message {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.55;
+}
+
 .modal-actions {
     display: flex;
     gap: 12px;
@@ -7653,16 +7669,12 @@ body {
 .muscle-stat-name {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 0;
     font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0;
     line-height: 1.2;
-}
-
-.muscle-stat-icon {
-    color: var(--primary);
 }
 
 .muscle-stat-status {
@@ -8876,12 +8888,8 @@ body {
 .lms-muscle-name {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0;
     margin-bottom: 12px;
-}
-
-.lms-muscle-icon {
-    color: var(--primary);
 }
 
 .lms-muscle-label {
