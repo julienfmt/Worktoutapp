@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '2026-04-12-1';
+const SW_VERSION = '2026-04-23-1';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';
@@ -12,8 +12,8 @@ const APP_SHELL_ASSETS = [
     './data.js',
     './app.js',
     './manifest.json',
-    './icons/icon-192.png.svg',
-    './icons/icon-512.png.svg'
+    './icons/icon-192.png',
+    './icons/icon-512.png'
 ];
 
 function isCacheableRequest(request) {

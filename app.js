@@ -531,6 +531,10 @@ class App {
         this.storageInfoRefreshIntervalMs = 60000;
         this.storageInfoRefreshTimer = null;
         this.activeAppDialogResolver = null;
+        this.cycleDeloadChoiceTemp = 'off';
+        this.exerciseHistoryIndexPromise = null;
+        this.exerciseHistoryResultCache = new Map();
+        this.activeExerciseLoadToken = null;
     }
 
     async init() {
@@ -601,6 +605,143 @@ class App {
         }
 
         return this.refreshHomeDataSnapshot();
+    }
+
+    async ensureCycleAnchorDate() {
+        let cycleStartDate = await db.getSetting('cycleStartDate');
+        if (!cycleStartDate) {
+            cycleStartDate = new Date().toISOString();
+            await db.setSetting('cycleStartDate', cycleStartDate);
+        }
+        return cycleStartDate;
+    }
+
+    async getCycleConfiguration() {
+        const accumulationWeeks = Math.max(4, Math.min(6, (await db.getSetting('accumulationWeeks')) ?? 4));
+        return {
+            accumulationWeeks,
+            deloadWeeks: 1,
+            totalWeeks: accumulationWeeks + 1
+        };
+    }
+
+    getCycleWeekObjective(phase, weekInCycle, config) {
+        if (phase === 'deload') {
+            return 'Objectif: alléger le volume, garder de bons mouvements et ressortir plus frais en fin de semaine.';
+        }
+
+        if (weekInCycle === 1) {
+            return 'Objectif: remettre du volume propre, reprendre des repères et laisser de la marge.';
+        }
+
+        if (weekInCycle >= config.accumulationWeeks) {
+            return 'Objectif: consolider la charge de travail, garder la technique propre et accepter une fatigue normale.';
+        }
+
+        return 'Objectif: accumuler du travail utile avec une exécution propre et une progression régulière.';
+    }
+
+    formatCycleSummary(state) {
+        if (!state) return 'Cycle : --';
+
+        const label = state.phase === 'deload' ? 'deload' : 'accumulation';
+        return `Cycle S${state.weekInCycle}/${state.totalWeeks} • ${label}`;
+    }
+
+    async getCurrentCycleState(referenceDate = new Date()) {
+        const cycleStartDate = await this.ensureCycleAnchorDate();
+        const config = await this.getCycleConfiguration();
+        const start = new Date(cycleStartDate);
+        const now = new Date(referenceDate);
+        const daysSinceStart = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
+        const absoluteWeek = Math.floor(daysSinceStart / 7);
+        const weekIndex = absoluteWeek % config.totalWeeks;
+        const weekInCycle = weekIndex + 1;
+        const phase = weekInCycle > config.accumulationWeeks ? 'deload' : 'accumulation';
+        const objective = this.getCycleWeekObjective(phase, weekInCycle, config);
+
+        return {
+            startDate: cycleStartDate,
+            accumulationWeeks: config.accumulationWeeks,
+            totalWeeks: config.totalWeeks,
+            weekInCycle,
+            phase,
+            objective,
+            objectiveShort: phase === 'deload' ? 'volume allégé' : 'volume utile',
+            label: phase === 'deload' ? 'Semaine de deload' : `Semaine d'accumulation ${weekInCycle}/${config.accumulationWeeks}`
+        };
+    }
+
+    async buildSessionCycleContext() {
+        const cycleState = await this.getCurrentCycleState();
+        const autoSelectDeload = (await db.getSetting('autoDeloadEnabled')) ?? true;
+        const shouldSuggestDeload = cycleState.phase === 'deload';
+        let suggestionTitle = 'Deload cette séance ?';
+        let suggestionCopy = '';
+
+        if (cycleState.phase === 'deload') {
+            suggestionTitle = 'Semaine de deload suggérée';
+            suggestionCopy = 'Le but est simple: réduire un peu le volume pour faire redescendre la fatigue et repartir plus frais au cycle suivant.';
+        } else {
+            suggestionTitle = 'Bloc d’accumulation';
+            suggestionCopy = 'Cette semaine sert surtout à accumuler du travail utile sans te disperser.';
+        }
+
+        return {
+            ...cycleState,
+            shouldSuggestDeload,
+            suggestionReason: cycleState.phase === 'deload' ? 'cycle' : null,
+            suggestionTitle,
+            suggestionCopy,
+            note: cycleState.phase === 'deload'
+                ? 'Le deload reste facultatif. Il sert surtout à dissiper la fatigue sans casser le rythme.'
+                : 'Le cycle est donné à titre indicatif pour te situer rapidement dans le bloc.',
+            deloadChoice: shouldSuggestDeload && autoSelectDeload ? 'on' : 'off'
+        };
+    }
+
+    getDeloadTargetSets(baseSets, deloadVolumeReduction = 50) {
+        const programmedSets = Math.max(1, Number(baseSets) || 1);
+        const reduction = Math.min(90, Math.max(0, Number(deloadVolumeReduction) || 0));
+        const reducedSets = Math.ceil(programmedSets * (1 - (reduction / 100)));
+        return Math.max(1, Math.min(programmedSets, reducedSets));
+    }
+
+    async getConfiguredDeloadTargetSets(slotOrSets) {
+        const baseSets = typeof slotOrSets === 'object'
+            ? Number(slotOrSets?.sets)
+            : Number(slotOrSets);
+        const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
+        return this.getDeloadTargetSets(baseSets, deloadVolumeReduction);
+    }
+
+    async syncSlotAutoTargetState(slot = this.currentSlot, slotData = null) {
+        if (!this.currentWorkout || !slot?.id) return null;
+
+        const resolvedSlotData = slotData || this.currentWorkout.slots?.[slot.id];
+        if (!resolvedSlotData) return null;
+
+        if (this.currentWorkout.isDeload) {
+            const deloadTargetSets = await this.getConfiguredDeloadTargetSets(slot);
+            resolvedSlotData.autoTargetSets = deloadTargetSets;
+            resolvedSlotData.autoTargetSource = 'deload';
+            resolvedSlotData.deloadTargetSets = deloadTargetSets;
+            return resolvedSlotData;
+        }
+
+        delete resolvedSlotData.deloadTargetSets;
+        if (resolvedSlotData.autoTargetSource === 'deload') {
+            delete resolvedSlotData.autoTargetSets;
+            delete resolvedSlotData.autoTargetSource;
+        }
+
+        return resolvedSlotData;
+    }
+
+    updateCurrentSessionHeader() {
+        const titleEl = document.getElementById('current-session-name');
+        if (!titleEl || !this.currentSession) return;
+        titleEl.textContent = this.currentSession.name + (this.currentWorkout?.isDeload ? ' 🔋' : '');
     }
 
     getSlotsForSessionFromSnapshot(sessionId, snapshot = this.homeDataSnapshot) {
@@ -1094,11 +1235,14 @@ class App {
             );
     }
 
-    normalizeProgramImport(data) {
+    normalizeProgramImport(data, options = {}) {
         const source = data?.program && Array.isArray(data.program.sessions)
             ? data.program
             : data;
         const sessions = Array.isArray(source?.sessions) ? source.sessions : [];
+        const resolveExerciseIdentity = typeof options.exerciseIdentityResolver === 'function'
+            ? options.exerciseIdentityResolver
+            : (exerciseName) => String(exerciseName || '').trim();
 
         if (!sessions.length) {
             throw new Error('Aucune séance détectée dans le fichier.');
@@ -1141,7 +1285,7 @@ class App {
 
             const rawSlots = Array.isArray(session?.slots) ? session.slots : [];
             rawSlots.forEach((rawSlot, slotIndex) => {
-                const exerciseName = String(
+                const importedExerciseName = String(
                     rawSlot?.name ||
                     rawSlot?.exercise ||
                     rawSlot?.exerciseName ||
@@ -1149,7 +1293,9 @@ class App {
                     ''
                 ).trim();
 
-                if (!exerciseName) return;
+                if (!importedExerciseName) return;
+
+                const exerciseName = resolveExerciseIdentity(importedExerciseName) || importedExerciseName;
 
                 const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
                     allowCardioInference: true
@@ -1175,7 +1321,8 @@ class App {
                 };
 
                 const slot = this.buildSlotFromExerciseDefinition(definition, sessionId, slotIndex);
-                slot.name = String(rawSlot?.activeExercise || exerciseName).trim();
+                const importedActiveExercise = String(rawSlot?.activeExercise || exerciseName).trim();
+                slot.name = resolveExerciseIdentity(importedActiveExercise) || importedActiveExercise;
                 slot.activeExercise = slot.name;
                 slot.pool = Array.from(new Set([slot.activeExercise, ...(definition.pool || [])].filter(Boolean)));
                 slot.instructions = definition.instructions;
@@ -1201,7 +1348,7 @@ class App {
                 if (!targetSessionId) return;
 
                 const sessionSlotIndex = normalizedSlots.filter(slot => slot.sessionId === targetSessionId).length;
-                const exerciseName = String(
+                const importedExerciseName = String(
                     rawSlot?.name ||
                     rawSlot?.exercise ||
                     rawSlot?.exerciseName ||
@@ -1209,7 +1356,9 @@ class App {
                     ''
                 ).trim();
 
-                if (!exerciseName) return;
+                if (!importedExerciseName) return;
+
+                const exerciseName = resolveExerciseIdentity(importedExerciseName) || importedExerciseName;
 
                 const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
                     allowCardioInference: true
@@ -1234,7 +1383,8 @@ class App {
                         : (inferred?.pool || [exerciseName])
                 }, targetSessionId, sessionSlotIndex);
 
-                slot.name = String(rawSlot?.activeExercise || exerciseName).trim();
+                const importedActiveExercise = String(rawSlot?.activeExercise || exerciseName).trim();
+                slot.name = resolveExerciseIdentity(importedActiveExercise) || importedActiveExercise;
                 slot.activeExercise = slot.name;
                 slot.pool = Array.from(new Set([slot.activeExercise, ...(rawSlot?.pool || inferred?.pool || [])].filter(Boolean)));
                 this.normalizeSlotProgressionConfig(slot);
@@ -1254,8 +1404,222 @@ class App {
         };
     }
 
-    async importProgramData(data) {
-        const normalized = this.normalizeProgramImport(data);
+    getImportedSettingValue(settings = [], key) {
+        const setting = Array.isArray(settings)
+            ? settings.find(item => item?.key === key)
+            : null;
+        return setting ? setting.value : null;
+    }
+
+    normalizeImportedWeeklyGoal(value) {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? Math.max(1, Math.min(7, parsed)) : null;
+    }
+
+    async applyPlanImportSettings({ objective = null, weeklyGoal = null } = {}) {
+        const cleanObjective = typeof objective === 'string' ? objective.trim() : '';
+        const cleanWeeklyGoal = this.normalizeImportedWeeklyGoal(weeklyGoal);
+
+        if (cleanObjective) {
+            await db.setSetting('trainingObjective', cleanObjective);
+        }
+        if (cleanWeeklyGoal != null) {
+            await db.setSetting('weeklyGoal', cleanWeeklyGoal);
+        }
+
+        await db.setSetting('onboardingCompleted', true);
+        await db.setSetting('nextSessionIndex', 0);
+        await db.setSetting('cycleStartDate', new Date().toISOString());
+    }
+
+    async getSessionNameArchive() {
+        const archive = await db.getSetting('sessionNameArchive');
+        return archive && typeof archive === 'object' && !Array.isArray(archive) ? archive : {};
+    }
+
+    getSessionDisplayNameFromArchive(sessionId, sessionLookup = new Map(), archive = {}) {
+        if (!sessionId) return 'Inconnue';
+        const session = sessionLookup.get(sessionId);
+        return session?.name || archive[sessionId] || 'Inconnue';
+    }
+
+    async getSessionDisplayName(sessionId) {
+        if (!sessionId) return 'Inconnue';
+        const session = await db.get('sessions', sessionId);
+        if (session?.name) return session.name;
+        const archive = await this.getSessionNameArchive();
+        return archive[sessionId] || 'Inconnue';
+    }
+
+    async captureCurrentSessionNamesForArchive() {
+        const [sessions, existingArchive] = await Promise.all([
+            db.getSessions(),
+            this.getSessionNameArchive()
+        ]);
+        const nextArchive = { ...existingArchive };
+        let changed = false;
+
+        sessions.forEach((session) => {
+            if (!session?.id || !session?.name) return;
+            if (nextArchive[session.id] === session.name) return;
+            nextArchive[session.id] = session.name;
+            changed = true;
+        });
+
+        if (changed) {
+            await db.setSetting('sessionNameArchive', nextArchive);
+        }
+
+        return nextArchive;
+    }
+
+    async getSlotHistoryArchive() {
+        const archive = await db.getSetting('slotHistoryArchive');
+        return archive && typeof archive === 'object' && !Array.isArray(archive) ? archive : {};
+    }
+
+    getSlotHistoryArchiveEntry(slot) {
+        if (!slot?.id) return null;
+        const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
+
+        return {
+            id: normalizedSlot.id,
+            sessionId: normalizedSlot.sessionId || null,
+            name: normalizedSlot.name || '',
+            activeExercise: normalizedSlot.activeExercise || normalizedSlot.name || '',
+            muscleGroup: normalizedSlot.muscleGroup || '',
+            type: normalizedSlot.type || 'compound',
+            trackingMode: normalizedSlot.trackingMode || 'strength',
+            repsMin: normalizedSlot.repsMin || null,
+            repsMax: normalizedSlot.repsMax || null,
+            sets: normalizedSlot.sets || null,
+            rest: normalizedSlot.rest || null,
+            rir: normalizedSlot.rir ?? null,
+            capturedAt: new Date().toISOString()
+        };
+    }
+
+    async captureCurrentSlotHistoryArchive() {
+        const [slots, existingArchive] = await Promise.all([
+            db.getAll('slots'),
+            this.getSlotHistoryArchive()
+        ]);
+        const nextArchive = { ...existingArchive };
+        let changed = false;
+
+        slots.forEach((slot) => {
+            const entry = this.getSlotHistoryArchiveEntry(slot);
+            if (!entry) return;
+            nextArchive[entry.id] = entry;
+            changed = true;
+        });
+
+        if (changed) {
+            await db.setSetting('slotHistoryArchive', nextArchive);
+        }
+
+        return nextArchive;
+    }
+
+    async buildSlotHistoryLookup(currentSlots = null, options = {}) {
+        const [slots, archive] = await Promise.all([
+            Array.isArray(currentSlots) ? Promise.resolve(currentSlots) : db.getAll('slots'),
+            this.getSlotHistoryArchive()
+        ]);
+        const lookup = new Map();
+        const archiveWins = options.archiveWins !== false;
+
+        const addArchiveEntries = () => Object.values(archive || {}).forEach((entry) => {
+            if (!entry?.id) return;
+            lookup.set(String(entry.id), entry);
+        });
+
+        const addCurrentSlots = () => (slots || []).forEach((slot) => {
+            if (!slot?.id) return;
+            lookup.set(String(slot.id), this.getSlotHistoryArchiveEntry(slot) || slot);
+        });
+
+        if (archiveWins) {
+            addCurrentSlots();
+            // Archived slots win for legacy sets whose old slotId was reused by a new program.
+            addArchiveEntries();
+        } else {
+            addArchiveEntries();
+            addCurrentSlots();
+        }
+
+        return lookup;
+    }
+
+    normalizePlanSlotsForHistory(slots = [], exerciseIdentityResolver = null) {
+        const resolveExerciseIdentity = typeof exerciseIdentityResolver === 'function'
+            ? exerciseIdentityResolver
+            : (exerciseName) => String(exerciseName || '').trim();
+
+        return slots.map((slot) => {
+            const nextSlot = { ...slot };
+            const importedActiveExercise = String(nextSlot.activeExercise || nextSlot.name || '').trim();
+            const resolvedActiveExercise = resolveExerciseIdentity(importedActiveExercise) || importedActiveExercise;
+
+            if (resolvedActiveExercise) {
+                const nameWasSameExercise = this.normalizeExerciseText(nextSlot.name) === this.normalizeExerciseText(importedActiveExercise);
+                nextSlot.activeExercise = resolvedActiveExercise;
+                if (!nextSlot.name || nameWasSameExercise) {
+                    nextSlot.name = resolvedActiveExercise;
+                }
+                nextSlot.pool = Array.from(new Set([
+                    resolvedActiveExercise,
+                    ...(Array.isArray(nextSlot.pool) ? nextSlot.pool : [])
+                ].filter(Boolean)));
+            }
+
+            return nextSlot;
+        });
+    }
+
+    async importBackupProgramOnly(data, options = {}) {
+        const collections = db.validateImportData(data);
+        const exerciseIdentityResolver = await this.createExerciseIdentityResolver();
+
+        await this.captureCurrentSessionNamesForArchive();
+        await this.captureCurrentSlotHistoryArchive();
+
+        const counts = await db.importSessionPlanData({
+            sessions: collections.sessions.map(session => ({ ...session })),
+            slots: this.normalizePlanSlotsForHistory(collections.slots, exerciseIdentityResolver)
+        }, {
+            clearCurrentWorkout: options.clearCurrentWorkout === true
+        });
+
+        const importedObjective = this.getImportedSettingValue(collections.settings, 'trainingObjective');
+        const importedWeeklyGoal = this.getImportedSettingValue(collections.settings, 'weeklyGoal');
+        const fallbackObjective = await db.getSetting('trainingObjective');
+        const fallbackWeeklyGoal = await db.getSetting('weeklyGoal');
+        const objective = typeof importedObjective === 'string' && importedObjective.trim()
+            ? importedObjective.trim()
+            : (fallbackObjective || '');
+        const weeklyGoal = this.normalizeImportedWeeklyGoal(importedWeeklyGoal) || fallbackWeeklyGoal || 3;
+
+        await this.applyPlanImportSettings({ objective, weeklyGoal });
+        this.invalidateExerciseHistoryCaches();
+
+        return {
+            ...counts,
+            mode: 'programOnly',
+            source: 'backup',
+            objective,
+            weeklyGoal
+        };
+    }
+
+    async importProgramData(data, options = {}) {
+        const preserveHistory = options.preserveHistory === true;
+        const exerciseIdentityResolver = preserveHistory
+            ? await this.createExerciseIdentityResolver()
+            : null;
+        const normalized = this.normalizeProgramImport(data, {
+            exerciseIdentityResolver
+        });
         const existingSettings = await db.getAll('settings');
         const settingsMap = new Map(existingSettings.map((item) => [item.key, item.value]));
 
@@ -1263,6 +1627,34 @@ class App {
         settingsMap.set('weeklyGoal', normalized.weeklyGoal || settingsMap.get('weeklyGoal') || 3);
         settingsMap.set('onboardingCompleted', true);
         settingsMap.set('nextSessionIndex', 0);
+
+        if (preserveHistory) {
+            await this.captureCurrentSessionNamesForArchive();
+            await this.captureCurrentSlotHistoryArchive();
+
+            const counts = await db.importSessionPlanData({
+                sessions: normalized.sessions,
+                slots: normalized.slots
+            }, {
+                clearCurrentWorkout: options.clearCurrentWorkout === true
+            });
+
+            await this.applyPlanImportSettings({
+                objective: settingsMap.get('trainingObjective') || '',
+                weeklyGoal: settingsMap.get('weeklyGoal') || 3
+            });
+
+            this.invalidateExerciseHistoryCaches();
+
+            return {
+                ...counts,
+                mode: 'programOnly',
+                source: 'program',
+                objective: settingsMap.get('trainingObjective') || '',
+                weeklyGoal: settingsMap.get('weeklyGoal') || 3
+            };
+        }
+
         settingsMap.set('xp', 0);
         settingsMap.set('lastWorkoutDate', null);
         settingsMap.set('streakCount', 0);
@@ -1285,6 +1677,7 @@ class App {
         };
 
         const counts = await db.importData(payload);
+        this.invalidateExerciseHistoryCaches();
         return {
             ...counts,
             mode: 'program',
@@ -1297,14 +1690,6 @@ class App {
     async checkPendingSession() {
         const savedWorkout = await db.getCurrentWorkout();
         if (!savedWorkout || !savedWorkout.sessionId) return;
-        
-        // Auto-expire sessions older than 12 hours (storage optimization)
-        const MAX_SESSION_AGE = 12 * 60 * 60 * 1000; // 12 hours
-        if (Date.now() - savedWorkout.startTime > MAX_SESSION_AGE) {
-            console.log('🧹 Séance expirée, nettoyage automatique');
-            await db.clearCurrentWorkout();
-            return;
-        }
         
         const session = await db.get('sessions', savedWorkout.sessionId);
         if (!session) {
@@ -1372,15 +1757,14 @@ class App {
         }
         
         // Update UI
-        document.getElementById('current-session-name').textContent = 
-            session.name + (this.isDeloadMode ? ' 🔋' : '');
+        this.updateCurrentSessionHeader();
+        this.showScreen('session');
         
         // Start timer from saved time
         this.startSessionTimer();
         
         // Render slots with completed state
         await this.renderSlots();
-        this.showScreen('session');
         this.scheduleSessionChallengeReveal(900);
     }
     
@@ -1556,7 +1940,9 @@ class App {
     setupVisibilityHandler() {
         // Handle app returning from background on iOS
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
+            if (document.hidden) {
+                void this.flushPendingWorkoutSave();
+            } else {
                 this.onAppResume();
                 this.refreshStorageIndicators().catch((error) => {
                     console.error('Erreur de reprise stockage:', error);
@@ -1576,6 +1962,14 @@ class App {
             this.refreshStorageIndicators().catch((error) => {
                 console.error('Erreur de reprise réseau:', error);
             });
+        });
+
+        window.addEventListener('pagehide', () => {
+            void this.flushPendingWorkoutSave();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            void this.flushPendingWorkoutSave();
         });
     }
     
@@ -1686,11 +2080,13 @@ class App {
             }, 500);
         }
         
-        const [homeData, storedIndex] = await Promise.all([
+        const [homeData, storedIndex, sessionNameArchive] = await Promise.all([
             this.refreshHomeDataSnapshot(),
-            db.getSetting('nextSessionIndex')
+            db.getSetting('nextSessionIndex'),
+            this.getSessionNameArchive()
         ]);
         const { sessions, history } = homeData;
+        const sessionLookup = new Map(sessions.map(session => [session.id, session]));
         const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex);
         const nextSession = sessions[nextIndex];
         
@@ -1704,11 +2100,19 @@ class App {
             this.currentSession = nextSession;
             document.getElementById('btn-start-session').disabled = false;
             document.getElementById('btn-change-session').disabled = false;
+
+            const cyclePreview = document.getElementById('session-cycle-preview');
+            if (cyclePreview) {
+                const cycleState = await this.getCurrentCycleState();
+                cyclePreview.textContent = this.formatCycleSummary(cycleState);
+            }
         } else {
             document.getElementById('session-name').textContent = 'Crée ta première séance';
             document.getElementById('session-duration').textContent = 'Configure ton programme';
             document.getElementById('session-slots').textContent = '0 exercice';
             document.getElementById('last-session-info').textContent = 'Dernière séance : --';
+            const cyclePreview = document.getElementById('session-cycle-preview');
+            if (cyclePreview) cyclePreview.textContent = 'Cycle : configure tes séances pour démarrer ton premier cycle.';
             document.getElementById('btn-start-session').disabled = true;
             document.getElementById('btn-change-session').disabled = true;
             this.currentSession = null;
@@ -1717,15 +2121,15 @@ class App {
         // Last session info
         if (history.length > 0 && nextSession) {
             const lastWorkout = [...history].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-            const lastSession = await db.get('sessions', lastWorkout.sessionId);
+            const lastSessionName = this.getSessionDisplayNameFromArchive(lastWorkout.sessionId, sessionLookup, sessionNameArchive);
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
             const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
-            document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSession?.name || 'Inconnue'}, ${daysText}`;
+            document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSessionName}, ${daysText}`;
         } else if (nextSession) {
             document.getElementById('last-session-info').textContent = 'Dernière séance : --';
         }
 
-        this.renderCurrentMonthCalendar(history, sessions);
+        this.renderCurrentMonthCalendar(history, sessions, sessionNameArchive);
 
         // Render streak system
         await this.renderStreakSystem();
@@ -1793,7 +2197,7 @@ class App {
         return `${trimmed.slice(0, 9).trim()}…`;
     }
 
-    renderCurrentMonthCalendar(history, sessions) {
+    renderCurrentMonthCalendar(history, sessions, sessionNameArchive = {}) {
         const kickerEl = document.getElementById('history-calendar-kicker');
         const titleEl = document.getElementById('history-calendar-title');
         const summaryEl = document.getElementById('history-calendar-summary');
@@ -1844,10 +2248,9 @@ class App {
                 workoutsByDay.set(key, []);
             }
 
-            const session = sessionLookup.get(workout.sessionId);
             workoutsByDay.get(key).push({
                 sessionId: workout.sessionId,
-                sessionName: session?.name || 'Inconnue'
+                sessionName: this.getSessionDisplayNameFromArchive(workout.sessionId, sessionLookup, sessionNameArchive)
             });
         }
 
@@ -2403,11 +2806,11 @@ class App {
         let bestLift = null;
 
         const sortedSets = [...setHistory]
-            .filter(set => set?.date && set?.exerciseId)
+            .filter(set => set?.date && this.resolveHistoricalSetExerciseId(set, slotMap))
             .sort((a, b) => new Date(a.date) - new Date(b.date));
 
         for (const set of sortedSets) {
-            const slot = slotMap.get(set.slotId);
+            const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
             if (slot && this.isCardioSlot(slot)) continue;
 
             const weight = Number(set.weight || 0);
@@ -2419,7 +2822,7 @@ class App {
             if (e1rm <= 0) continue;
 
             const setDate = this.getSafeDate(set.date);
-            const exerciseId = set.exerciseId;
+            const exerciseId = this.resolveHistoricalSetExerciseId(set, slotMap);
             const workoutId = set.workoutId || `${exerciseId}-${set.date}`;
             if (!exerciseWorkouts.has(exerciseId)) {
                 exerciseWorkouts.set(exerciseId, new Map());
@@ -2505,7 +2908,7 @@ class App {
 
     async buildStatsSnapshot(history, setHistory, slots) {
         const now = new Date();
-        const slotMap = new Map((slots || []).map(slot => [slot.id, slot]));
+        const slotMap = await this.buildSlotHistoryLookup(slots || []);
         const sortedHistory = [...(history || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
         const start7 = this.getStatsRangeStart(7, now);
         const start14 = this.getStatsRangeStart(14, now);
@@ -2541,7 +2944,7 @@ class App {
         const estimatedRpeValues30 = [];
 
         for (const set of setHistory || []) {
-            const slot = slotMap.get(set.slotId);
+            const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
             const setDate = this.getSafeDate(set.date);
             const loadedVolume = this.getSetLoadedVolume(set, slot);
             const rpe = this.getStatsRpe(set, slot);
@@ -3067,7 +3470,7 @@ class App {
             for (const set of setHistory) {
                 const setDate = new Date(set.date);
                 if (setDate >= weekStart && setDate < weekEnd) {
-                    volume += this.getSetLoadedVolume(set, slotMap.get(set.slotId));
+                    volume += this.getSetLoadedVolume(set, slotMap.get(String(set.slotId)) || slotMap.get(set.slotId));
                 }
             }
 
@@ -3237,33 +3640,25 @@ class App {
 
     // ===== Deload System =====
     async checkDeloadSuggestion() {
-        const cycleLength = (await db.getSetting('cycleLength')) ?? 5;
         const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
         const coldDayThreshold = (await db.getSetting('coldDayThreshold')) ?? 3;
+        const cycleState = await this.getCurrentCycleState();
         
         // Get workout history
         const history = await db.getAll('workoutHistory');
+        if (cycleState.phase === 'deload') {
+            return {
+                shouldSuggest: true,
+                reason: 'cycle',
+                message: 'Tu arrives sur ta semaine de deload. Alléger un peu le volume aide à dissiper la fatigue avant de repartir sur un nouveau bloc.'
+            };
+        }
         if (history.length === 0) return { shouldSuggest: false };
         
         // Sort by date
         const sortedHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        // Check 1: Cycle-based deload (every X weeks)
-        const lastDeloadDate = await db.getSetting('lastDeloadDate');
-        const cycleStartDate = await db.getSetting('cycleStartDate');
-        
-        if (cycleStartDate) {
-            const weeksSinceCycleStart = Math.floor((Date.now() - new Date(cycleStartDate)) / (7 * 24 * 60 * 60 * 1000));
-            if (weeksSinceCycleStart >= cycleLength - 1) {
-                return {
-                    shouldSuggest: true,
-                    reason: 'cyclique',
-                    message: `Tu as complété ${weeksSinceCycleStart} semaines d'entraînement intensif. Ton corps a besoin de récupérer pour continuer à progresser !`
-                };
-            }
-        }
-        
-        // Check 2: Auto-deload based on cold days (if enabled)
+        // Check: Auto-deload based on cold days (if enabled)
         if (autoDeloadEnabled && sortedHistory.length >= coldDayThreshold) {
             let consecutiveColdDays = 0;
             
@@ -3280,7 +3675,7 @@ class App {
                 return {
                     shouldSuggest: true,
                     reason: 'fatigue',
-                    message: `Tes ${consecutiveColdDays} dernières séances montrent des signes de fatigue accumulée. Une semaine de récupération t'aidera à revenir plus fort !`
+                    message: `Tes ${consecutiveColdDays} dernières séances montrent des signes de fatigue accumulée. Un deload cette séance peut t'aider à refaire du jus sans te cramer.`
                 };
             }
         }
@@ -3804,6 +4199,12 @@ class App {
     }
 
     async ensureSessionChallenge(session) {
+        if (this.currentWorkout?.isDeload) {
+            this.currentWorkout.challenge = null;
+            await db.saveCurrentWorkout(this.currentWorkout);
+            return null;
+        }
+
         if (!this.currentWorkout || this.currentWorkout.challenge) {
             return this.currentWorkout?.challenge || null;
         }
@@ -3840,6 +4241,8 @@ class App {
             this.challengeRevealTimeout = null;
         }
 
+        if (this.currentWorkout?.isDeload) return;
+
         const challenge = this.getActiveSessionChallenge();
         if (!challenge || challenge.shown || challenge.status !== 'active') return;
 
@@ -3850,6 +4253,8 @@ class App {
     }
 
     showSessionChallengeModal() {
+        if (this.currentWorkout?.isDeload) return;
+
         const challenge = this.getActiveSessionChallenge();
         const modal = document.getElementById('modal-session-challenge');
         if (!challenge || !modal || challenge.status !== 'active') return;
@@ -4035,16 +4440,10 @@ class App {
 
     // ===== Session Screen =====
     async startSession(session) {
-        // Check if deload should be suggested
-        const deloadCheck = await this.checkDeloadSuggestion();
-        if (deloadCheck.shouldSuggest) {
-            const accepted = await this.showDeloadModal(deloadCheck);
-            // Continue with session regardless of choice
-        }
-        
         this.currentSession = session;
         this.sessionStartTime = Date.now();
-        this.isDeloadMode = await db.getSetting('isDeloadMode') || false;
+        this.isDeloadMode = false;
+        const sessionCycle = await this.buildSessionCycleContext();
         
         // Initialize current workout
         this.currentWorkout = {
@@ -4052,7 +4451,9 @@ class App {
             startTime: this.sessionStartTime,
             slots: {},
             completedSlots: [],
-            isDeload: this.isDeloadMode,
+            isDeload: false,
+            deloadSource: null,
+            sessionCycle,
             lmsScores: {}, // Store LMS scores per muscle group
             coachingState: {
                 version: 2,
@@ -4068,20 +4469,23 @@ class App {
                 lastWorkedMuscles: []
             }
         };
-        await db.saveCurrentWorkout(this.currentWorkout);
+        const savePromise = db.saveCurrentWorkout(this.currentWorkout);
 
-        document.getElementById('current-session-name').textContent = session.name + (this.isDeloadMode ? ' 🔋' : '');
+        this.updateCurrentSessionHeader();
+        this.showScreen('session');
+        this.startSessionTimer();
+        const initialRenderPromise = this.renderSlots();
         
         // Show LMS prompt for muscle groups in this session
+        await savePromise;
         await this.showLMSPrompt(session);
 
         await this.ensureSessionChallenge(session);
-        
-        // Start session timer
-        this.startSessionTimer();
-        
-        await this.renderSlots();
-        this.showScreen('session');
+
+        await initialRenderPromise;
+        if (this.currentWorkout?.challenge) {
+            await this.renderSlots();
+        }
         this.scheduleSessionChallengeReveal();
     }
     
@@ -4123,14 +4527,75 @@ class App {
     getMuscleGroupInfo(muscleId) {
         return getMuscleGroupMeta(muscleId);
     }
+
+    async applyCurrentWorkoutDeloadChoice(shouldDeload, source = 'manual') {
+        if (!this.currentWorkout) return;
+
+        this.currentWorkout.isDeload = Boolean(shouldDeload);
+        this.currentWorkout.deloadSource = shouldDeload ? source : null;
+        if (this.currentWorkout.sessionCycle) {
+            this.currentWorkout.sessionCycle.deloadActivated = Boolean(shouldDeload);
+            this.currentWorkout.sessionCycle.deloadChoice = shouldDeload ? 'on' : 'off';
+        }
+        this.isDeloadMode = Boolean(shouldDeload);
+        if (shouldDeload) {
+            this.currentWorkout.challenge = null;
+            if (this.challengeRevealTimeout) {
+                clearTimeout(this.challengeRevealTimeout);
+                this.challengeRevealTimeout = null;
+            }
+        }
+
+        for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots || {})) {
+            const slot = await db.get('slots', slotId);
+            if (!slot || !slotData) continue;
+            await this.syncSlotAutoTargetState(slot, slotData);
+        }
+
+        await db.saveCurrentWorkout(this.currentWorkout);
+        this.updateCurrentSessionHeader();
+    }
+
+    renderCycleCheckinCard(cycleContext) {
+        const kickerEl = document.getElementById('cycle-checkin-kicker');
+        const titleEl = document.getElementById('cycle-checkin-title');
+        const phaseEl = document.getElementById('cycle-checkin-phase');
+        const objectiveEl = document.getElementById('cycle-checkin-objective');
+        const progressEl = document.getElementById('cycle-checkin-progress');
+        const deloadBlockEl = document.getElementById('cycle-checkin-deload');
+        const deloadTitleEl = document.getElementById('cycle-deload-title');
+        const deloadCopyEl = document.getElementById('cycle-deload-copy');
+        const noteEl = document.getElementById('cycle-checkin-note');
+
+        if (!kickerEl || !titleEl || !phaseEl || !objectiveEl || !progressEl || !deloadBlockEl || !deloadTitleEl || !deloadCopyEl || !noteEl) return;
+
+        kickerEl.textContent = `Cycle en cours • ${cycleContext.totalWeeks} semaines`;
+        titleEl.textContent = `Semaine ${cycleContext.weekInCycle}/${cycleContext.totalWeeks}`;
+        phaseEl.textContent = cycleContext.phase === 'deload' ? 'Deload' : 'Accumulation';
+        phaseEl.classList.toggle('is-deload', cycleContext.phase === 'deload');
+        objectiveEl.textContent = cycleContext.objective;
+        progressEl.innerHTML = Array.from({ length: cycleContext.totalWeeks }, (_, index) => {
+            const weekNumber = index + 1;
+            const classes = ['cycle-checkin-progress-dot'];
+            if (weekNumber < cycleContext.weekInCycle) classes.push('is-complete');
+            if (weekNumber === cycleContext.weekInCycle) classes.push('is-current');
+            if (weekNumber > cycleContext.accumulationWeeks) classes.push('is-deload');
+            return `<span class="${classes.join(' ')}" aria-hidden="true"></span>`;
+        }).join('');
+        deloadTitleEl.textContent = cycleContext.suggestionTitle;
+        deloadCopyEl.textContent = cycleContext.suggestionCopy;
+        noteEl.textContent = cycleContext.note;
+        deloadBlockEl.style.display = cycleContext.shouldSuggestDeload ? 'grid' : 'none';
+
+        const options = document.querySelectorAll('.cycle-deload-option');
+        options.forEach((option) => {
+            option.classList.toggle('is-active', option.dataset.deloadChoice === this.cycleDeloadChoiceTemp);
+        });
+    }
     
     // Show LMS prompt modal
     async showLMSPrompt(session) {
         const muscleGroups = await this.getSessionMuscleGroups(session);
-        
-        if (muscleGroups.length === 0) {
-            return; // No identified muscles, skip LMS
-        }
 
         const titleIcon = document.querySelector('.lms-title-icon');
         if (titleIcon) {
@@ -4142,6 +4607,19 @@ class App {
             infoIcon.innerHTML = renderAppIcon('recovery-info', { size: 22, label: 'Information récupération' });
         }
         
+        const cycleContext = this.currentWorkout?.sessionCycle || await this.buildSessionCycleContext();
+        this.currentWorkout.sessionCycle = cycleContext;
+        this.cycleDeloadChoiceTemp = cycleContext.deloadChoice || 'off';
+        this.renderCycleCheckinCard(cycleContext);
+
+        const deloadSelector = document.getElementById('cycle-deload-selector');
+        deloadSelector?.querySelectorAll('.cycle-deload-option').forEach((button) => {
+            button.onclick = () => {
+                this.cycleDeloadChoiceTemp = button.dataset.deloadChoice === 'on' ? 'on' : 'off';
+                this.renderCycleCheckinCard(cycleContext);
+            };
+        });
+
         // Generate LMS UI for each muscle group
         const container = document.getElementById('lms-muscle-list');
         container.innerHTML = '';
@@ -4181,6 +4659,8 @@ class App {
             const slider = muscleItem.querySelector('.lms-slider');
             slider.addEventListener('input', (e) => this.handleLMSSliderChange(e, muscleId));
         }
+
+        container.style.display = muscleGroups.length > 0 ? 'flex' : 'none';
         
         // Show the sheet
         return new Promise((resolve) => {
@@ -4199,6 +4679,10 @@ class App {
 
                 // Save only explicit LMS answers to current workout
                 this.currentWorkout.lmsScores = confirmedScores;
+                await this.applyCurrentWorkoutDeloadChoice(
+                    this.cycleDeloadChoiceTemp === 'on',
+                    cycleContext.suggestionReason || 'manual'
+                );
                 await db.saveCurrentWorkout(this.currentWorkout);
                 
                 // Save LMS history for tracking only if the user answered something
@@ -4730,7 +5214,9 @@ class App {
             parts.push(`repos <strong>${advice.restRecommendation}</strong>`);
         }
 
-        if (setPlan.reductionAccepted) {
+        if (setPlan.isDeloadPlanApplied) {
+            parts.push(`format deload à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong>`);
+        } else if (setPlan.reductionAccepted) {
             parts.push(`volume validé à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong>`);
         } else if (setPlan.showReductionPrompt) {
             parts.push(`option: s'arrêter à <strong>${setPlan.suggestedReductionSets} série${setPlan.suggestedReductionSets > 1 ? 's' : ''}</strong>`);
@@ -4750,6 +5236,19 @@ class App {
 
         const fatigueLevel = advice.sessionContext?.fatigueLevel || 'low';
         const trend = advice.trendSummary?.trend || 'stable';
+        const isDeloadActive = advice?.type === 'deload'
+            || advice?.type === 'reactive_deload'
+            || advice?.type === 'deload_mini'
+            || advice?.isDeload;
+        const isRecalibration = advice.programTargetChange || advice.rangeFitRecalibration;
+
+        if (isDeloadActive) {
+            return `Règle: reste facile, garde 2 à 4 reps en réserve et ne cherche ni défi ni performance max aujourd'hui.`;
+        }
+
+        if (isRecalibration) {
+            return `Règle: traite cette séance comme une calibration; la charge peut descendre si la plage de reps ou le volume monte.`;
+        }
 
         if (advice.suggestedAssistanceKg != null) {
             return `Règle: garde une amplitude complète, puis ajuste l'assistance d'un palier seulement si tu sors de la fourchette.`;
@@ -4772,8 +5271,27 @@ class App {
         const reasons = [];
         const trendSummary = advice.trendSummary;
         const sessionContext = advice.sessionContext;
+        const isDeloadActive = advice?.type === 'deload'
+            || advice?.type === 'reactive_deload'
+            || advice?.type === 'deload_mini'
+            || advice?.isDeload;
 
-        if (trendSummary?.confidence >= 0.3) {
+        if (isDeloadActive) {
+            const cycleState = this.currentWorkout?.sessionCycle;
+            const cycleLabel = cycleState?.weekInCycle && cycleState?.totalWeeks
+                ? `deload actif (semaine ${cycleState.weekInCycle}/${cycleState.totalWeeks})`
+                : 'deload actif';
+            reasons.push(cycleLabel);
+        }
+
+        if (advice.programTargetChange) {
+            const change = advice.programTargetChange;
+            reasons.push(`nouveau format ${this.formatProgramTargetLabel(change.previous)} → ${this.formatProgramTargetLabel(change.current)}`);
+        } else if (advice.rangeFitRecalibration) {
+            reasons.push('charge recalibrée sur la fourchette actuelle');
+        }
+
+        if (!isDeloadActive && trendSummary?.confidence >= 0.3) {
             const e1rmPct = Number.isFinite(trendSummary.e1rmDelta)
                 ? Math.round(trendSummary.e1rmDelta * 1000) / 10
                 : null;
@@ -4853,8 +5371,12 @@ class App {
         const dismissedSuggestedSets = Number.isFinite(Number(volumeDecision?.dismissedSuggestedSets))
             ? Number(volumeDecision.dismissedSuggestedSets)
             : null;
-        const reductionAccepted = targetState.activeTargetSets < programmedSets;
         const activeTargetSets = targetState.activeTargetSets;
+        const activeTargetSource = targetState.source || 'programmed';
+        const isDeloadPlanApplied = activeTargetSource === 'deload'
+            && activeTargetSets < programmedSets;
+        const reductionAccepted = activeTargetSets < programmedSets
+            && (volumeDecision?.acceptedTargetSets != null || activeTargetSource === 'deload');
 
         const reasonMap = {
             deload: 'deload',
@@ -4866,11 +5388,13 @@ class App {
         return {
             programmedSets,
             activeTargetSets,
+            activeTargetSource,
             directSuggestedSets,
             suggestedReductionSets,
             reductionCandidate,
             increaseCandidate,
             reductionAccepted,
+            isDeloadPlanApplied,
             acceptedDecision: volumeDecision,
             hasSuggestedReduction: Boolean(reductionCandidate),
             hasOptionalIncrease: Boolean(increaseCandidate),
@@ -4884,10 +5408,17 @@ class App {
         };
     }
 
+    getDisplayedSetCount(slot = this.currentSlot, advice = this.currentCoachingAdvice, slotData = null) {
+        const setPlan = this.buildCoachSetPlan(slot, advice);
+        return setPlan.reductionAccepted ? setPlan.activeTargetSets : setPlan.programmedSets;
+    }
+
     getCoachCardChipText(advice, slot = this.currentSlot, setPlan = this.buildCoachSetPlan(slot, advice)) {
+        if (setPlan.isDeloadPlanApplied || advice?.isDeload) return 'Deload actif';
         if (setPlan.reductionAccepted) return 'Volume validé';
         if (setPlan.showReductionPrompt) return 'Suggestion volume';
         if (advice?.topSetProgression) return 'Top set';
+        if (advice?.programTargetChange || advice?.rangeFitRecalibration) return 'Recalibrage';
         if (slot?.progressionMode === 'capped_load') return 'Charge plafonnée';
         if (slot?.progressionMode === 'bodyweight') return 'Poids du corps';
         if (advice?.sessionContext?.fatigueLevel === 'high') return 'Fatigue haute';
@@ -5298,6 +5829,213 @@ class App {
         }) || null;
     }
 
+    findExerciseLibraryEntryByNameOrAlias(exerciseName) {
+        const normalizedName = this.normalizeExerciseText(exerciseName);
+        if (!normalizedName) return null;
+
+        return this.getExerciseLibrary().find(entry => {
+            const searchableNames = [
+                entry.name,
+                ...(entry.aliases || [])
+            ];
+            return searchableNames.some(name => this.normalizeExerciseText(name) === normalizedName);
+        }) || null;
+    }
+
+    getBaseExerciseHistoryName(exerciseId) {
+        return String(exerciseId || '')
+            .replace(/\s*\((gauche|droite|left|right)\)\s*$/i, '')
+            .trim();
+    }
+
+    getHistoricalSlotExerciseNames(slotInfo = null) {
+        if (!slotInfo) return [];
+        return [
+            slotInfo.activeExercise,
+            slotInfo.exerciseName,
+            slotInfo.name
+        ]
+            .map(name => String(name || '').trim())
+            .filter(Boolean);
+    }
+
+    buildExerciseHistoryNameMap(setHistory = [], slotLookup = new Map()) {
+        const historyNames = new Map();
+        const sortedSets = [...setHistory]
+            .filter(set => set?.exerciseId || set?.slotId)
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        for (const set of sortedSets) {
+            const slotInfo = set.slotId ? slotLookup.get(String(set.slotId)) : null;
+            const candidates = [
+                set.exerciseId,
+                this.getBaseExerciseHistoryName(set.exerciseId),
+                ...this.getHistoricalSlotExerciseNames(slotInfo)
+            ]
+                .map(name => String(name || '').trim())
+                .filter(Boolean);
+
+            for (const candidate of candidates) {
+                const normalized = this.normalizeExerciseText(candidate);
+                if (normalized && !historyNames.has(normalized)) {
+                    historyNames.set(normalized, candidate);
+                }
+            }
+        }
+
+        return historyNames;
+    }
+
+    invalidateExerciseHistoryCaches() {
+        this.exerciseHistoryIndexPromise = null;
+        this.exerciseHistoryResultCache.clear();
+    }
+
+    async getExerciseHistoryLegacyIndex() {
+        if (!this.exerciseHistoryIndexPromise) {
+            this.exerciseHistoryIndexPromise = (async () => {
+                const [allSets, slotLookup] = await Promise.all([
+                    db.getAll('setHistory'),
+                    this.buildSlotHistoryLookup()
+                ]);
+                const historyIndex = new Map();
+
+                allSets.forEach((set) => {
+                    const candidateNames = this.getSetHistoryCandidateExerciseNames(set, slotLookup);
+                    candidateNames.forEach((name) => {
+                        const normalizedName = this.normalizeExerciseText(name);
+                        if (!normalizedName) return;
+                        if (!historyIndex.has(normalizedName)) {
+                            historyIndex.set(normalizedName, []);
+                        }
+                        historyIndex.get(normalizedName).push(set);
+                    });
+                });
+
+                return historyIndex;
+            })();
+        }
+
+        return this.exerciseHistoryIndexPromise;
+    }
+
+    async createExerciseIdentityResolver() {
+        const [setHistory, slotLookup] = await Promise.all([
+            db.getAll('setHistory'),
+            this.buildSlotHistoryLookup(null, { archiveWins: false })
+        ]);
+        const historyNames = this.buildExerciseHistoryNameMap(setHistory, slotLookup);
+
+        return (exerciseName) => this.resolveExerciseIdentityName(exerciseName, historyNames);
+    }
+
+    resolveExerciseIdentityName(exerciseName, historyNames = new Map()) {
+        const rawName = String(exerciseName || '').trim();
+        if (!rawName) return '';
+
+        const exactHistoryName = historyNames.get(this.normalizeExerciseText(rawName));
+        if (exactHistoryName) return exactHistoryName;
+
+        const libraryEntry = this.findExerciseLibraryEntryByNameOrAlias(rawName);
+        const identityCandidates = [
+            libraryEntry?.name,
+            ...(libraryEntry?.aliases || [])
+        ].filter(Boolean);
+
+        for (const candidate of identityCandidates) {
+            const historyName = historyNames.get(this.normalizeExerciseText(candidate));
+            if (historyName) return historyName;
+        }
+
+        return libraryEntry?.name || rawName;
+    }
+
+    getExerciseIdentityCandidates(exerciseName) {
+        const rawName = String(exerciseName || '').trim();
+        if (!rawName) return [];
+
+        const baseName = this.getBaseExerciseHistoryName(rawName);
+        const libraryEntry = this.findExerciseLibraryEntryByNameOrAlias(rawName)
+            || this.findExerciseLibraryEntryByNameOrAlias(baseName);
+        const candidates = [
+            rawName,
+            baseName,
+            libraryEntry?.name,
+            ...(libraryEntry?.aliases || [])
+        ]
+            .map(name => String(name || '').trim())
+            .filter(Boolean);
+
+        return Array.from(new Set(candidates));
+    }
+
+    getSetHistoryCandidateExerciseNames(set, slotLookup = new Map()) {
+        if (!set) return [];
+
+        const slotInfo = set.slotId ? slotLookup.get(String(set.slotId)) : null;
+        const candidates = [
+            set.exerciseId,
+            this.getBaseExerciseHistoryName(set.exerciseId),
+            ...this.getHistoricalSlotExerciseNames(slotInfo)
+        ]
+            .map(name => String(name || '').trim())
+            .filter(Boolean);
+
+        return Array.from(new Set(candidates));
+    }
+
+    setMatchesExerciseIdentity(set, exerciseId, slotLookup = new Map()) {
+        const targetNames = this.getExerciseIdentityCandidates(exerciseId);
+        if (!targetNames.length) return false;
+
+        const targetKeys = new Set(targetNames.map(name => this.normalizeExerciseText(name)).filter(Boolean));
+        const setNames = this.getSetHistoryCandidateExerciseNames(set, slotLookup);
+
+        return setNames.some(name => targetKeys.has(this.normalizeExerciseText(name)));
+    }
+
+    resolveHistoricalSetExerciseId(set, slotLookup = new Map()) {
+        return this.getSetHistoryCandidateExerciseNames(set, slotLookup)[0] || '';
+    }
+
+    async getSetHistoryForExercise(exerciseId, options = {}) {
+        const cleanExerciseId = String(exerciseId || '').trim();
+        if (!cleanExerciseId) return [];
+
+        const includeLegacy = options.includeLegacy !== false;
+        const cacheKey = `${includeLegacy ? 'legacy' : 'direct'}:${this.normalizeExerciseText(cleanExerciseId)}`;
+        if (this.exerciseHistoryResultCache.has(cacheKey)) {
+            return [...this.exerciseHistoryResultCache.get(cacheKey)];
+        }
+
+        const directSets = await db.getByIndex('setHistory', 'exerciseId', cleanExerciseId);
+        if (!includeLegacy) {
+            this.exerciseHistoryResultCache.set(cacheKey, directSets);
+            return [...directSets];
+        }
+
+        const [historyIndex, targetNames] = await Promise.all([
+            this.getExerciseHistoryLegacyIndex(),
+            Promise.resolve(this.getExerciseIdentityCandidates(cleanExerciseId))
+        ]);
+        const seen = new Set(directSets.map((set, index) => set?.id ?? `direct-${index}`));
+        const merged = [...directSets];
+
+        targetNames.forEach((name) => {
+            const normalizedName = this.normalizeExerciseText(name);
+            const candidateSets = historyIndex.get(normalizedName) || [];
+            candidateSets.forEach((set, index) => {
+                const key = set?.id ?? `${normalizedName}-${index}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                merged.push(set);
+            });
+        });
+
+        this.exerciseHistoryResultCache.set(cacheKey, merged);
+        return [...merged];
+    }
+
     getExerciseSearchBlob(entry) {
         return this.normalizeExerciseText([
             entry.name,
@@ -5312,20 +6050,44 @@ class App {
     getTrackingMode(slotOrExercise) {
         if (!slotOrExercise) return 'strength';
 
+        const exerciseName = this.getSlotExerciseName(slotOrExercise);
+        const libraryEntry = this.findExerciseLibraryEntry(exerciseName);
+        const inferredTrackingMode = libraryEntry?.trackingMode
+            || this.inferCustomExerciseTemplate(exerciseName, {
+                preferLibraryMatch: false,
+                allowCardioInference: true
+            })?.trackingMode
+            || 'strength';
+
         if (typeof slotOrExercise === 'object') {
+            const usesStrengthProgression =
+                slotOrExercise.progressionMode === 'load' ||
+                slotOrExercise.progressionMode === 'capped_load' ||
+                slotOrExercise.progressionMode === 'bodyweight' ||
+                slotOrExercise.loadingProfile === 'free_weight' ||
+                slotOrExercise.loadingProfile === 'machine_stack' ||
+                slotOrExercise.loadingProfile === 'plate_stack' ||
+                slotOrExercise.loadingProfile === 'bodyweight';
+
+            if (slotOrExercise.trackingMode === 'cardio') {
+                if (usesStrengthProgression || inferredTrackingMode !== 'cardio') {
+                    return 'strength';
+                }
+                return 'cardio';
+            }
+
             if (slotOrExercise.trackingMode) {
                 return slotOrExercise.trackingMode;
             }
 
             // Legacy slots without explicit tracking should stay on the classic
             // load/reps flow when they already use standard progression settings.
-            if (slotOrExercise.progressionMode === 'load' || slotOrExercise.progressionMode === 'capped_load') {
+            if (usesStrengthProgression) {
                 return 'strength';
             }
         }
 
-        const libraryEntry = this.findExerciseLibraryEntry(this.getSlotExerciseName(slotOrExercise));
-        return libraryEntry?.trackingMode || 'strength';
+        return inferredTrackingMode;
     }
 
     isCardioSlot(slotOrExercise) {
@@ -5858,6 +6620,7 @@ class App {
         const slots = await db.getSlotsBySession(this.currentSession.id);
         const container = document.getElementById('slots-list');
         container.innerHTML = '';
+        const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
 
         // Build superset map (firstSlotId -> secondSlotId)
         const supersetMap = {};
@@ -5866,6 +6629,8 @@ class App {
                 supersetMap[slot.id] = slot.supersetWith;
             }
         }
+        const secondSlotIds = new Set(Object.values(supersetMap));
+        const firstSlotBySecond = new Map(Object.entries(supersetMap).map(([firstSlotId, secondSlotId]) => [secondSlotId, firstSlotId]));
 
         // Assign colors to each superset pair
         const supersetColors = {};
@@ -5880,27 +6645,25 @@ class App {
             }
         }
 
-        for (let i = 0; i < slots.length; i++) {
-            const slot = slots[i];
+        const cards = await Promise.all(slots.map(async (slot) => {
             const isCompleted = this.currentWorkout?.completedSlots?.includes(slot.id);
             
             // Check if this slot is part of a superset
-            const isInSuperset = slot.supersetWith || Object.values(supersetMap).includes(slot.id);
-            const isFirstInSuperset = slot.supersetWith && !Object.values(supersetMap).includes(slot.id);
-            const isSecondInSuperset = Object.values(supersetMap).includes(slot.id);
+            const isFirstInSuperset = Boolean(slot.supersetWith) && !secondSlotIds.has(slot.id);
+            const isSecondInSuperset = secondSlotIds.has(slot.id);
             
             // Find the first slot ID if this is the second in superset
-            let firstSlotId = null;
-            if (isSecondInSuperset) {
-                firstSlotId = Object.keys(supersetMap).find(key => supersetMap[key] === slot.id);
-            }
+            const firstSlotId = isSecondInSuperset ? (firstSlotBySecond.get(slot.id) || null) : null;
             
             // Get superset color
             const supersetColor = supersetColors[slot.id] !== undefined ? supersetColors[slot.id] : 0;
             
-            const card = await this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor);
-            container.appendChild(card);
-        }
+            return this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor, { failureThreshold });
+        }));
+
+        const fragment = document.createDocumentFragment();
+        cards.forEach((card) => fragment.appendChild(card));
+        container.appendChild(fragment);
         
         // Update progress bar
         this.updateSessionProgress(slots);
@@ -5916,12 +6679,13 @@ class App {
     }
     
     // ===== Performance Status (RPE-aware) =====
-    async getExerciseStatus(slot) {
+    async getExerciseStatus(slot, failureThreshold = null) {
         const exerciseId = slot.activeExercise || slot.name;
-        const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
+        const resolvedFailureThreshold = failureThreshold ?? ((await db.getSetting('failureCount')) ?? 3);
         
         // Get all set history for this exercise
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = (await this.getSetHistoryForExercise(exerciseId))
+            .filter(set => !set.isDeload);
         
         if (allSetHistory.length === 0) {
             return { class: '', title: 'Nouveau' };
@@ -5985,7 +6749,7 @@ class App {
         let consecutiveStagnation = 1;
         let lowEffortCount = (current.hasRealRpe && current.avgRpe !== null && current.avgRpe < 8) ? 1 : 0;
         
-        for (let i = 1; i < Math.min(workouts.length - 1, failureThreshold + 1); i++) {
+        for (let i = 1; i < Math.min(workouts.length - 1, resolvedFailureThreshold + 1); i++) {
             const curr = workouts[i];
             const prev = workouts[i + 1];
             const currFirst = curr.sets[0];
@@ -6005,7 +6769,7 @@ class App {
         }
         
         // Intelligent status based on stagnation count and effort
-        if (consecutiveStagnation >= failureThreshold) {
+        if (consecutiveStagnation >= resolvedFailureThreshold) {
             return { class: 'danger', title: `Plateau (${consecutiveStagnation}x)` };
         } else if (consecutiveStagnation >= 2) {
             if (lowEffortCount >= 2) {
@@ -6020,7 +6784,7 @@ class App {
         }
     }
 
-    async createSlotCard(slot, isCompleted, isFirstInSuperset = false, isSecondInSuperset = false, firstSlotId = null, supersetColor = 0) {
+    async createSlotCard(slot, isCompleted, isFirstInSuperset = false, isSecondInSuperset = false, firstSlotId = null, supersetColor = 0, renderOptions = {}) {
         const card = document.createElement('div');
         let cardClass = `slot-card ${isCompleted ? 'completed' : ''}`;
         if (isFirstInSuperset) cardClass += ' superset-start';
@@ -6035,7 +6799,7 @@ class App {
         card.style.setProperty('--superset-accent', supersetAccent);
         
         // Calculate performance status from history
-        const status = await this.getExerciseStatus(slot);
+        const status = await this.getExerciseStatus(slot, renderOptions.failureThreshold);
         const isInSuperset = isFirstInSuperset || isSecondInSuperset;
         
         // Superset badge (only show when not completed)
@@ -6200,7 +6964,20 @@ class App {
         this.editingSetIndex = null; // Reset edit mode
         
         if (!this.currentSlot) return;
+        const loadToken = Symbol(`exercise-${slotId}`);
+        this.activeExerciseLoadToken = loadToken;
         this.ensureWorkoutCoachingState();
+        this.currentCoachingAdvice = null;
+        this.currentExerciseTrendSummary = null;
+        this.lastExerciseHistory = null;
+        this.lastExerciseHistoryAll = [];
+        this.exerciseProgressHistory = [];
+        this.lastUnilateralHistoryLeft = null;
+        this.lastUnilateralHistoryLeftAll = [];
+        this.lastUnilateralHistoryRight = null;
+        this.lastUnilateralHistoryRightAll = [];
+        this.unilateralCoachingAdviceLeft = null;
+        this.unilateralCoachingAdviceRight = null;
         
         // Check if this is a unilateral exercise
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
@@ -6216,18 +6993,17 @@ class App {
                 startTime: Date.now(),
                 meta: this.buildSlotCoachMeta(this.currentSlot)
             };
-            await db.saveCurrentWorkout(this.currentWorkout);
         }
-        this.currentWorkout.slots[slotId].meta = this.buildSlotCoachMeta(this.currentSlot);
-        await db.saveCurrentWorkout(this.currentWorkout);
+        const slotData = this.currentWorkout.slots[slotId];
+        await this.syncSlotAutoTargetState(this.currentSlot, slotData);
+        slotData.meta = this.buildSlotCoachMeta(this.currentSlot);
         
         // Ensure unilateral arrays exist for existing workout data
         if (this.isUnilateralMode) {
-            const slotData = this.currentWorkout.slots[slotId];
             if (!slotData.setsLeft) slotData.setsLeft = [];
             if (!slotData.setsRight) slotData.setsRight = [];
-            await db.saveCurrentWorkout(this.currentWorkout);
         }
+        await db.saveCurrentWorkout(this.currentWorkout);
 
         document.getElementById('exercise-slot-label').textContent = this.currentSlot.slotId;
         document.getElementById('current-exercise-name').textContent = exerciseName;
@@ -6235,7 +7011,8 @@ class App {
         // Check for LMS volume adjustment
         const lmsData = await this.getLMSDataForSlot(this.currentSlot);
         this.currentLMSData = lmsData; // Store for later use
-        document.getElementById('exercise-sets').textContent = this.currentSlot.sets;
+        document.getElementById('exercise-sets').textContent =
+            this.getDisplayedSetCount(this.currentSlot, this.currentCoachingAdvice, slotData);
         
         document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(this.currentSlot);
         document.getElementById('exercise-rest').textContent = this.currentSlot.rest > 0 ? `${this.currentSlot.rest}s` : '--';
@@ -6277,40 +7054,26 @@ class App {
             document.getElementById('logbook-card').style.display = 'none';
             if (unilateralCoachingContainer) unilateralCoachingContainer.style.display = 'block';
             if (unilateralLogbookContainer) unilateralLogbookContainer.style.display = 'block';
-            
-            // Load logbook for both sides
-            await this.loadUnilateralLogbook();
-            
-            // Calculate coaching for both sides
-            await this.calculateUnilateralCoachingAdvice();
-            this.showUnilateralCoachingAdvice();
-            
-            // Render unified unilateral logbook
+            document.getElementById('unilateral-advice-name-left').textContent = exerciseName;
+            document.getElementById('unilateral-advice-name-right').textContent = exerciseName;
+            document.getElementById('unilateral-advice-message-left').textContent = '';
+            document.getElementById('unilateral-advice-message-right').textContent = '';
+            document.getElementById('unilateral-advice-weight-left').textContent = '--';
+            document.getElementById('unilateral-advice-weight-right').textContent = '--';
+            document.getElementById('unilateral-advice-reps-left').textContent = '--';
+            document.getElementById('unilateral-advice-reps-right').textContent = '--';
             this.renderUnilateralLogbook();
             this.renderExerciseNotes();
-            
             this.renderUnilateralSeries();
         } else {
             document.getElementById('logbook-card').style.display = 'block';
             if (unilateralCoachingContainer) unilateralCoachingContainer.style.display = 'none';
             if (unilateralLogbookContainer) unilateralLogbookContainer.style.display = 'none';
-            
-            // Load logbook (last session data)
-            await this.loadLogbook();
-
-            if (isCardioExercise) {
-                this.currentCoachingAdvice = null;
-                document.getElementById('coaching-advice').style.display = 'none';
-                document.getElementById('exercise-progress-card').style.display = 'none';
-                document.getElementById('coach-decision-card').style.display = 'none';
-            } else {
-                // Calculate and show coaching advice (store for use in renderSeries)
-                this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
-                await this.showCoachingAdvice();
-                this.renderExerciseProgressSparkline(this.exerciseProgressHistory);
-            }
+            this.renderLogbook(null);
+            document.getElementById('coaching-advice').style.display = 'none';
+            document.getElementById('exercise-progress-card').style.display = 'none';
+            document.getElementById('coach-decision-card').style.display = 'none';
             this.renderExerciseNotes();
-            
             this.renderSeries();
         }
         
@@ -6318,6 +7081,47 @@ class App {
         
         // Check if there's an active timer from before
         this.onAppResume();
+
+        void (async () => {
+            const isStale = () => this.activeExerciseLoadToken !== loadToken || this.currentSlot?.id !== slotId;
+
+            if (this.isUnilateralMode) {
+                await this.loadUnilateralLogbook();
+                if (isStale()) return;
+
+                await this.calculateUnilateralCoachingAdvice();
+                if (isStale()) return;
+
+                this.showUnilateralCoachingAdvice();
+                document.getElementById('exercise-sets').textContent =
+                    this.getDisplayedSetCount(this.currentSlot, this.unilateralCoachingAdviceLeft || this.unilateralCoachingAdviceRight || this.currentCoachingAdvice, slotData);
+                this.renderUnilateralLogbook();
+                this.renderExerciseNotes();
+                this.renderUnilateralSeries();
+                return;
+            }
+
+            await this.loadLogbook();
+            if (isStale()) return;
+
+            if (isCardioExercise) {
+                this.currentCoachingAdvice = null;
+                document.getElementById('coaching-advice').style.display = 'none';
+                document.getElementById('exercise-progress-card').style.display = 'none';
+                document.getElementById('coach-decision-card').style.display = 'none';
+            } else {
+                this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
+                if (isStale()) return;
+                await this.showCoachingAdvice();
+                if (isStale()) return;
+                this.renderExerciseProgressSparkline(this.exerciseProgressHistory);
+            }
+
+            document.getElementById('exercise-sets').textContent =
+                this.getDisplayedSetCount(this.currentSlot, this.currentCoachingAdvice, slotData);
+            this.renderExerciseNotes();
+            this.renderSeries();
+        })();
     }
     
     // ===== Unilateral Logbook Loading =====
@@ -6336,16 +7140,21 @@ class App {
     }
     
     async loadSideHistoryAll(exerciseId) {
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = (await this.getSetHistoryForExercise(exerciseId))
+            .filter(set => !set.isDeload);
         
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
-                workoutGroups[set.workoutId] = { date: set.date, sets: [], totalReps: 0, maxWeight: 0 };
+                workoutGroups[set.workoutId] = { date: set.date, sets: [], totalReps: 0, maxWeight: 0, isDeload: false, cycleWeek: null };
             }
             workoutGroups[set.workoutId].sets.push(set);
             workoutGroups[set.workoutId].totalReps += set.reps || 0;
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
+            workoutGroups[set.workoutId].isDeload = workoutGroups[set.workoutId].isDeload || Boolean(set.isDeload);
+            if (workoutGroups[set.workoutId].cycleWeek == null && set.cycleWeek != null) {
+                workoutGroups[set.workoutId].cycleWeek = set.cycleWeek;
+            }
         }
         
         const workoutIds = Object.keys(workoutGroups);
@@ -6361,7 +7170,9 @@ class App {
                 date: workout.date,
                 sets: workout.sets,
                 totalReps: workout.totalReps,
-                maxWeight: workout.maxWeight
+                maxWeight: workout.maxWeight,
+                isDeload: workout.isDeload,
+                cycleWeek: workout.cycleWeek
             };
         });
     }
@@ -6472,12 +7283,16 @@ class App {
         histories.forEach((history, idx) => {
             const dateText = this.formatLogbookDate(history.date);
             const isLatest = idx === 0;
+            const deloadBadge = history.isDeload
+                ? `<span class="logbook-session-badge">Deload${history.cycleWeek ? ` • S${history.cycleWeek}` : ''}</span>`
+                : '';
             
             html += `<div class="unilateral-logbook-session ${isLatest ? '' : 'unilateral-logbook-session-older'}">`;
             html += `<div class="unilateral-logbook-session-header">
                 <span class="logbook-session-label">${isLatest ? 'Dernière' : `S-${idx + 1}`}</span>
                 <span class="logbook-session-date">${dateText}</span>
             </div>`;
+            if (deloadBadge) html += deloadBadge;
             html += '<div class="unilateral-logbook-sets">';
             for (const set of history.sets) {
                 html += `<span class="unilateral-logbook-set">${this.formatSetResult(set, set.exerciseId || this.currentSlot)}</span>`;
@@ -6505,7 +7320,15 @@ class App {
         this.isReviewMode = this.areSlotsCompleted([slotId, this.currentSlot.supersetWith]);
         this.supersetCoachingAdviceA = null;
         this.supersetCoachingAdviceB = null;
+        this.lastExerciseHistory = null;
+        this.lastExerciseHistoryAll = [];
+        this.lastSupersetHistory = null;
+        this.lastSupersetHistoryAll = [];
+        this.exerciseProgressHistory = [];
+        this.supersetProgressHistory = [];
         this.ensureWorkoutCoachingState();
+        const loadToken = Symbol(`superset-${slotId}`);
+        this.activeExerciseLoadToken = loadToken;
 
         // Initialize slot data for both exercises
         if (!this.currentWorkout.slots[slotId]) {
@@ -6514,6 +7337,8 @@ class App {
         if (!this.currentWorkout.slots[this.supersetSlot.id]) {
             this.currentWorkout.slots[this.supersetSlot.id] = { sets: [], startTime: Date.now(), meta: this.buildSlotCoachMeta(this.supersetSlot) };
         }
+        await this.syncSlotAutoTargetState(this.currentSlot, this.currentWorkout.slots[slotId]);
+        await this.syncSlotAutoTargetState(this.supersetSlot, this.currentWorkout.slots[this.supersetSlot.id]);
         this.currentWorkout.slots[slotId].meta = this.buildSlotCoachMeta(this.currentSlot);
         this.currentWorkout.slots[this.supersetSlot.id].meta = this.buildSlotCoachMeta(this.supersetSlot);
         await db.saveCurrentWorkout(this.currentWorkout);
@@ -6522,8 +7347,11 @@ class App {
         document.getElementById('exercise-slot-label').textContent = `⚡ ${this.currentSlot.slotId} + ${this.supersetSlot.slotId}`;
         document.getElementById('current-exercise-name').textContent = 'SuperSet';
         
-        // Use min sets between both exercises
-        const sets = Math.min(this.currentSlot.sets, this.supersetSlot.sets);
+        // Use the active target sets between both exercises
+        const sets = Math.min(
+            this.getDisplayedSetCount(this.currentSlot, this.supersetCoachingAdviceA, this.currentWorkout.slots[slotId]),
+            this.getDisplayedSetCount(this.supersetSlot, this.supersetCoachingAdviceB, this.currentWorkout.slots[this.supersetSlot.id])
+        );
         document.getElementById('exercise-sets').textContent = sets;
         document.getElementById('exercise-reps').textContent = 'Voir ci-dessous';
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
@@ -6543,22 +7371,47 @@ class App {
         document.getElementById('coach-decision-card').style.display = 'none';
         document.getElementById('exercise-notes').style.display = 'none';
 
-        // Load logbook for both exercises
-        await this.loadLogbook();
-        await this.loadSupersetLogbook();
-        
-        // Calculate coaching advice for BOTH exercises
-        await this.calculateSupersetCoachingAdvice();
-        this.showSupersetCoachingAdvice();
-        this.showScreen('exercise');
-
-        // Render after the screen is visible so the progress canvases can measure correctly.
+        const nameA = this.currentSlot.activeExercise || this.currentSlot.name;
+        const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
+        document.getElementById('superset-advice-name-a').textContent = nameA;
+        document.getElementById('superset-advice-name-b').textContent = nameB;
+        document.getElementById('superset-advice-message-a').textContent = '';
+        document.getElementById('superset-advice-message-b').textContent = '';
+        document.getElementById('superset-advice-weight-a').textContent = '--';
+        document.getElementById('superset-advice-weight-b').textContent = '--';
+        document.getElementById('superset-advice-reps-a').textContent = '--';
+        document.getElementById('superset-advice-reps-b').textContent = '--';
         this.renderUnifiedSupersetLogbook();
         this.renderSupersetSeries();
-        window.requestAnimationFrame(() => this.renderSupersetInsights());
+        this.showScreen('exercise');
         
         // Check if there's an active timer from before
         this.onAppResume();
+
+        void (async () => {
+            const isStale = () => this.activeExerciseLoadToken !== loadToken || this.currentSlot?.id !== slotId || this.supersetSlot?.id !== this.currentSlot?.supersetWith;
+
+            await Promise.all([
+                this.loadLogbook(),
+                this.loadSupersetLogbook()
+            ]);
+            if (isStale()) return;
+
+            await this.calculateSupersetCoachingAdvice();
+            if (isStale()) return;
+
+            this.showSupersetCoachingAdvice();
+            document.getElementById('exercise-sets').textContent = Math.min(
+                this.getDisplayedSetCount(this.currentSlot, this.supersetCoachingAdviceA, this.currentWorkout.slots[slotId]),
+                this.getDisplayedSetCount(this.supersetSlot, this.supersetCoachingAdviceB, this.currentWorkout.slots[this.supersetSlot.id])
+            );
+            this.renderUnifiedSupersetLogbook();
+            this.renderSupersetSeries();
+            window.requestAnimationFrame(() => {
+                if (isStale()) return;
+                this.renderSupersetInsights();
+            });
+        })();
     }
     
     // Calculate coaching advice for both exercises in a superset
@@ -6611,7 +7464,7 @@ class App {
     async buildProgressionContext(slot, options = {}) {
         const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
         const exerciseId = normalizedSlot.activeExercise || normalizedSlot.name;
-        const workouts = await this.getExerciseWorkoutHistory(exerciseId);
+        const workouts = await this.getExerciseWorkoutHistory(exerciseId, { excludeDeload: true });
         const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         const incrementKg = normalizedSlot.incrementKg ?? (normalizedSlot.type === 'isolation'
             ? Math.min(baseWeightIncrement, normalizedSlot.minIncrementKg || 1)
@@ -6638,6 +7491,7 @@ class App {
         const sessionContext = this.getSessionFatigueContextForSlot(normalizedSlot, options);
         const canIncreaseLoad = normalizedSlot.maxSelectableLoadKg == null || nextLoadCandidate <= normalizedSlot.maxSelectableLoadKg;
         const atCap = normalizedSlot.maxSelectableLoadKg != null && lastWeight >= normalizedSlot.maxSelectableLoadKg;
+        const programTargetChange = this.getProgramTargetChange(normalizedSlot, lastWorkout);
 
         return {
             slot: normalizedSlot,
@@ -6660,7 +7514,8 @@ class App {
             consecutiveExposureSuccess,
             sessionContext,
             atCap,
-            canIncreaseLoad
+            canIncreaseLoad,
+            programTargetChange
         };
     }
 
@@ -6689,6 +7544,183 @@ class App {
             : 0;
     }
 
+    getProgramTargetChange(slot, lastWorkout) {
+        if (!slot || !lastWorkout) return null;
+
+        const previous = lastWorkout.programSnapshot || null;
+        if (!previous) return null;
+
+        const prevRepsMin = Number(previous.repsMin);
+        const prevRepsMax = Number(previous.repsMax);
+        const prevSets = Number(previous.sets || lastWorkout.programmedSetCount || lastWorkout.targetSetCount || lastWorkout.sets?.length || 0);
+        const currentRepsMin = Number(slot.repsMin);
+        const currentRepsMax = Number(slot.repsMax);
+        const currentSets = Number(slot.sets || 0);
+        const hasRepSnapshot = previous.repsMin != null && previous.repsMax != null
+            && Number.isFinite(prevRepsMin)
+            && Number.isFinite(prevRepsMax);
+        const repsDelta = hasRepSnapshot
+            ? ((currentRepsMin + currentRepsMax) / 2) - ((prevRepsMin + prevRepsMax) / 2)
+            : 0;
+        const setsDelta = Number.isFinite(prevSets) && currentSets > 0 ? currentSets - prevSets : 0;
+        const repsChanged = hasRepSnapshot && Math.abs(repsDelta) >= 1;
+        const setsChanged = Math.abs(setsDelta) >= 1;
+
+        if (!repsChanged && !setsChanged) return null;
+
+        return {
+            previous: {
+                repsMin: hasRepSnapshot ? prevRepsMin : null,
+                repsMax: hasRepSnapshot ? prevRepsMax : null,
+                sets: prevSets || null
+            },
+            current: {
+                repsMin: currentRepsMin,
+                repsMax: currentRepsMax,
+                sets: currentSets
+            },
+            repsDelta,
+            setsDelta,
+            repsChanged,
+            setsChanged,
+            higherRepDemand: repsChanged && repsDelta > 0,
+            lowerRepDemand: repsChanged && repsDelta < 0,
+            higherVolumeDemand: setsChanged && setsDelta > 0,
+            lowerVolumeDemand: setsChanged && setsDelta < 0
+        };
+    }
+
+    formatProgramTargetLabel(target = {}) {
+        const sets = target.sets || '?';
+        const hasReps = target.repsMin != null && target.repsMax != null;
+        return hasReps ? `${sets}x${target.repsMin}-${target.repsMax}` : `${sets} séries`;
+    }
+
+    getBestWorkoutE1RM(workout) {
+        if (!workout?.sets?.length) return 0;
+        return Math.max(
+            ...workout.sets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
+            0
+        );
+    }
+
+    getProgramRecalibrationAdvice(slot, context) {
+        const change = context.programTargetChange;
+        const lastWorkout = context.lastWorkout;
+        const lastWeight = Number(context.lastWeight || 0);
+
+        if (!change || !lastWorkout || lastWeight <= 0) return null;
+
+        const e1rm = this.getBestWorkoutE1RM(lastWorkout);
+        const targetLoad = e1rm > 0
+            ? this.getTargetLoadFromE1RM(e1rm, slot.repsMax, 8.5)
+            : null;
+        const hasTargetLoad = Number.isFinite(Number(targetLoad)) && Number(targetLoad) > 0;
+        const previousLabel = this.formatProgramTargetLabel(change.previous);
+        const currentLabel = this.formatProgramTargetLabel(change.current);
+        const messagePrefix = `Programme mis à jour (${previousLabel} → ${currentLabel}).`;
+
+        if (change.higherRepDemand || change.higherVolumeDemand) {
+            const suggestedWeight = hasTargetLoad
+                ? Math.min(lastWeight, Number(targetLoad))
+                : (change.higherRepDemand ? this.roundToHalf(lastWeight * 0.9) : lastWeight);
+            const shouldLower = suggestedWeight < lastWeight - 0.25;
+            const demandText = change.higherRepDemand
+                ? (shouldLower
+                    ? 'La cible demande plus de reps: baisser la charge est normal pour rester dans la bonne zone.'
+                    : 'La cible demande plus de reps, mais ta base peut rester stable si la première série est propre.')
+                : (shouldLower
+                    ? 'Le volume monte: on baisse légèrement pour sécuriser la qualité.'
+                    : 'Le volume monte: garde la charge de référence et valide la qualité avant de chercher plus lourd.');
+
+            return {
+                type: shouldLower ? 'decrease' : 'maintain',
+                icon: shouldLower ? 'decrease' : 'target',
+                title: 'Recalibrage du nouveau plan',
+                message: `${messagePrefix} ${demandText}`,
+                suggestedWeight,
+                weightTrend: shouldLower ? 'down' : 'neutral',
+                suggestedReps: context.targetReps,
+                programTargetChange: change,
+                referenceWeight: lastWeight
+            };
+        }
+
+        if (change.lowerRepDemand) {
+            const supportedLoad = hasTargetLoad ? Number(targetLoad) : lastWeight;
+            const suggestedWeight = supportedLoad > lastWeight + 0.25
+                ? Math.min(supportedLoad, this.roundToHalf(lastWeight + context.weightIncrement))
+                : lastWeight;
+            const canNudgeUp = suggestedWeight > lastWeight + 0.25;
+
+            return {
+                type: canNudgeUp ? 'increase' : 'maintain',
+                icon: canNudgeUp ? 'increase' : 'target',
+                title: 'Nouveau format plus lourd',
+                message: `${messagePrefix} La plage est plus basse: tu peux tester plus lourd, mais seulement d’un palier et avec une première série propre.`,
+                suggestedWeight,
+                weightTrend: canNudgeUp ? 'up' : 'neutral',
+                suggestedReps: context.targetReps,
+                programTargetChange: change,
+                referenceWeight: lastWeight
+            };
+        }
+
+        if (change.lowerVolumeDemand) {
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Volume réduit, qualité d’abord',
+                message: `${messagePrefix} Garde la charge de référence et valide le nouveau volume avant de monter.`,
+                suggestedWeight: lastWeight,
+                weightTrend: 'neutral',
+                suggestedReps: context.targetReps,
+                programTargetChange: change,
+                referenceWeight: lastWeight
+            };
+        }
+
+        return null;
+    }
+
+    getRangeFitRecalibrationAdvice(slot, context) {
+        const lastWorkout = context.lastWorkout;
+        const lastWeight = Number(context.lastWeight || 0);
+        const avgReps = Number(context.avgReps || 0);
+        const repsShortfall = Number(slot.repsMin || 0) - avgReps;
+
+        if (context.programTargetChange || !lastWorkout || lastWeight <= 0 || repsShortfall < 1.5) {
+            return null;
+        }
+
+        const e1rm = this.getBestWorkoutE1RM(lastWorkout);
+        const targetLoad = e1rm > 0
+            ? this.getTargetLoadFromE1RM(e1rm, slot.repsMax, 8.5)
+            : null;
+        const suggestedWeight = Number.isFinite(Number(targetLoad))
+            ? Math.min(lastWeight, Number(targetLoad))
+            : null;
+        const minUsefulDrop = Math.max(0.5, Number(context.weightIncrement || 0) / 2);
+
+        if (!Number.isFinite(Number(suggestedWeight)) || suggestedWeight >= lastWeight - minUsefulDrop) {
+            return null;
+        }
+
+        const avgLabel = Math.round(avgReps * 10) / 10;
+
+        return {
+            type: 'decrease',
+            icon: 'decrease',
+            title: 'Charge à recalibrer',
+            message: `La dernière base tourne à ${avgLabel} reps en moyenne, sous la fourchette actuelle ${slot.repsMin}-${slot.repsMax}. Baisser la charge est normal pour retrouver des reps propres avant de remonter.`,
+            suggestedWeight,
+            weightTrend: 'down',
+            suggestedReps: context.targetReps,
+            referenceWeight: lastWeight,
+            rangeFitRecalibration: true
+        };
+    }
+
     getLoadProgressionAdvice(slot, context) {
         const { lastWorkout, lastWeight, avgReps, targetReps, weightIncrement } = context;
 
@@ -6701,6 +7733,16 @@ class App {
                 suggestedReps: targetReps,
                 weightTrend: 'neutral'
             };
+        }
+
+        const recalibrationAdvice = this.getProgramRecalibrationAdvice(slot, context);
+        if (recalibrationAdvice) {
+            return recalibrationAdvice;
+        }
+
+        const rangeFitAdvice = this.getRangeFitRecalibrationAdvice(slot, context);
+        if (rangeFitAdvice) {
+            return rangeFitAdvice;
         }
 
         if (avgReps >= slot.repsMax) {
@@ -6733,6 +7775,50 @@ class App {
             suggestedReps: targetReps,
             weightTrend: 'neutral'
         };
+    }
+
+    async applyDeloadOverlayToAdvice(advice, slot, context = {}) {
+        if (!advice || !slot || !this.currentWorkout?.isDeload) return advice;
+
+        const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
+        const targetSets = await this.getConfiguredDeloadTargetSets(slot);
+        const overlay = {
+            ...advice,
+            type: 'deload',
+            icon: 'warning',
+            title: 'Deload actif',
+            suggestedSets: targetSets,
+            deloadSets: targetSets,
+            isDeload: true
+        };
+
+        const numericBaseWeight = Number.isFinite(Number(context.lastWeight)) && Number(context.lastWeight) > 0
+            ? Number(context.lastWeight)
+            : (Number.isFinite(Number(advice.suggestedWeight)) && Number(advice.suggestedWeight) > 0 ? Number(advice.suggestedWeight) : null);
+
+        if (slot.progressionMode === 'bodyweight' && slot.bodyweightProfile?.allowAssistance) {
+            const assistanceStepKg = slot.bodyweightProfile.assistanceStepKg || 5;
+            const currentAssistanceKg = slot.bodyweightProfile.currentAssistanceKg || 0;
+            overlay.suggestedAssistanceKg = currentAssistanceKg + assistanceStepKg;
+            overlay.suggestedWeight = null;
+            overlay.suggestedWeightLabel = `${overlay.suggestedAssistanceKg}kg assistance`;
+            overlay.weightTrend = 'down';
+            overlay.message = `Deload sur ce bloc: prends un peu plus d’assistance et garde ${targetSets} séries faciles, loin de l’échec.`;
+            return overlay;
+        }
+
+        if (numericBaseWeight != null) {
+            const deloadWeight = this.roundToHalf(numericBaseWeight * (1 - (deloadPercent / 100)));
+            overlay.suggestedWeight = deloadWeight;
+            overlay.referenceWeight = numericBaseWeight;
+            overlay.weightTrend = 'down';
+            overlay.message = `Deload sur cette séance: vise ${deloadWeight}kg et ${targetSets} séries propres. On baisse un peu la charge et le volume pour refaire du jus.`;
+            return overlay;
+        }
+
+        overlay.weightTrend = 'neutral';
+        overlay.message = `Deload sur cette séance: garde un effort facile et limite-toi à ${targetSets} séries propres pour récupérer.`;
+        return overlay;
     }
 
     applySupersetSpecificAdjustments(advice, slot, context, options = {}) {
@@ -7161,8 +8247,13 @@ class App {
         const context = await this.buildProgressionContext(normalizedSlot, options);
 
         let advice;
+        const recalibrationAdvice = normalizedSlot.progressionMode !== 'bodyweight'
+            ? (this.getProgramRecalibrationAdvice(normalizedSlot, context) || this.getRangeFitRecalibrationAdvice(normalizedSlot, context))
+            : null;
 
-        if (normalizedSlot.progressionMode === 'bodyweight') {
+        if (recalibrationAdvice) {
+            advice = recalibrationAdvice;
+        } else if (normalizedSlot.progressionMode === 'bodyweight') {
             advice = this.getBodyweightProgressionAdvice(normalizedSlot, context);
         } else if (normalizedSlot.progressionMode === 'capped_load') {
             advice = this.getCappedLoadProgressionAdvice(normalizedSlot, context);
@@ -7180,6 +8271,7 @@ class App {
 
         const coachContext = await this.buildCoachContextForSlot(normalizedSlot, options);
         advice = this.applyContextualAdjustmentsToAdvice(advice, normalizedSlot, coachContext);
+        advice = await this.applyDeloadOverlayToAdvice(advice, normalizedSlot, context);
         advice = this.enforceProgressionConstraints(advice, normalizedSlot, context);
         if (typeof context.lastWeight === 'number' && context.lastWeight > 0) {
             advice.referenceWeight = context.lastWeight;
@@ -7387,12 +8479,16 @@ class App {
         histories.forEach((history, idx) => {
             const dateText = this.formatLogbookDate(history.date);
             const isLatest = idx === 0;
+            const deloadBadge = history.isDeload
+                ? `<span class="logbook-session-badge">Deload${history.cycleWeek ? ` • S${history.cycleWeek}` : ''}</span>`
+                : '';
             
             html += `<div class="logbook-session ${isLatest ? 'logbook-session-latest' : 'logbook-session-older'} superset-logbook-session ${isLatest ? '' : 'superset-logbook-session-older'}">`;
             html += `<div class="superset-logbook-session-header">
                 <span class="logbook-session-label">${isLatest ? 'Dernière séance' : `Séance -${idx + 1}`}</span>
                 <span class="logbook-session-date">${dateText}</span>
             </div>`;
+            if (deloadBadge) html += deloadBadge;
             html += '<div class="logbook-session-sets">';
             for (const set of history.sets) {
                 html += `
@@ -7433,7 +8529,7 @@ class App {
             if (weightDiff > 0 || repsDiff > 0) {
                 trendIcon = this.getLogbookTrendIconSVG('positive');
                 trendClass = 'positive';
-                trendText = `${weightDiff > 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+                trendText = `${weightDiff > 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${trendHistories.length} séances utiles`;
             } else if (weightDiff < 0 || repsDiff < 0) {
                 trendIcon = this.getLogbookTrendIconSVG('negative');
                 trendClass = 'negative';
@@ -7455,14 +8551,18 @@ class App {
         if (!this.supersetSlot) return;
         
         const exerciseId = this.supersetSlot.activeExercise || this.supersetSlot.name;
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = await this.getSetHistoryForExercise(exerciseId);
         
         const workoutGroups = {};
         for (const set of allSetHistory) {
             if (!workoutGroups[set.workoutId]) {
-                workoutGroups[set.workoutId] = { date: set.date, sets: [] };
+                workoutGroups[set.workoutId] = { date: set.date, sets: [], isDeload: false, cycleWeek: null };
             }
             workoutGroups[set.workoutId].sets.push(set);
+            workoutGroups[set.workoutId].isDeload = workoutGroups[set.workoutId].isDeload || Boolean(set.isDeload);
+            if (workoutGroups[set.workoutId].cycleWeek == null && set.cycleWeek != null) {
+                workoutGroups[set.workoutId].cycleWeek = set.cycleWeek;
+            }
         }
         
         const workoutIds = Object.keys(workoutGroups);
@@ -7486,7 +8586,9 @@ class App {
                 date: workout.date,
                 sets: workout.sets,
                 totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
-                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0))
+                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0)),
+                isDeload: workout.isDeload,
+                cycleWeek: workout.cycleWeek
             };
         });
         this.supersetProgressHistory = trendWorkouts.map(wId => {
@@ -7496,7 +8598,9 @@ class App {
                 date: workout.date,
                 sets: workout.sets,
                 totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
-                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0))
+                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0)),
+                isDeload: workout.isDeload,
+                cycleWeek: workout.cycleWeek
             };
         });
         
@@ -7565,10 +8669,15 @@ class App {
     renderSupersetSeries() {
         const container = document.getElementById('series-list');
         container.innerHTML = '';
-        
-        const sets = Math.min(this.currentSlot.sets, this.supersetSlot.sets);
+
         const slotAData = this.currentWorkout.slots[this.currentSlot.id] || { sets: [] };
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id] || { sets: [] };
+        const adviceA = this.supersetCoachingAdviceA;
+        const adviceB = this.supersetCoachingAdviceB;
+        const sets = Math.min(
+            this.getDisplayedSetCount(this.currentSlot, adviceA, slotAData),
+            this.getDisplayedSetCount(this.supersetSlot, adviceB, slotBData)
+        );
         
         const lastSetsA = this.lastExerciseHistory?.sets || [];
         const lastSetsB = this.lastSupersetHistory?.sets || [];
@@ -7578,8 +8687,6 @@ class App {
         const nameB = this.supersetSlot.activeExercise || this.supersetSlot.name;
         
         // Get coaching suggested weights
-        const adviceA = this.supersetCoachingAdviceA;
-        const adviceB = this.supersetCoachingAdviceB;
         const coachWeightA = adviceA?.suggestedWeight;
         const coachWeightB = adviceB?.suggestedWeight;
         const targetRepsAArray = this.getAdviceTargetRepsArray(
@@ -7864,7 +8971,10 @@ class App {
         this.renderSupersetSeries();
 
         // Check if all sets complete
-        const sets = Math.min(this.currentSlot.sets, this.supersetSlot.sets);
+        const sets = Math.min(
+            this.getDisplayedSetCount(this.currentSlot, this.supersetCoachingAdviceA, slotAData),
+            this.getDisplayedSetCount(this.supersetSlot, this.supersetCoachingAdviceB, slotBData)
+        );
         const completedA = slotAData.sets.filter(s => s.completed).length;
         const completedB = slotBData.sets.filter(s => s.completed).length;
         
@@ -7897,6 +9007,21 @@ class App {
                 <span class="comparison-text">2 exercices en un ! Efficacité max !</span>
             </div>
         `;
+        this.renderExerciseSummaryAchievements({
+            badges: [
+                {
+                    icon: '⚡',
+                    label: 'SuperSet validé',
+                    detail: 'Deux exercices bouclés dans le même bloc.'
+                }
+            ],
+            microWins: [
+                {
+                    icon: '➕',
+                    text: `${totalRepsA + totalRepsB} reps cumulées sur le bloc`
+                }
+            ]
+        });
 
         document.getElementById('exercise-summary').classList.add('active');
 
@@ -7921,7 +9046,7 @@ class App {
         const exerciseId = this.currentSlot.activeExercise || this.currentSlot.name;
         
         // Get all set history for this exercise
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = await this.getSetHistoryForExercise(exerciseId);
         
         // Filter to get only sets from previous workouts (not current)
         const previousSets = allSetHistory.filter(s => {
@@ -7964,14 +9089,28 @@ class App {
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
             const totalReps = workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
             const maxWeight = Math.max(...workout.sets.map(s => s.weight || 0));
-            return { date: workout.date, sets: workout.sets, totalReps, maxWeight };
+            return {
+                date: workout.date,
+                sets: workout.sets,
+                totalReps,
+                maxWeight,
+                isDeload: workout.sets.some(set => set.isDeload),
+                cycleWeek: workout.sets[0]?.cycleWeek ?? null
+            };
         });
         this.exerciseProgressHistory = trendWorkouts.map(wId => {
             const workout = workoutGroups[wId];
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
             const totalReps = workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
             const maxWeight = Math.max(...workout.sets.map(s => s.weight || 0));
-            return { date: workout.date, sets: workout.sets, totalReps, maxWeight };
+            return {
+                date: workout.date,
+                sets: workout.sets,
+                totalReps,
+                maxWeight,
+                isDeload: workout.sets.some(set => set.isDeload),
+                cycleWeek: workout.sets[0]?.cycleWeek ?? null
+            };
         });
         
         // Keep backward compatibility: lastExerciseHistory = most recent
@@ -8046,12 +9185,18 @@ class App {
         histories.forEach((history, idx) => {
             const dateText = this.formatLogbookDate(history.date);
             const isLatest = idx === 0;
+            const deloadBadge = history.isDeload
+                ? `<span class="logbook-session-badge">Deload${history.cycleWeek ? ` • S${history.cycleWeek}` : ''}</span>`
+                : '';
             
             html += `<div class="logbook-session ${isLatest ? 'logbook-session-latest' : 'logbook-session-older'}">`;
             html += `<div class="logbook-session-header">
                 <span class="logbook-session-label">${isLatest ? 'Dernière séance' : `Séance -${idx + 1}`}</span>
                 <span class="logbook-session-date">${dateText}</span>
             </div>`;
+            if (deloadBadge) {
+                html += deloadBadge;
+            }
             
             html += '<div class="logbook-session-sets">';
             for (const set of history.sets) {
@@ -8083,9 +9228,10 @@ class App {
         });
         
         // Add trend comparison if multiple sessions
-        if (histories.length >= 2) {
-            const latest = histories[0];
-            const oldest = histories[histories.length - 1];
+        const trendHistories = histories.filter(history => !history.isDeload);
+        if (trendHistories.length >= 2) {
+            const latest = trendHistories[0];
+            const oldest = trendHistories[trendHistories.length - 1];
             const weightDiff = latest.maxWeight - oldest.maxWeight;
             const repsDiff = latest.totalReps - oldest.totalReps;
             
@@ -8100,7 +9246,9 @@ class App {
             } else if (weightDiff < 0 || repsDiff < 0) {
                 trendIcon = this.getLogbookTrendIconSVG('negative');
                 trendClass = 'negative';
-                trendText = `${weightDiff < 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+                trendText = `${weightDiff < 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${trendHistories.length} séances utiles`;
+            } else {
+                trendText = `Stable sur ${trendHistories.length} séances utiles`;
             }
             
             html += `
@@ -8122,7 +9270,7 @@ class App {
     }
 
     getProgressInsight(historyArray = []) {
-        const histories = (historyArray || []).filter(history => history?.sets?.length);
+        const histories = (historyArray || []).filter(history => history?.sets?.length && !history?.isDeload);
         if (histories.length < 2) return null;
 
         const ordered = [...histories].slice(0, 8).reverse();
@@ -8272,12 +9420,13 @@ class App {
 
     renderExerciseProgressSparkline(historyArray = []) {
         if (this.isSupersetMode || this.isUnilateralMode) return;
+        const usefulHistory = (historyArray || []).filter(history => !history?.isDeload);
         this.renderProgressCard(
             'exercise-progress-card',
             'exercise-progress-badge',
             'exercise-progress-meta',
             'exercise-progress-sparkline',
-            historyArray
+            usefulHistory
         );
     }
 
@@ -8301,6 +9450,16 @@ class App {
         if (!advice || !slot) return [];
         const items = [];
         const setPlan = this.buildCoachSetPlan(slot, advice);
+        if (setPlan.isDeloadPlanApplied) {
+            const cycleState = this.currentWorkout?.sessionCycle;
+            const cycleDetail = cycleState?.weekInCycle && cycleState?.totalWeeks
+                ? ` sur la semaine ${cycleState.weekInCycle}/${cycleState.totalWeeks}`
+                : '';
+            items.push({
+                label: 'Cycle',
+                value: `La séance est en <strong>deload actif</strong>${cycleDetail}. Le coach baisse la charge et le volume sans lire ça comme une régression.`
+            });
+        }
         if (slot.progressionMode === 'capped_load') {
             items.push({
                 label: 'Mode',
@@ -8360,7 +9519,12 @@ class App {
                 value: `Le déclencheur principal est <strong>${slot.capDetection.reasons.map(reason => reasonMap[reason] || reason).join(' • ')}</strong>.`
             });
         }
-        if (setPlan.reductionAccepted) {
+        if (setPlan.isDeloadPlanApplied) {
+            items.push({
+                label: 'Volume',
+                value: `Le deload du jour ramène ce bloc à <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong> au lieu de ${slot.sets}.`
+            });
+        } else if (setPlan.reductionAccepted) {
             items.push({
                 label: 'Volume',
                 value: `Tu as accepté <strong>${setPlan.activeTargetSets} série${setPlan.activeTargetSets > 1 ? 's' : ''}</strong> au lieu de ${slot.sets} aujourd'hui.`
@@ -8508,6 +9672,13 @@ class App {
         this.noteSaveTimeout = setTimeout(() => {
             db.saveCurrentWorkout(this.currentWorkout);
         }, 180);
+    }
+
+    async flushPendingWorkoutSave() {
+        if (!this.currentWorkout) return;
+        clearTimeout(this.noteSaveTimeout);
+        this.noteSaveTimeout = null;
+        await db.saveCurrentWorkout(this.currentWorkout);
     }
 
     saveExerciseNote(value) {
@@ -8821,11 +9992,14 @@ class App {
         
         const coachWeightLeft = this.unilateralCoachingAdviceLeft?.suggestedWeight;
         const coachWeightRight = this.unilateralCoachingAdviceRight?.suggestedWeight;
-        
-        const programmedSets = this.currentSlot.sets;
+        const displayedSets = this.getDisplayedSetCount(
+            this.currentSlot,
+            this.unilateralCoachingAdviceLeft || this.unilateralCoachingAdviceRight || this.currentCoachingAdvice,
+            slotData
+        );
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
 
-        for (let i = 0; i < programmedSets; i++) {
+        for (let i = 0; i < displayedSets; i++) {
             const setLeftData = setsLeft[i] || {};
             const setRightData = setsRight[i] || {};
             const isCompleted = setLeftData.completed && setRightData.completed;
@@ -8992,7 +10166,7 @@ class App {
             setsLeft.filter(s => s?.completed).length,
             setsRight.filter(s => s?.completed).length
         );
-        if (completedSets >= programmedSets && !this.isReviewMode) {
+        if (completedSets >= displayedSets && !this.isReviewMode) {
             this.showUnilateralSummary();
         }
     }
@@ -9030,7 +10204,11 @@ class App {
         this.renderUnilateralSeries();
 
         // Check if all sets complete
-        const programmedSets = this.currentSlot.sets;
+        const programmedSets = this.getDisplayedSetCount(
+            this.currentSlot,
+            this.unilateralCoachingAdviceLeft || this.unilateralCoachingAdviceRight || this.currentCoachingAdvice,
+            slotData
+        );
         const completedLeft = slotData.setsLeft.filter(s => s?.completed).length;
         const completedRight = slotData.setsRight.filter(s => s?.completed).length;
         
@@ -9083,6 +10261,19 @@ class App {
         }
         
         document.getElementById('summary-comparison').innerHTML = comparisonHTML;
+        this.renderExerciseSummaryAchievements({
+            badges: balanced
+                ? [{
+                    icon: '⚖️',
+                    label: 'Équilibre propre',
+                    detail: 'Les deux côtés sont au même niveau aujourd’hui.'
+                }]
+                : [],
+            microWins: [{
+                icon: '🔁',
+                text: `${totalRepsLeft + totalRepsRight} reps cumulées sur l'exercice`
+            }]
+        });
         document.getElementById('exercise-summary').classList.add('active');
 
         // Mark slot as completed
@@ -9535,8 +10726,15 @@ class App {
         if (!this.currentSlot || !this.supersetSlot || !this.currentWorkout) return null;
 
         const slotAData = this.currentWorkout.slots?.[this.currentSlot.id] || { sets: [] };
-        const sets = Math.min(this.currentSlot.sets, this.supersetSlot.sets);
-        const completedSets = slotAData.sets.filter(set => set?.completed).length;
+        const slotBData = this.currentWorkout.slots?.[this.supersetSlot.id] || { sets: [] };
+        const sets = Math.min(
+            this.getDisplayedSetCount(this.currentSlot, this.supersetCoachingAdviceA, slotAData),
+            this.getDisplayedSetCount(this.supersetSlot, this.supersetCoachingAdviceB, slotBData)
+        );
+        const completedSets = Math.min(
+            slotAData.sets.filter(set => set?.completed).length,
+            slotBData.sets.filter(set => set?.completed).length
+        );
         const nextSetIndex = Math.min(completedSets, Math.max(0, sets - 1));
         const targetRepsAArray = this.getAdviceTargetRepsArray(
             this.supersetCoachingAdviceA,
@@ -9565,10 +10763,15 @@ class App {
         const completedLeft = (slotData.setsLeft || []).filter(set => set?.completed).length;
         const completedRight = (slotData.setsRight || []).filter(set => set?.completed).length;
         const completedSets = Math.min(completedLeft, completedRight);
-        const nextSetNumber = Math.min(completedSets + 1, this.currentSlot.sets);
+        const targetSets = this.getDisplayedSetCount(
+            this.currentSlot,
+            this.unilateralCoachingAdviceLeft || this.unilateralCoachingAdviceRight || this.currentCoachingAdvice,
+            slotData
+        );
+        const nextSetNumber = Math.min(completedSets + 1, targetSets);
 
         return {
-            progress: `${nextSetNumber}/${this.currentSlot.sets}`,
+            progress: `${nextSetNumber}/${targetSets}`,
             title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice unilatéral',
             metrics: [
                 { label: 'Rép', value: `${this.currentSlot.repsMin}-${this.currentSlot.repsMax}` },
@@ -10263,18 +11466,232 @@ class App {
         this.updateRestTimer();
     }
 
-    // ===== Exercise Summary =====
-    async showExerciseSummary() {
-        const slotData = this.currentWorkout.slots[this.currentSlot.id];
-        const totalReps = slotData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-        const maxWeight = Math.max(...slotData.sets.map(s => s.weight || 0));
-        const isCardioExercise = this.isCardioSlot(this.currentSlot);
-        const currentBestSet = slotData.sets.reduce((best, set) => {
-            if (!set?.completed) return best;
+    getCompletedStrengthSetsForSummary(slot, slotData = null) {
+        const resolvedSlotData = slotData || this.currentWorkout?.slots?.[slot?.id] || {};
+        if (!slot) return [];
+
+        const collectSets = (sets = [], variant = null) => sets
+            .map((set, index) => ({ ...set, setNumber: index + 1, variant }))
+            .filter(set => set?.completed && Number(set.reps || 0) > 0);
+
+        if (resolvedSlotData.setsLeft || resolvedSlotData.setsRight) {
+            return [
+                ...collectSets(resolvedSlotData.setsLeft || [], 'left'),
+                ...collectSets(resolvedSlotData.setsRight || [], 'right')
+            ];
+        }
+
+        return collectSets(resolvedSlotData.sets || []);
+    }
+
+    buildExerciseSummarySnapshot(slot, completedSets = [], historyWorkouts = []) {
+        const safeSets = Array.isArray(completedSets) ? completedSets : [];
+        const safeHistory = (Array.isArray(historyWorkouts) ? historyWorkouts : []).filter(workout => !workout?.isDeload);
+        const isCardioExercise = this.isCardioSlot(slot);
+        const totalReps = safeSets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const maxWeight = safeSets.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
+        const totalVolume = safeSets.reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0);
+        const bestSet = safeSets.reduce((best, set) => {
+            if (isCardioExercise) return best;
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
             const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
             return currentScore > bestScore ? set : best;
         }, null);
+        const bestE1RM = bestSet ? this.calculateE1RM(bestSet.weight || 0, bestSet.reps || 0, bestSet.rpe || 8) : 0;
+        const previousWorkout = safeHistory[0] || null;
+        const previousBestSet = previousWorkout?.sets?.reduce((best, set) => {
+            const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
+            const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
+            return currentScore > bestScore ? set : best;
+        }, null) || null;
+        const previousBestE1RM = previousBestSet ? this.calculateE1RM(previousBestSet.weight || 0, previousBestSet.reps || 0, previousBestSet.rpe || 8) : 0;
+        const historicalPeakE1RM = Math.max(
+            0,
+            ...safeHistory.map(workout => Math.max(...(workout.sets || []).map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0))
+        );
+        const historicalPeakVolume = Math.max(0, ...safeHistory.map(workout => {
+            return (workout.sets || []).reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0);
+        }));
+        const previousBestRepsByWeight = new Map();
+        safeHistory.forEach(workout => {
+            (workout.sets || []).forEach(set => {
+                const weight = Number(set?.weight || 0);
+                const reps = Number(set?.reps || 0);
+                const key = String(weight);
+                if (reps <= 0) return;
+                previousBestRepsByWeight.set(key, Math.max(previousBestRepsByWeight.get(key) || 0, reps));
+            });
+        });
+
+        let bestRepRecord = null;
+        safeSets.forEach(set => {
+            const weight = Number(set?.weight || 0);
+            const reps = Number(set?.reps || 0);
+            const previousBest = previousBestRepsByWeight.get(String(weight)) || 0;
+            const delta = reps - previousBest;
+            if (previousBest > 0 && delta > 0 && (!bestRepRecord || delta > bestRepRecord.delta)) {
+                bestRepRecord = { weight, reps, previousBest, delta };
+            }
+        });
+
+        return {
+            slot,
+            totalReps,
+            maxWeight,
+            totalVolume,
+            bestSet,
+            bestE1RM,
+            previousWorkout,
+            previousBestE1RM,
+            historicalPeakE1RM,
+            historicalPeakVolume,
+            bestRepRecord,
+            isFirstExerciseEntry: safeHistory.length === 0,
+            repsDiffVsLast: previousWorkout ? totalReps - Number(previousWorkout.totalReps || 0) : null,
+            weightDiffVsLast: previousWorkout ? maxWeight - Number(previousWorkout.maxWeight || 0) : null,
+            volumeDiffVsLast: previousWorkout
+                ? totalVolume - (previousWorkout.sets || []).reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0)
+                : null
+        };
+    }
+
+    buildExerciseAchievements(snapshot) {
+        const prs = [];
+        const badges = [];
+        const microWins = [];
+
+        if (!snapshot || this.isCardioSlot(snapshot.slot)) {
+            return { prs, badges, microWins };
+        }
+
+        if (snapshot.isFirstExerciseEntry) {
+            badges.push({
+                icon: '🌟',
+                label: 'Première trace',
+                detail: 'Premier résultat enregistré sur cet exercice.'
+            });
+        }
+
+        if (snapshot.bestE1RM > 0 && snapshot.historicalPeakE1RM > 0 && snapshot.bestE1RM > snapshot.historicalPeakE1RM + 0.2) {
+            const delta = snapshot.bestE1RM - snapshot.historicalPeakE1RM;
+            prs.push({
+                icon: '🏆',
+                title: 'PR e1RM',
+                value: `+${this.formatOneDecimal(delta)} kg`,
+                detail: `${this.formatOneDecimal(snapshot.bestE1RM)} kg estimés`
+            });
+            badges.push({
+                icon: '💪',
+                label: 'Force en hausse',
+                detail: `Meilleur e1RM battu sur ${snapshot.slot.activeExercise || snapshot.slot.name}.`
+            });
+        }
+
+        if (snapshot.bestRepRecord) {
+            prs.push({
+                icon: '📈',
+                title: `PR reps à ${this.formatSetWeight(snapshot.bestRepRecord.weight, snapshot.slot)}`,
+                value: `+${snapshot.bestRepRecord.delta} rep${snapshot.bestRepRecord.delta > 1 ? 's' : ''}`,
+                detail: `${snapshot.bestRepRecord.reps} reps vs ${snapshot.bestRepRecord.previousBest} avant`
+            });
+            badges.push({
+                icon: '🔁',
+                label: 'Reps débloquées',
+                detail: 'Tu fais plus de reps à charge identique.'
+            });
+        }
+
+        if (snapshot.totalVolume > 0 && snapshot.historicalPeakVolume > 0 && snapshot.totalVolume > snapshot.historicalPeakVolume + 1) {
+            const deltaPct = this.percentChange(snapshot.totalVolume, snapshot.historicalPeakVolume);
+            prs.push({
+                icon: '📦',
+                title: 'PR volume exercice',
+                value: this.formatPercentDelta(deltaPct),
+                detail: `${this.formatVolume(snapshot.totalVolume)} kg déplacés`
+            });
+            badges.push({
+                icon: '⚡',
+                label: 'Volume record',
+                detail: 'Tu as accumulé plus de volume que sur tes anciennes séances.'
+            });
+        }
+
+        if (snapshot.repsDiffVsLast != null && snapshot.repsDiffVsLast > 0) {
+            microWins.push({
+                icon: '➕',
+                text: `+${snapshot.repsDiffVsLast} reps vs la dernière fois`
+            });
+        }
+
+        if (snapshot.weightDiffVsLast != null && snapshot.weightDiffVsLast > 0) {
+            microWins.push({
+                icon: '🏋️',
+                text: `+${this.formatOneDecimal(snapshot.weightDiffVsLast)} kg sur la charge max`
+            });
+        }
+
+        if (snapshot.volumeDiffVsLast != null && snapshot.volumeDiffVsLast > 0) {
+            const deltaPct = this.percentChange(snapshot.totalVolume, snapshot.totalVolume - snapshot.volumeDiffVsLast);
+            if (Number.isFinite(deltaPct) && deltaPct >= 5) {
+                microWins.push({
+                    icon: '📊',
+                    text: `Volume ${this.formatPercentDelta(deltaPct)} vs ton dernier passage`
+                });
+            }
+        }
+
+        return { prs, badges, microWins };
+    }
+
+    renderExerciseSummaryAchievements({ prs = [], badges = [], microWins = [] } = {}) {
+        const prListEl = document.getElementById('summary-pr-list');
+        const badgesEl = document.getElementById('summary-badges');
+        if (!prListEl || !badgesEl) return;
+
+        if (!prs.length) {
+            prListEl.innerHTML = '';
+        } else {
+            prListEl.innerHTML = prs.map(pr => `
+                <div class="summary-pr-card">
+                    <div class="summary-pr-header">
+                        <span class="summary-pr-icon">${pr.icon}</span>
+                        <span class="summary-pr-title">${this.escapeHtml(pr.title)}</span>
+                    </div>
+                    <div class="summary-pr-value">${this.escapeHtml(pr.value)}</div>
+                    <div class="summary-pr-detail">${this.escapeHtml(pr.detail)}</div>
+                </div>
+            `).join('');
+        }
+
+        const chips = [
+            ...badges.map(badge => ({ tone: 'badge', icon: badge.icon, label: badge.label, detail: badge.detail })),
+            ...microWins.map(win => ({ tone: 'micro', icon: win.icon, label: win.text, detail: null }))
+        ];
+
+        if (!chips.length) {
+            badgesEl.innerHTML = '';
+            return;
+        }
+
+        badgesEl.innerHTML = chips.map(chip => `
+            <div class="summary-badge-chip ${chip.tone}">
+                <span class="summary-badge-icon">${chip.icon}</span>
+                <span class="summary-badge-text">${this.escapeHtml(chip.label)}</span>
+            </div>
+        `).join('');
+    }
+
+    // ===== Exercise Summary =====
+    async showExerciseSummary() {
+        const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        const completedSets = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotData);
+        const historyWorkouts = await this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name);
+        const snapshot = this.buildExerciseSummarySnapshot(this.currentSlot, completedSets, historyWorkouts);
+        const achievements = this.buildExerciseAchievements(snapshot);
+        const totalReps = snapshot.totalReps;
+        const maxWeight = snapshot.maxWeight;
+        const isCardioExercise = this.isCardioSlot(this.currentSlot);
+        const currentBestSet = snapshot.bestSet;
         this.editingSetIndex = null;
 
         const summaryTotalLabel = document.querySelector('.summary-stats .stat:first-child .stat-label');
@@ -10305,13 +11722,8 @@ class App {
             const lastMaxWeight = this.lastExerciseHistory.maxWeight;
             const repsDiff = totalReps - lastTotalReps;
             const weightDiff = maxWeight - lastMaxWeight;
-            const previousBestSet = this.lastExerciseHistory.sets.reduce((best, set) => {
-                const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
-                const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
-                return currentScore > bestScore ? set : best;
-            }, null);
             const currentE1RM = currentBestSet ? this.calculateE1RM(currentBestSet.weight || 0, currentBestSet.reps || 0, currentBestSet.rpe || 8) : 0;
-            const previousE1RM = previousBestSet ? this.calculateE1RM(previousBestSet.weight || 0, previousBestSet.reps || 0, previousBestSet.rpe || 8) : 0;
+            const previousE1RM = snapshot.previousBestE1RM;
             const e1rmDiffPct = previousE1RM > 0 ? ((currentE1RM - previousE1RM) / previousE1RM) * 100 : 0;
             
             let comparisonClass = 'neutral';
@@ -10376,6 +11788,12 @@ class App {
             `;
         }
 
+        this.renderExerciseSummaryAchievements(achievements);
+
+        if (achievements.prs.length > 0) {
+            gamification.celebratePersonalRecord(this.currentSlot.activeExercise || this.currentSlot.name);
+        }
+
         document.getElementById('exercise-summary').classList.add('active');
 
         // Mark slot as completed
@@ -10412,13 +11830,89 @@ class App {
     // ===== Finish Session =====
     async showFinishModal() {
         const slots = await db.getSlotsBySession(this.currentSession.id);
-        const remaining = slots.length - (this.currentWorkout?.completedSlots?.length || 0);
-        
-        const message = remaining > 0 
-            ? `Il reste ${remaining} exercice${remaining > 1 ? 's' : ''} non fait${remaining > 1 ? 's' : ''}. Tu peux terminer quand même.`
-            : 'Tu as complété tous les exercices ! 💪';
-        
+        const totalExercises = slots.length;
+        const completedExercises = this.currentWorkout?.completedSlots?.length || 0;
+        const remaining = Math.max(0, totalExercises - completedExercises);
+        const completionRate = totalExercises > 0 ? completedExercises / totalExercises : 0;
+        const completionPercent = Math.round(completionRate * 100);
+        const totalSets = Object.values(this.currentWorkout?.slots || {}).reduce((sum, slotData) => {
+            const standard = (slotData.sets || []).filter(set => set?.completed).length;
+            const left = (slotData.setsLeft || []).filter(set => set?.completed).length;
+            const right = (slotData.setsRight || []).filter(set => set?.completed).length;
+            return sum + standard + left + right;
+        }, 0);
+        const durationMinutes = Math.max(1, Math.round((Date.now() - this.sessionStartTime) / 60000));
+        const streakData = await streakEngine.getStreakData();
+        const weeklyGoal = streakData.weeklyGoal || 3;
+        const sessionsAfterFinish = Math.min(weeklyGoal, (streakData.currentWeekSessions || 0) + 1);
+        const weeklyProgressText = `${sessionsAfterFinish}/${weeklyGoal} cette semaine`;
+
+        let badge = 'Finisher mode';
+        let heroIcon = '✨';
+        let title = 'Terminer la séance ?';
+        let message = 'Tu peux encore faire un dernier tour, ou verrouiller ta séance maintenant.';
+        let note = `Ton streak passerait à ${weeklyProgressText}.`;
+
+        if (completionRate >= 0.999) {
+            badge = 'Full clear';
+            heroIcon = '🏁';
+            title = 'Séance clean, bien jouée';
+            message = 'Tout est validé. Tu peux encaisser la séance et repartir avec un vrai screen de fin.';
+            note = `Full clear sécurisé. Ton rythme hebdo passerait à ${weeklyProgressText}.`;
+        } else if (completionRate >= 0.75) {
+            badge = 'Quête presque finie';
+            heroIcon = '⚡';
+            title = 'Tu es vraiment proche du full clear';
+            message = `Il reste ${remaining} exercice${remaining > 1 ? 's' : ''}. Si tu t'arrêtes là, la séance est quand même comptée.`;
+            note = 'Si tu as encore un peu d’énergie, le full clear est à portée.';
+        } else if (completionRate >= 0.4) {
+            badge = 'Progression validée';
+            heroIcon = '🎯';
+            title = 'Séance utile déjà sécurisée';
+            message = `Tu as validé ${completedExercises} exercice${completedExercises > 1 ? 's' : ''}. Tu peux clôturer maintenant, ou pousser encore un peu.`;
+            note = 'Mieux vaut une séance bien validée que de sortir du plan n’importe comment.';
+        } else if (completedExercises > 0 || totalSets > 0) {
+            badge = 'Sortie stratégique';
+            heroIcon = '🛡️';
+            title = 'Tu peux aussi couper proprement';
+            message = `Il reste encore ${remaining} exercice${remaining > 1 ? 's' : ''}. On enregistre ce qui est fait si tu préfères t’arrêter ici.`;
+            note = 'L’idée est de garder une trace propre, pas de forcer à tout prix.';
+        }
+
+        const chips = [];
+        if (completionRate >= 0.999) chips.push({ icon: '🏆', text: 'Full clear' });
+        if (totalSets >= Math.max(8, totalExercises * 2)) chips.push({ icon: '🔥', text: 'Bon volume' });
+        if (durationMinutes >= 45) chips.push({ icon: '⏱️', text: 'Focus solide' });
+        if (sessionsAfterFinish >= weeklyGoal) chips.push({ icon: '🚀', text: 'Objectif semaine atteint' });
+        else if (sessionsAfterFinish === weeklyGoal - 1) chips.push({ icon: '📈', text: 'Presque l’objectif' });
+        if (!chips.length) chips.push({ icon: '💪', text: 'Séance lancée' });
+
+        const exercisesNote = remaining === 0
+            ? 'Carte entièrement nettoyée'
+            : `${remaining} restant${remaining > 1 ? 's' : ''}`;
+        const setsNote = totalSets >= 12 ? 'Très bon débit' : totalSets >= 6 ? 'Charge utile' : 'Rythme en construction';
+        const durationNote = durationMinutes >= 50 ? 'Bloc solide' : durationMinutes >= 30 ? 'Bon focus' : 'Même court, ça compte';
+
+        document.getElementById('finish-badge').textContent = badge;
+        document.getElementById('finish-hero-icon').textContent = heroIcon;
+        document.getElementById('finish-title').textContent = title;
         document.getElementById('finish-message').textContent = message;
+        document.getElementById('finish-note').textContent = note;
+        document.getElementById('finish-progress-label').textContent = remaining === 0 ? 'Clear séance' : 'Progression séance';
+        document.getElementById('finish-progress-value').textContent = `${completionPercent}%`;
+        document.getElementById('finish-progress-fill').style.width = `${completionPercent}%`;
+        document.getElementById('finish-stat-exercises').textContent = `${completedExercises}/${totalExercises || completedExercises}`;
+        document.getElementById('finish-stat-exercises-note').textContent = exercisesNote;
+        document.getElementById('finish-stat-sets').textContent = `${totalSets}`;
+        document.getElementById('finish-stat-sets-note').textContent = setsNote;
+        document.getElementById('finish-stat-duration').textContent = `${durationMinutes} min`;
+        document.getElementById('finish-stat-duration-note').textContent = durationNote;
+        document.getElementById('finish-micro-wins').innerHTML = chips.map(chip => `
+            <div class="finish-win-chip">
+                <span class="finish-win-icon">${this.escapeHtml(chip.icon)}</span>
+                <span>${this.escapeHtml(chip.text)}</span>
+            </div>
+        `).join('');
         document.getElementById('modal-finish').classList.add('active');
     }
 
@@ -10431,7 +11925,7 @@ class App {
         if (!confirmBtn) return;
 
         confirmBtn.disabled = isLoading;
-        confirmBtn.textContent = isLoading ? 'Sauvegarde...' : 'Terminer';
+        confirmBtn.textContent = isLoading ? 'Sauvegarde...' : 'Valider';
     }
 
     async confirmFinishSession() {
@@ -10457,6 +11951,11 @@ class App {
                 completedSlots: this.currentWorkout.completedSlots,
                 stimulusScore: stimulusScore.total,
                 sessionNote: this.currentWorkout.sessionNote || '',
+                isDeload: Boolean(this.currentWorkout.isDeload),
+                deloadSource: this.currentWorkout.deloadSource || null,
+                cycleWeek: this.currentWorkout.sessionCycle?.weekInCycle || null,
+                cyclePhase: this.currentWorkout.sessionCycle?.phase || null,
+                cycleObjective: this.currentWorkout.sessionCycle?.objective || '',
                 challenge: this.currentWorkout.challenge || finalizedChallenge || null,
                 saveKey
             };
@@ -10485,8 +11984,11 @@ class App {
                 const volumeDecision = slotData.coachVolumeDecision || null;
                 const targetSetCount = targetState.activeTargetSets || slot.sets || 0;
                 const programmedSetCount = targetState.programmedSets || slot.sets || 0;
-                const volumeDecisionType = volumeDecision?.status || 'programmed';
-                const volumeProtected = volumeDecision?.protectedFromTrend === true;
+                const volumeDecisionType = this.currentWorkout.isDeload
+                    ? 'deload'
+                    : (volumeDecision?.status || 'programmed');
+                const volumeProtected = this.currentWorkout.isDeload || volumeDecision?.protectedFromTrend === true;
+                const targetRepsArray = this.genTargetReps(slot.repsMin, slot.repsMax, targetSetCount);
                 const hasUnilateralData = slotData.setsLeft && slotData.setsRight &&
                     (slotData.setsLeft.some(set => set?.completed) || slotData.setsRight.some(set => set?.completed));
 
@@ -10506,8 +12008,16 @@ class App {
                             rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                             targetSetCount,
                             programmedSetCount,
+                            targetReps: targetRepsArray[i] || slot.repsMax,
+                            targetRepsMin: slot.repsMin,
+                            targetRepsMax: slot.repsMax,
+                            targetRir: slot.rir,
                             volumeDecisionType,
                             volumeProtected,
+                            isDeload: Boolean(this.currentWorkout.isDeload),
+                            deloadSource: this.currentWorkout.deloadSource || null,
+                            cycleWeek: this.currentWorkout.sessionCycle?.weekInCycle || null,
+                            cyclePhase: this.currentWorkout.sessionCycle?.phase || null,
                             exerciseNote: slotData.exerciseNote || '',
                             sessionNote: this.currentWorkout.sessionNote || '',
                             date: saveDate
@@ -10529,8 +12039,16 @@ class App {
                             rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                             targetSetCount,
                             programmedSetCount,
+                            targetReps: targetRepsArray[i] || slot.repsMax,
+                            targetRepsMin: slot.repsMin,
+                            targetRepsMax: slot.repsMax,
+                            targetRir: slot.rir,
                             volumeDecisionType,
                             volumeProtected,
+                            isDeload: Boolean(this.currentWorkout.isDeload),
+                            deloadSource: this.currentWorkout.deloadSource || null,
+                            cycleWeek: this.currentWorkout.sessionCycle?.weekInCycle || null,
+                            cyclePhase: this.currentWorkout.sessionCycle?.phase || null,
                             exerciseNote: slotData.exerciseNote || '',
                             sessionNote: this.currentWorkout.sessionNote || '',
                             date: saveDate
@@ -10556,14 +12074,24 @@ class App {
                         rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                         targetSetCount,
                         programmedSetCount,
+                        targetReps: targetRepsArray[i] || slot.repsMax,
+                        targetRepsMin: slot.repsMin,
+                        targetRepsMax: slot.repsMax,
+                        targetRir: slot.rir,
                         volumeDecisionType,
                         volumeProtected,
+                        isDeload: Boolean(this.currentWorkout.isDeload),
+                        deloadSource: this.currentWorkout.deloadSource || null,
+                        cycleWeek: this.currentWorkout.sessionCycle?.weekInCycle || null,
+                        cyclePhase: this.currentWorkout.sessionCycle?.phase || null,
                         exerciseNote: slotData.exerciseNote || '',
                         sessionNote: this.currentWorkout.sessionNote || '',
                         date: saveDate
                     });
                 }
             }
+
+            this.invalidateExerciseHistoryCaches();
 
             const sessions = await db.getSessions();
             const historyForSuggestion = await db.getAll('workoutHistory');
@@ -10581,10 +12109,7 @@ class App {
             const isGoalMetNow = streakDataAfter.currentWeekSessions >= streakDataAfter.weeklyGoal;
             const justMetWeeklyGoal = !wasGoalMetBefore && isGoalMetNow;
 
-            if (this.isDeloadMode) {
-                await db.setSetting('isDeloadMode', false);
-                this.isDeloadMode = false;
-            }
+            this.isDeloadMode = false;
 
             const duration = Math.round((Date.now() - this.sessionStartTime) / 60000);
             let totalSets = 0;
@@ -10655,7 +12180,7 @@ class App {
             
             // Get last session data to check for PR
             const exerciseId = slot?.activeExercise || slot?.name;
-            const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+            const allSetHistory = await this.getSetHistoryForExercise(exerciseId);
             const lastWeight = allSetHistory.length > 0 ? Math.max(...allSetHistory.map(s => s.weight || 0)) : 0;
             const lastReps = allSetHistory.length > 0 ? Math.max(...allSetHistory.map(s => s.reps || 0)) : 0;
             
@@ -10740,6 +12265,8 @@ class App {
             const positiveRows = Array.isArray(recap?.positiveRows) ? recap.positiveRows : [];
             const cautionRows = Array.isArray(recap?.cautionRows) ? recap.cautionRows : [];
             const stableRows = Array.isArray(recap?.stableRows) ? recap.stableRows : [];
+            const achievementBadges = Array.isArray(recap?.badges) ? recap.badges : [];
+            const microWins = Array.isArray(recap?.microWins) ? recap.microWins : [];
             const focusRows = positiveRows.length > 0 ? positiveRows : stableRows.slice(0, 2);
             const topMusclesText = recap?.topMuscles?.length
                 ? `Zones les plus stimulées: ${recap.topMuscles.map(name => this.escapeHtml(name)).join(' · ')}`
@@ -10747,11 +12274,63 @@ class App {
             const summaryLine = recap?.summaryLine
                 ? this.escapeHtml(recap.summaryLine)
                 : 'Séance enregistrée.';
+            const normalizedScore = Math.max(0, Math.min(100, Number(score?.normalized) || 0));
+            const scoreCircumference = 2 * Math.PI * 52;
+            const scoreOffset = scoreCircumference * (1 - normalizedScore / 100);
+            const qualityLabel = quality === 'excellent'
+                ? 'Momentum max'
+                : quality === 'good'
+                    ? 'Très bon signal'
+                    : quality === 'ok'
+                        ? 'Base solide'
+                        : 'Progression en vue';
+            const achievementsHtml = achievementBadges.length
+                ? `
+                    <div class="stimulus-achievement-section">
+                        <div class="stimulus-section-heading">
+                            <span>Réussites de la séance</span>
+                            <span class="stimulus-section-pill">${achievementBadges.length}</span>
+                        </div>
+                        <div class="stimulus-achievement-grid">
+                            ${achievementBadges.map(badge => `
+                                <div class="stimulus-achievement-card ${this.escapeHtml(badge.theme || 'record')}">
+                                    <div class="stimulus-achievement-medal">
+                                        <div class="stimulus-achievement-medal-core">${this.escapeHtml(badge.icon)}</div>
+                                    </div>
+                                    <div class="stimulus-achievement-copy">
+                                        <div class="stimulus-achievement-label">${this.escapeHtml(badge.label)}</div>
+                                        <div class="stimulus-achievement-note">${this.escapeHtml(badge.detail)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `
+                : '';
+            const microWinsHtml = microWins.length
+                ? `
+                    <div class="stimulus-section-heading">
+                        <span>Petites victoires</span>
+                        <span class="stimulus-section-pill">${microWins.length}</span>
+                    </div>
+                    <div class="stimulus-micro-wins">
+                        ${microWins.map(win => `
+                            <div class="stimulus-micro-chip ${this.escapeHtml(win.theme || 'neutral')}">
+                                <span class="stimulus-micro-chip-icon">${this.escapeHtml(win.icon)}</span>
+                                <span>${this.escapeHtml(win.text)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+                : '';
 
             const heroMetricsHtml = heroMetrics.length
                 ? heroMetrics.map(metric => `
-                    <div class="stimulus-metric-card">
-                        <div class="stimulus-metric-label">${this.escapeHtml(metric.label)}</div>
+                    <div class="stimulus-metric-card ${this.escapeHtml(metric.theme || 'neutral')}">
+                        <div class="stimulus-metric-topline">
+                            <div class="stimulus-metric-label">${this.escapeHtml(metric.label)}</div>
+                            <div class="stimulus-metric-dot"></div>
+                        </div>
                         <div class="stimulus-metric-value">${this.escapeHtml(metric.value)}</div>
                         <div class="stimulus-metric-note">${this.escapeHtml(metric.note)}</div>
                     </div>
@@ -10779,6 +12358,8 @@ class App {
             overlay.innerHTML = `
                 <div class="stimulus-score-shell">
                     <div class="stimulus-score-content">
+                        <div class="stimulus-score-orb stimulus-score-orb-a"></div>
+                        <div class="stimulus-score-orb stimulus-score-orb-b"></div>
                         <div class="stimulus-score-header">
                             <div class="stimulus-score-header-copy">
                                 <div class="stimulus-score-kicker">Séance terminée</div>
@@ -10789,12 +12370,25 @@ class App {
                         </div>
 
                         <div class="stimulus-score-hero">
-                            <div class="stimulus-score-value ${quality}">
-                                <span class="score-number">0</span>
+                            <div class="stimulus-score-gauge ${quality}">
+                                <svg class="stimulus-score-gauge-svg" viewBox="0 0 120 120" aria-hidden="true">
+                                    <circle class="stimulus-score-gauge-track" cx="60" cy="60" r="52"></circle>
+                                    <circle class="stimulus-score-gauge-progress" cx="60" cy="60" r="52" style="stroke-dasharray:${scoreCircumference};stroke-dashoffset:${scoreOffset};"></circle>
+                                </svg>
+                                <div class="stimulus-score-value ${quality}">
+                                    <span class="score-number">0</span>
+                                </div>
                             </div>
                             <div class="stimulus-score-hero-copy">
                                 <div class="stimulus-score-label">Stimulus Score</div>
-                                <div class="stimulus-score-hero-note">Mesure rapide de la qualité du stimulus et de l'effort utile.</div>
+                                <div class="stimulus-score-hero-title">${qualityLabel}</div>
+                                <div class="stimulus-score-hero-note">Un résumé clair de la qualité du stimulus, de l'effort utile et de la progression utile sur cette séance.</div>
+                                <div class="stimulus-score-progress">
+                                    <div class="stimulus-score-progress-track">
+                                        <div class="stimulus-score-progress-fill ${quality}" style="width:${normalizedScore}%;"></div>
+                                    </div>
+                                    <div class="stimulus-score-progress-label">${normalizedScore}% du plein potentiel du jour</div>
+                                </div>
                             </div>
                         </div>
 
@@ -10804,8 +12398,11 @@ class App {
                             </div>
                         ` : ''}
 
+                        ${achievementsHtml}
+
                         <div class="stimulus-score-comparison ${comparisonTone}">
-                            ${comparisonText}
+                            <div class="stimulus-score-comparison-kicker">Lecture rapide</div>
+                            <div>${comparisonText}</div>
                         </div>
 
                         <div class="stimulus-score-panels">
@@ -10826,6 +12423,7 @@ class App {
                             </div>
                         </div>
 
+                        ${microWinsHtml}
                         <div class="stimulus-score-footer-note">${topMusclesText}</div>
                         <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
                     </div>
@@ -11354,7 +12952,7 @@ class App {
         const progressionMode = slot.progressionMode || (slot.bodyweightMode ? 'bodyweight' : 'load');
         const loadingProfile = slot.loadingProfile || (progressionMode === 'bodyweight' ? 'bodyweight' : 'free_weight');
         const bodyweightProfile = slot.bodyweightProfile || {};
-        const trackingMode = slot.trackingMode || this.getTrackingMode(slot);
+        const trackingMode = this.getTrackingMode(slot);
         const trackingConfig = this.getTrackingModeFieldConfig(trackingMode);
         const slotPool = Array.isArray(slot.pool) && slot.pool.length
             ? slot.pool
@@ -12328,15 +13926,127 @@ class App {
         URL.revokeObjectURL(url);
     }
 
+    showImportModeDialog({ isBackup = false } = {}) {
+        document.getElementById('modal-import-mode')?.remove();
+
+        const destructiveLabel = isBackup ? 'Restaurer tout' : 'Repartir de zéro';
+        const destructiveHint = isBackup
+            ? 'Remplace séances, historique, paramètres et éventuelle séance en cours par le fichier.'
+            : 'Remplace tout le contenu local par ce programme et efface l’historique actuel.';
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.id = 'modal-import-mode';
+        modal.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-import-mode">
+                <div class="app-dialog-icon">📥</div>
+                <h3>Importer comment ?</h3>
+                <div class="app-dialog-message import-mode-message">
+                    <strong>Recommandé :</strong> mets seulement les séances à jour pour garder tes perfs, ton XP, ton streak et toute ta progression.
+                </div>
+                <div class="import-mode-actions">
+                    <button class="btn btn-primary" type="button" data-import-mode="programOnly">
+                        Mettre à jour les séances seulement
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-import-mode="full">
+                        ${this.escapeHtml(destructiveLabel)}
+                    </button>
+                    <p class="import-mode-destructive-note">${this.escapeHtml(destructiveHint)}</p>
+                    <button class="btn btn-ghost" type="button" data-import-mode="cancel">Annuler</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        return new Promise((resolve) => {
+            const finish = (mode) => {
+                modal.remove();
+                resolve(mode);
+            };
+
+            modal.querySelector('[data-import-mode="programOnly"]')?.addEventListener('click', () => finish('programOnly'));
+            modal.querySelector('[data-import-mode="full"]')?.addEventListener('click', () => finish('full'));
+            modal.querySelector('[data-import-mode="cancel"]')?.addEventListener('click', () => finish(null));
+            modal.querySelector('.modal-backdrop')?.addEventListener('click', () => finish(null));
+        });
+    }
+
+    async resolveImportMode(data, { isBackup = false, fromOnboarding = false, requestedMode = null } = {}) {
+        if (fromOnboarding) {
+            return 'full';
+        }
+        if (requestedMode === 'full' || requestedMode === 'programOnly') {
+            return requestedMode;
+        }
+
+        return this.showImportModeDialog({ isBackup });
+    }
+
+    async confirmClearCurrentWorkoutForPlanImport() {
+        const savedWorkout = await db.getCurrentWorkout();
+        if (!savedWorkout) return false;
+
+        const session = savedWorkout.sessionId ? await db.get('sessions', savedWorkout.sessionId) : null;
+        const sessionName = session?.name || 'ta séance en cours';
+        const confirmed = await this.showAppConfirm(
+            `Une séance est en cours (${sessionName}). Pour remplacer le programme proprement, elle doit être supprimée.\n\nTes anciennes séances déjà validées restent conservées.`,
+            {
+                title: 'Séance en cours',
+                variant: 'warning',
+                confirmText: 'Supprimer et importer',
+                cancelText: 'Annuler'
+            }
+        );
+
+        return confirmed ? true : null;
+    }
+
     async importData(file, options = {}) {
         try {
             const text = await file.text();
             const jsonText = this.extractImportJsonText(text);
             const data = JSON.parse(jsonText);
             const isBackup = this.isBackupImportPayload(data);
+
+            if (isBackup) {
+                db.validateImportData(data);
+            } else {
+                this.normalizeProgramImport(data);
+            }
+
+            const importMode = await this.resolveImportMode(data, {
+                isBackup,
+                fromOnboarding: options.fromOnboarding === true,
+                requestedMode: options.importMode
+            });
+
+            if (!importMode) return;
+
+            let clearCurrentWorkout = false;
+            if (importMode === 'programOnly') {
+                const clearChoice = await this.confirmClearCurrentWorkoutForPlanImport();
+                if (clearChoice === null) return;
+                clearCurrentWorkout = clearChoice;
+            }
+
             const counts = isBackup
-                ? await db.importData(data)
-                : await this.importProgramData(data);
+                ? (
+                    importMode === 'full'
+                        ? await db.importData(data)
+                        : await this.importBackupProgramOnly(data, { clearCurrentWorkout })
+                )
+                : await this.importProgramData(data, {
+                    preserveHistory: importMode === 'programOnly',
+                    clearCurrentWorkout
+                });
+
+            if (counts.currentWorkoutCleared) {
+                this.currentWorkout = null;
+                this.currentSession = null;
+                this.currentSlot = null;
+                this.supersetSlot = null;
+            }
 
             await this.renderHome();
             await this.refreshStorageIndicators({ includeSettings: true });
@@ -12345,11 +14055,20 @@ class App {
                 await this.completeOnboarding({ refreshHome: false });
             }
 
-            if (isBackup && counts.currentWorkout > 0) {
+            if (isBackup && importMode === 'full' && counts.currentWorkout > 0) {
                 await this.checkPendingSession();
             }
 
-            const msg = counts.mode === 'program'
+            const msg = counts.mode === 'programOnly'
+                ? `✅ Séances mises à jour !\n\n` +
+                    `• ${counts.sessions} séances\n` +
+                    `• ${counts.slots} exercices\n` +
+                    `• ${counts.workouts} entraînements conservés\n` +
+                    `• ${counts.sets} séries conservées\n` +
+                    `• Objectif : ${counts.objective || 'inchangé'}\n` +
+                    `• Séances / semaine : ${counts.weeklyGoal}\n\n` +
+                    `Le coach garde ton historique et utilise maintenant les nouveaux objectifs de reps, séries, repos et RIR.`
+                : counts.mode === 'program'
                 ? `✅ Programme importé avec succès !\n\n` +
                     `• ${counts.sessions} séances\n` +
                     `• ${counts.slots} exercices\n` +
@@ -12365,7 +14084,9 @@ class App {
                     `• ${counts.currentWorkout} séance en cours`;
 
             await this.showAppAlert(msg, {
-                title: counts.mode === 'program' ? 'Programme importé' : 'Import terminé',
+                title: counts.mode === 'programOnly'
+                    ? 'Séances mises à jour'
+                    : (counts.mode === 'program' ? 'Programme importé' : 'Import terminé'),
                 variant: 'success',
                 confirmText: 'Parfait'
             });
@@ -13128,7 +14849,7 @@ class App {
     
     async applyExerciseChange(slot, newExerciseName, resetParams) {
         const previousActiveExercise = slot.activeExercise;
-        const previousTrackingMode = slot.trackingMode || this.getTrackingMode(slot);
+        const previousTrackingMode = this.getTrackingMode(slot);
         const definition = this.findExerciseLibraryEntry(newExerciseName) || this.inferCustomExerciseTemplate(newExerciseName);
 
         // Update active exercise
@@ -13214,7 +14935,7 @@ class App {
         const streakCount = (await db.getSetting('streakCount')) ?? 0;
         
         // Periodization settings
-        const cycleLength = (await db.getSetting('cycleLength')) ?? 5;
+        const accumulationWeeks = (await db.getSetting('accumulationWeeks')) ?? 4;
         const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
         const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
         
@@ -13235,8 +14956,8 @@ class App {
         document.getElementById('setting-lock-weeks-value').textContent = lockWeeks;
         
         // Periodization settings
-        document.getElementById('setting-cycle-length').value = cycleLength;
-        document.getElementById('setting-cycle-length-value').textContent = cycleLength;
+        document.getElementById('setting-accumulation-weeks').value = accumulationWeeks;
+        document.getElementById('setting-accumulation-weeks-value').textContent = accumulationWeeks;
         
         document.getElementById('setting-auto-deload').checked = autoDeloadEnabled;
         
@@ -13359,7 +15080,7 @@ class App {
             { id: 'setting-deload-percent', valueId: 'setting-deload-percent-value' },
             { id: 'setting-weight-increment', valueId: 'setting-weight-increment-value' },
             { id: 'setting-lock-weeks', valueId: 'setting-lock-weeks-value' },
-            { id: 'setting-cycle-length', valueId: 'setting-cycle-length-value' },
+            { id: 'setting-accumulation-weeks', valueId: 'setting-accumulation-weeks-value' },
             { id: 'setting-deload-volume', valueId: 'setting-deload-volume-value' }
         ];
         
@@ -13388,7 +15109,7 @@ class App {
             : (Number.isFinite(parsedCheatStreak) ? Math.max(0, parsedCheatStreak) : currentStreakCount);
         
         // Periodization settings
-        const cycleLength = parseInt(document.getElementById('setting-cycle-length').value);
+        const accumulationWeeks = parseInt(document.getElementById('setting-accumulation-weeks').value);
         const autoDeloadEnabled = document.getElementById('setting-auto-deload').checked;
         const deloadVolumeReduction = parseInt(document.getElementById('setting-deload-volume').value);
 
@@ -13413,7 +15134,9 @@ class App {
         await db.setSetting('lockWeeks', lockWeeks);
         
         // Periodization settings
-        await db.setSetting('cycleLength', cycleLength);
+        await db.setSetting('accumulationWeeks', accumulationWeeks);
+        await db.setSetting('cycleLength', accumulationWeeks + 1);
+        await db.setSetting('deloadWeek', accumulationWeeks + 1);
         await db.setSetting('autoDeloadEnabled', autoDeloadEnabled);
         await db.setSetting('deloadVolumeReduction', deloadVolumeReduction);
         await db.setSetting('streakCount', forcedStreakCount);
@@ -13871,7 +15594,8 @@ class App {
     
     // === ADVANCED: Generate Comprehensive Exercise Analysis ===
     async generateExerciseAnalysis(exerciseId, slot) {
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = (await this.getSetHistoryForExercise(exerciseId))
+            .filter(set => !set.isDeload);
         
         // Group by workout
         const workoutGroups = {};
@@ -14299,7 +16023,7 @@ class App {
     normalizeSlotProgressionConfig(slot) {
         if (!slot) return slot;
 
-        slot.trackingMode ||= this.isCardioSlot(slot) ? 'cardio' : 'strength';
+        slot.trackingMode = this.getTrackingMode(slot);
 
         const bodyweightConfig = this.getBodyweightAutoConfig(slot);
         const bodyweightDetected = slot.bodyweightMode === true ||
@@ -14490,11 +16214,27 @@ class App {
             && Number(decision.acceptedTargetSets) > 0
             ? Number(decision.acceptedTargetSets)
             : null;
+        const autoTargetSets = Number.isFinite(Number(resolvedSlotData?.autoTargetSets))
+            && Number(resolvedSlotData.autoTargetSets) > 0
+            ? Number(resolvedSlotData.autoTargetSets)
+            : null;
+        let activeTargetSets = programmedSets;
+        let source = 'programmed';
+
+        if (acceptedTargetSets != null) {
+            activeTargetSets = Math.min(programmedSets, acceptedTargetSets);
+            source = 'manual';
+        } else if (autoTargetSets != null) {
+            activeTargetSets = Math.min(programmedSets, autoTargetSets);
+            source = resolvedSlotData?.autoTargetSource || 'auto';
+        }
 
         return {
             programmedSets,
-            activeTargetSets: acceptedTargetSets || programmedSets,
-            decision
+            activeTargetSets,
+            autoTargetSets,
+            decision,
+            source
         };
     }
 
@@ -14510,20 +16250,31 @@ class App {
 
             if (!workoutGroups[set.workoutId]) {
                 workoutGroups[set.workoutId] = {
+                    id: set.workoutId,
                     date: set.date,
                     sets: [],
+                    slotIds: new Set(),
                     totalReps: 0,
                     maxWeight: 0,
                     avgRpe: null,
                     hasRealRpe: false,
                     targetSetCount: 0,
                     programmedSetCount: 0,
+                    targetRepsMin: null,
+                    targetRepsMax: null,
                     volumeDecisionType: null,
-                    volumeProtected: false
+                    volumeProtected: false,
+                    isDeload: false,
+                    deloadSource: null,
+                    cycleWeek: null,
+                    cyclePhase: null
                 };
             }
 
             workoutGroups[set.workoutId].sets.push(set);
+            if (set.slotId) {
+                workoutGroups[set.workoutId].slotIds.add(String(set.slotId));
+            }
             workoutGroups[set.workoutId].totalReps += set.reps || 0;
             workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
             workoutGroups[set.workoutId].targetSetCount = Math.max(
@@ -14534,18 +16285,50 @@ class App {
                 workoutGroups[set.workoutId].programmedSetCount,
                 Number(set.programmedSetCount) || 0
             );
+            if (workoutGroups[set.workoutId].targetRepsMin == null && Number.isFinite(Number(set.targetRepsMin))) {
+                workoutGroups[set.workoutId].targetRepsMin = Number(set.targetRepsMin);
+            }
+            if (workoutGroups[set.workoutId].targetRepsMax == null && Number.isFinite(Number(set.targetRepsMax))) {
+                workoutGroups[set.workoutId].targetRepsMax = Number(set.targetRepsMax);
+            }
             if (!workoutGroups[set.workoutId].volumeDecisionType && set.volumeDecisionType) {
                 workoutGroups[set.workoutId].volumeDecisionType = set.volumeDecisionType;
             }
             if (set.volumeProtected) {
                 workoutGroups[set.workoutId].volumeProtected = true;
             }
+            if (set.isDeload) {
+                workoutGroups[set.workoutId].isDeload = true;
+            }
+            if (!workoutGroups[set.workoutId].deloadSource && set.deloadSource) {
+                workoutGroups[set.workoutId].deloadSource = set.deloadSource;
+            }
+            if (workoutGroups[set.workoutId].cycleWeek == null && set.cycleWeek != null) {
+                workoutGroups[set.workoutId].cycleWeek = set.cycleWeek;
+            }
+            if (!workoutGroups[set.workoutId].cyclePhase && set.cyclePhase) {
+                workoutGroups[set.workoutId].cyclePhase = set.cyclePhase;
+            }
         }
 
         for (const workout of Object.values(workoutGroups)) {
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
+            workout.slotIds = Array.from(workout.slotIds);
             workout.targetSetCount = Math.max(workout.targetSetCount || 0, workout.sets.length);
             workout.programmedSetCount = Math.max(workout.programmedSetCount || 0, workout.targetSetCount);
+            if (workout.targetRepsMin != null && workout.targetRepsMax != null) {
+                workout.programSnapshot = {
+                    repsMin: workout.targetRepsMin,
+                    repsMax: workout.targetRepsMax,
+                    sets: workout.programmedSetCount || workout.targetSetCount || workout.sets.length
+                };
+            } else if ((workout.programmedSetCount || workout.targetSetCount) > 0) {
+                workout.programSnapshot = {
+                    repsMin: null,
+                    repsMax: null,
+                    sets: workout.programmedSetCount || workout.targetSetCount || workout.sets.length
+                };
+            }
             const setsWithExplicitRpe = workout.sets.filter(set => this.hasExplicitRpe(set));
             workout.hasRealRpe = setsWithExplicitRpe.length > 0;
             workout.avgRpe = setsWithExplicitRpe.length > 0
@@ -14556,9 +16339,51 @@ class App {
         return Object.values(workoutGroups).sort((a, b) => new Date(b.date) - new Date(a.date));
     }
 
-    async getExerciseWorkoutHistory(exerciseId) {
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
-        return this.buildWorkoutsFromSetHistory(allSetHistory);
+    async attachWorkoutProgramSnapshots(workouts = []) {
+        const missingSnapshotWorkouts = workouts.filter(workout => (
+            !workout.programSnapshot ||
+            workout.programSnapshot.repsMin == null ||
+            workout.programSnapshot.repsMax == null
+        ) && workout?.id != null);
+        if (!missingSnapshotWorkouts.length) return workouts;
+
+        const [workoutRecords, slotArchive] = await Promise.all([
+            db.getAll('workoutHistory'),
+            this.getSlotHistoryArchive()
+        ]);
+        const recordMap = new Map(workoutRecords.map(record => [String(record.id), record]));
+
+        missingSnapshotWorkouts.forEach((workout) => {
+            const record = recordMap.get(String(workout.id));
+            const slotIds = Array.isArray(workout.slotIds) && workout.slotIds.length
+                ? workout.slotIds
+                : workout.sets.map(set => set.slotId).filter(Boolean);
+            const slotMeta = slotIds
+                .map(slotId => record?.slots?.[slotId]?.meta)
+                .find(meta => meta && Number.isFinite(Number(meta.repsMin)) && Number.isFinite(Number(meta.repsMax)));
+            const archivedSlot = slotIds
+                .map(slotId => slotArchive?.[slotId])
+                .find(slot => slot && (Number.isFinite(Number(slot.repsMin)) || Number.isFinite(Number(slot.sets))));
+
+            if (!slotMeta && !archivedSlot) return;
+
+            workout.programSnapshot = {
+                repsMin: slotMeta ? Number(slotMeta.repsMin) : (Number.isFinite(Number(archivedSlot.repsMin)) ? Number(archivedSlot.repsMin) : null),
+                repsMax: slotMeta ? Number(slotMeta.repsMax) : (Number.isFinite(Number(archivedSlot.repsMax)) ? Number(archivedSlot.repsMax) : null),
+                sets: Number(slotMeta?.sets) || Number(archivedSlot?.sets) || workout.programmedSetCount || workout.targetSetCount || workout.sets.length
+            };
+        });
+
+        return workouts;
+    }
+
+    async getExerciseWorkoutHistory(exerciseId, options = {}) {
+        const allSetHistory = await this.getSetHistoryForExercise(exerciseId);
+        const workouts = this.buildWorkoutsFromSetHistory(allSetHistory);
+        if (options.includeProgramSnapshot !== false) {
+            await this.attachWorkoutProgramSnapshots(workouts);
+        }
+        return options.excludeDeload ? workouts.filter(workout => !workout.isDeload) : workouts;
     }
 
     buildWorkoutAggregateFromSets(sets = [], slotMap = new Map()) {
@@ -14573,7 +16398,7 @@ class App {
         for (const set of sets) {
             if (!set) continue;
 
-            const slot = slotMap.get(set.slotId);
+            const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
             const reps = Number(set.reps || 0);
             const weight = Number(set.weight || 0);
             totalSets += 1;
@@ -14665,11 +16490,69 @@ class App {
         return `${this.formatPercentDelta(row.deltaPct)} e1RM`;
     }
 
+    buildSessionFinishAchievements({ currentStats, previousStats, topMuscles = [], trendRows = [], recordCount = 0 }) {
+        const badges = [];
+        const microWins = [];
+
+        if (recordCount > 0) {
+            badges.push({
+                icon: '🏆',
+                theme: 'record',
+                label: `${recordCount} record${recordCount > 1 ? 's' : ''}`,
+                detail: 'Nouveau(x) meilleur(s) signal(aux) détecté(s) sur la séance.'
+            });
+        }
+
+        const improvedRows = trendRows
+            .filter(row => row.trend === 'improved' && row.deltaPct != null && row.deltaPct > 0)
+            .sort((a, b) => b.deltaPct - a.deltaPct);
+        if (improvedRows.length > 0) {
+            const topRow = improvedRows[0];
+            badges.push({
+                icon: '🚀',
+                theme: 'progress',
+                label: `${topRow.label} en hausse`,
+                detail: `${this.formatPercentDelta(topRow.deltaPct)} d'e1RM vs la séance précédente`
+            });
+        }
+
+        if (previousStats) {
+            const repDelta = currentStats.totalReps - previousStats.totalReps;
+            if (repDelta > 0) {
+                microWins.push({
+                    icon: '➕',
+                    theme: 'reps',
+                    text: `+${repDelta} reps sur la séance`
+                });
+            }
+
+            const volumeDeltaPct = this.percentChange(currentStats.totalVolume, previousStats.totalVolume);
+            if (Number.isFinite(volumeDeltaPct) && volumeDeltaPct >= 5) {
+                microWins.push({
+                    icon: '📦',
+                    theme: 'volume',
+                    text: `Volume total ${this.formatPercentDelta(volumeDeltaPct)}`
+                });
+            }
+        }
+
+        if (topMuscles.length > 0 && previousStats) {
+            microWins.push({
+                icon: '🎯',
+                theme: 'focus',
+                text: `Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}`
+            });
+        }
+
+        return { badges, microWins };
+    }
+
     async buildSessionFinishRecap({ workoutId, totalSets, durationMinutes, stimulusScore }) {
         const sessionSlots = await db.getSlotsBySession(this.currentSession.id);
         const slotMap = new Map(sessionSlots.map(slot => [slot.id, slot]));
         const workoutSets = await db.getByIndex('setHistory', 'workoutId', workoutId);
         const currentStats = this.buildWorkoutAggregateFromSets(workoutSets, slotMap);
+        const isDeloadSession = Boolean(this.currentWorkout?.isDeload);
         const completedSlots = new Set(workoutSets.map(set => String(set.slotId)));
         const totalExercises = sessionSlots.length;
         const completedExercises = completedSlots.size;
@@ -14679,7 +16562,7 @@ class App {
         let recordCount = 0;
 
         for (const set of workoutSets) {
-            const slot = slotMap.get(set.slotId);
+            const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
             if (!slot || this.isCardioSlot(slot)) continue;
 
             const rpe = this.getStatsRpe(set, slot) ?? 8;
@@ -14694,7 +16577,7 @@ class App {
             if (!completedSlots.has(String(slot.id)) || this.isCardioSlot(slot)) continue;
 
             const slotHistorySets = await db.getByIndex('setHistory', 'slotId', slot.id);
-            const workouts = this.buildWorkoutsFromSetHistory(slotHistorySets);
+            const workouts = this.buildWorkoutsFromSetHistory(slotHistorySets).filter(workout => !workout.isDeload);
             if (!workouts.length) continue;
 
             const latest = workouts[0];
@@ -14752,25 +16635,41 @@ class App {
         const sessionHistory = await db.getByIndex('workoutHistory', 'sessionId', this.currentSession.id);
         const previousSession = sessionHistory
             .filter(workout => workout.id !== workoutId)
+            .filter(workout => !workout.isDeload)
             .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
         const previousStats = previousSession
             ? this.buildWorkoutAggregateFromSets(await db.getByIndex('setHistory', 'workoutId', previousSession.id), slotMap)
             : null;
-        const comparison = this.buildSessionComparisonMessage(currentStats, previousStats, this.currentSession.name);
+        const comparison = isDeloadSession
+            ? {
+                tone: 'neutral',
+                text: 'Séance deload enregistrée. Elle est gardée à part pour ne pas biaiser la lecture de ta progression.'
+            }
+            : this.buildSessionComparisonMessage(currentStats, previousStats, this.currentSession.name);
+        const sessionAchievements = this.buildSessionFinishAchievements({
+            currentStats,
+            previousStats,
+            topMuscles,
+            trendRows,
+            recordCount
+        });
 
         const heroMetrics = [
             {
                 label: 'Durée',
+                theme: 'duration',
                 value: `${durationMinutes} min`,
                 note: `${completedExercises}/${totalExercises || completedExercises} exercices terminés`
             },
             {
                 label: 'Séries',
+                theme: 'sets',
                 value: `${totalSets}`,
                 note: `${currentStats.totalReps} reps totales`
             },
             {
                 label: currentStats.totalVolume > 0 ? 'Volume' : 'Cardio',
+                theme: currentStats.totalVolume > 0 ? 'volume' : 'cardio',
                 value: currentStats.totalVolume > 0
                     ? `${this.formatVolume(currentStats.totalVolume)} kg`
                     : `${this.formatOneDecimal(currentStats.totalCardioMinutes)} min`,
@@ -14778,6 +16677,7 @@ class App {
             },
             {
                 label: recordCount > 0 ? 'Records' : 'Intensité',
+                theme: recordCount > 0 ? 'record' : 'intensity',
                 value: recordCount > 0
                     ? `${recordCount}`
                     : (currentStats.avgRpe == null ? '--' : `RPE ${this.formatOneDecimal(currentStats.avgRpe)}`),
@@ -14785,9 +16685,11 @@ class App {
             }
         ];
 
-        let summaryLine = completionRate >= 0.99
-            ? 'Séance complétée proprement.'
-            : `${completedExercises}/${totalExercises} exercices validés.`;
+        let summaryLine = isDeloadSession
+            ? 'Deload validé proprement.'
+            : completionRate >= 0.99
+                ? 'Séance complétée proprement.'
+                : `${completedExercises}/${totalExercises} exercices validés.`;
         if (topMuscles.length > 0) {
             summaryLine += ` Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}.`;
         }
@@ -14801,6 +16703,8 @@ class App {
             stableRows,
             topMuscles,
             recordCount,
+            badges: sessionAchievements.badges,
+            microWins: sessionAchievements.microWins,
             avgRpe: currentStats.avgRpe,
             completionRate,
             totalVolume: currentStats.totalVolume,
@@ -15207,7 +17111,7 @@ class App {
 
     async buildCoachContextForSlot(slot, options = {}) {
         const exerciseId = slot.activeExercise || slot.name;
-        const workouts = await this.getExerciseWorkoutHistory(exerciseId);
+        const workouts = await this.getExerciseWorkoutHistory(exerciseId, { excludeDeload: true });
         const trendSummary = this.buildExerciseTrendSummary(workouts, slot);
         const sessionContext = this.getSessionFatigueContextForSlot(slot, options);
         const lmsData = await this.getLMSDataForSlot(slot, {
@@ -15400,7 +17304,13 @@ class App {
         const setsContainer = document.getElementById('coaching-suggested-sets-container');
         const setsLabel = document.getElementById('coaching-suggested-sets-label');
         if (setsContainer) {
-            if (setPlan.reductionAccepted) {
+            if (setPlan.isDeloadPlanApplied) {
+                setsContainer.style.display = 'block';
+                if (setsLabel) setsLabel.textContent = 'Format deload';
+                const deltaLabel = `${setPlan.displayDelta}`;
+                document.getElementById('coaching-suggested-sets').innerHTML =
+                    `${setPlan.activeTargetSets} séries <span class="volume-adjustment-badge decrease">${deltaLabel}</span>`;
+            } else if (setPlan.reductionAccepted) {
                 setsContainer.style.display = 'block';
                 if (setsLabel) setsLabel.textContent = 'Volume validé';
                 const deltaLabel = `${setPlan.displayDelta}`;
@@ -15544,7 +17454,7 @@ class App {
         const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         
         // Check if deload mode is active
-        const isDeloadMode = this.isDeloadMode || (await db.getSetting('isDeloadMode')) || false;
+        const isDeloadMode = Boolean(this.currentWorkout?.isDeload || this.isDeloadMode);
         const deloadIntensityReduction = (await db.getSetting('deloadPercent')) ?? 10;
         
         // === LMS INTEGRATION: Get local muscle soreness data ===
@@ -15567,7 +17477,7 @@ class App {
         const minSetsPerExercise = 2; // MEV floor
         
         // Get all set history for this exercise
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = await this.getSetHistoryForExercise(exerciseId);
         
         // Group by workout with per-set analysis
         const workoutGroups = {};
@@ -16554,44 +18464,30 @@ class App {
     
     // === MESOCYCLE POSITION TRACKING ===
     async getMesocyclePosition() {
-        const cycleStartDate = await db.getSetting('cycleStartDate');
-        if (!cycleStartDate) return null;
-        
-        const start = new Date(cycleStartDate);
-        const now = new Date();
-        const daysSinceStart = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-        const weekInCycle = Math.floor(daysSinceStart / 7) + 1;
-        const cycleLength = DEFAULT_PERIODIZATION.cycleLength || 5;
-        
-        // Position in mesocycle affects volume recommendations
-        let phase, volumeMultiplier, rpeTarget;
-        
-        if (weekInCycle === 1) {
-            phase = 'introduction';
-            volumeMultiplier = 0.8;  // Start at ~MEV
-            rpeTarget = 7;
-        } else if (weekInCycle === cycleLength) {
-            phase = 'deload';
-            volumeMultiplier = 0.5;  // Drop to MV
+        const cycleState = await this.getCurrentCycleState();
+        if (!cycleState) return null;
+
+        let volumeMultiplier = 1;
+        let rpeTarget = 8;
+
+        if (cycleState.phase === 'deload') {
+            volumeMultiplier = 0.5;
             rpeTarget = 6;
-        } else if (weekInCycle >= cycleLength - 1) {
-            phase = 'overreach';
-            volumeMultiplier = 1.1;  // Push toward MRV
-            rpeTarget = 9;
-        } else {
-            phase = 'accumulation';
-            volumeMultiplier = 1.0 + (weekInCycle - 1) * 0.05; // Gradual ramp
-            rpeTarget = 8;
+        } else if (cycleState.weekInCycle === 1) {
+            volumeMultiplier = 0.9;
+            rpeTarget = 7;
+        } else if (cycleState.weekInCycle >= cycleState.accumulationWeeks) {
+            volumeMultiplier = 1.05;
+            rpeTarget = 8.5;
         }
-        
+
         return {
-            weekInCycle,
-            cycleLength,
-            phase,
+            weekInCycle: cycleState.weekInCycle,
+            cycleLength: cycleState.totalWeeks,
+            phase: cycleState.phase,
             volumeMultiplier,
             rpeTarget,
-            daysSinceStart,
-            recommendation: this.getMesocyclePhaseRecommendation(phase)
+            recommendation: cycleState.objective
         };
     }
     
@@ -16609,59 +18505,55 @@ class App {
     async calculateWeeklyMuscleVolume(muscleGroup) {
         const landmarks = VOLUME_LANDMARKS[muscleGroup] || VOLUME_LANDMARKS['default'];
         
-        // Get this week's workouts
+        // Read directly from setHistory so old sessions remain useful after a program update.
         const now = new Date();
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
         startOfWeek.setHours(0, 0, 0, 0);
-        
-        const allHistory = await db.getAll('workoutHistory');
-        const thisWeekWorkouts = allHistory.filter(w => new Date(w.date) >= startOfWeek);
+        const [allSetHistory, allSlots] = await Promise.all([
+            db.getAll('setHistory'),
+            db.getAll('slots')
+        ]);
+        const slotMap = await this.buildSlotHistoryLookup(allSlots);
         
         // Get all sets from this week
         let totalEffectiveSets = 0;
         let totalRawSets = 0;
         const exerciseBreakdown = {};
         
-        for (const workout of thisWeekWorkouts) {
-            // Get slots for this workout's session
-            const slots = await db.getByIndex('slots', 'sessionId', workout.sessionId);
-            
-            for (const slot of slots) {
-                const exerciseName = slot.activeExercise || slot.name;
-                const contributions = this.getExerciseMuscleContributions(exerciseName);
-                if (contributions.length === 0 && slot.muscleGroup) {
-                    contributions.push({ muscleId: slot.muscleGroup, role: 'primary', weight: 1 });
-                }
-                const targetContribution = contributions.find(item => item.muscleId === muscleGroup);
-                if (!targetContribution) continue;
-                
-                // Get sets for this exercise in this workout
-                const exerciseId = exerciseName;
-                const setHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
-                const workoutSets = setHistory.filter(s => s.workoutId === workout.id);
-                
-                if (workoutSets.length === 0) continue;
-                
-                // Calculate effective sets
-                const slotMeta = this.buildSlotCoachMeta(slot);
-                const effectiveSets = workoutSets.reduce((sum, set) => {
-                    const inferredRpe = set.rpe != null ? set.rpe : this.estimateSetRpe(set, slotMeta);
-                    const effectiveScore = set.rpe != null
-                        ? this.calculateEffectiveVolumeScore(set.reps, inferredRpe, set.weight, null)
-                        : Math.min(0.75, this.calculateEffectiveVolumeScore(set.reps, inferredRpe, set.weight, null));
-                    return sum + (effectiveScore * targetContribution.weight);
-                }, 0);
+        for (const set of allSetHistory) {
+            const setDate = new Date(set.date);
+            if (setDate < startOfWeek || setDate > now) continue;
 
-                totalEffectiveSets += effectiveSets;
-                totalRawSets += workoutSets.length * targetContribution.weight;
-                
-                if (!exerciseBreakdown[exerciseName]) {
-                    exerciseBreakdown[exerciseName] = { raw: 0, effective: 0 };
-                }
-                exerciseBreakdown[exerciseName].raw += workoutSets.length * targetContribution.weight;
-                exerciseBreakdown[exerciseName].effective += effectiveSets;
+            const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
+            const exerciseNames = this.getSetHistoryCandidateExerciseNames(set, slotMap);
+            const exerciseName = exerciseNames[0] || '';
+            let contributions = [];
+            for (const candidateName of exerciseNames) {
+                contributions = this.getExerciseMuscleContributions(candidateName);
+                if (contributions.length > 0) break;
             }
+            if (contributions.length === 0 && slot?.muscleGroup) {
+                contributions.push({ muscleId: slot.muscleGroup, role: 'primary', weight: 1 });
+            }
+            const targetContribution = contributions.find(item => item.muscleId === muscleGroup);
+            if (!targetContribution) continue;
+
+            const slotMeta = slot ? this.buildSlotCoachMeta(slot) : null;
+            const inferredRpe = set.rpe != null ? set.rpe : this.estimateSetRpe(set, slotMeta);
+            const effectiveScore = set.rpe != null
+                ? this.calculateEffectiveVolumeScore(set.reps, inferredRpe, set.weight, null)
+                : Math.min(0.75, this.calculateEffectiveVolumeScore(set.reps, inferredRpe, set.weight, null));
+            const weightedEffectiveScore = effectiveScore * targetContribution.weight;
+
+            totalEffectiveSets += weightedEffectiveScore;
+            totalRawSets += targetContribution.weight;
+
+            if (!exerciseBreakdown[exerciseName]) {
+                exerciseBreakdown[exerciseName] = { raw: 0, effective: 0 };
+            }
+            exerciseBreakdown[exerciseName].raw += targetContribution.weight;
+            exerciseBreakdown[exerciseName].effective += weightedEffectiveScore;
         }
         
         // Determine volume status relative to landmarks
@@ -16773,7 +18665,8 @@ class App {
     
     // === PROGRESSIVE OVERLOAD TRACKING ===
     async getProgressionSummary(exerciseId) {
-        const allSetHistory = await db.getByIndex('setHistory', 'exerciseId', exerciseId);
+        const allSetHistory = (await this.getSetHistoryForExercise(exerciseId))
+            .filter(set => !set.isDeload);
         if (allSetHistory.length === 0) return null;
         
         // Group by workout and calculate e1RM progression

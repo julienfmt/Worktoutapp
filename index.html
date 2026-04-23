@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#ffffff">
     <title>Muscu - Training App</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icons/icon-192.png.svg">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
@@ -72,6 +72,9 @@
                     </div>
                     <div class="last-session" id="last-session-info">
                         Dernière séance : --
+                    </div>
+                    <div class="session-cycle-preview" id="session-cycle-preview">
+                        Cycle : --
                     </div>
                     <div class="session-actions">
                         <button class="btn btn-primary btn-large" id="btn-start-session">
@@ -255,12 +258,55 @@
             <!-- Modal fin de séance -->
             <div class="modal" id="modal-finish">
                 <div class="modal-backdrop"></div>
-                <div class="modal-content">
-                    <h3>Terminer la séance ?</h3>
-                    <p id="finish-message">Tu as complété tous les exercices !</p>
+                <div class="modal-content finish-modal-content">
+                    <div class="finish-modal-glow" aria-hidden="true"></div>
+                    <div class="finish-modal-badge" id="finish-badge">Finisher mode</div>
+
+                    <div class="finish-modal-hero">
+                        <div class="finish-modal-icon-wrap" aria-hidden="true">
+                            <div class="finish-modal-icon-ring"></div>
+                            <div class="finish-modal-icon" id="finish-hero-icon">✨</div>
+                        </div>
+                        <div class="finish-modal-copy">
+                            <h3 id="finish-title">Terminer la séance ?</h3>
+                            <p id="finish-message">Tu as complété tous les exercices !</p>
+                        </div>
+                    </div>
+
+                    <div class="finish-modal-progress-block">
+                        <div class="finish-modal-progress-header">
+                            <span id="finish-progress-label">Progression</span>
+                            <span id="finish-progress-value">0%</span>
+                        </div>
+                        <div class="finish-modal-progress-track" aria-hidden="true">
+                            <div class="finish-modal-progress-fill" id="finish-progress-fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="finish-modal-stats">
+                        <div class="finish-stat-card">
+                            <span class="finish-stat-label">Exos validés</span>
+                            <span class="finish-stat-value" id="finish-stat-exercises">0/0</span>
+                            <span class="finish-stat-note" id="finish-stat-exercises-note">Full clear en vue</span>
+                        </div>
+                        <div class="finish-stat-card">
+                            <span class="finish-stat-label">Séries jouées</span>
+                            <span class="finish-stat-value" id="finish-stat-sets">0</span>
+                            <span class="finish-stat-note" id="finish-stat-sets-note">Rythme lancé</span>
+                        </div>
+                        <div class="finish-stat-card">
+                            <span class="finish-stat-label">Temps investi</span>
+                            <span class="finish-stat-value" id="finish-stat-duration">0 min</span>
+                            <span class="finish-stat-note" id="finish-stat-duration-note">Présence validée</span>
+                        </div>
+                    </div>
+
+                    <div class="finish-modal-wins" id="finish-micro-wins"></div>
+                    <div class="finish-modal-note" id="finish-note">Tu peux encore faire un tour, ou valider maintenant.</div>
+
                     <div class="modal-actions">
                         <button class="btn btn-secondary" id="btn-cancel-finish">Continuer</button>
-                        <button class="btn btn-primary" id="btn-confirm-finish">Terminer</button>
+                        <button class="btn btn-primary" id="btn-confirm-finish">Valider</button>
                     </div>
                 </div>
             </div>
@@ -811,6 +857,8 @@
                     <div class="summary-comparison" id="summary-comparison">
                         <!-- Comparaison avec la dernière séance -->
                     </div>
+                    <div class="summary-pr-list" id="summary-pr-list"></div>
+                    <div class="summary-badges" id="summary-badges"></div>
                     <button class="btn btn-primary btn-large" id="btn-back-to-session">
                         Retour à la séance
                     </button>
@@ -1283,20 +1331,20 @@
                 </div>
 
                 <div class="settings-divider"></div>
-                <h4 class="settings-group-title">🔋 Périodisation & Deload</h4>
+                <h4 class="settings-group-title">🔁 Cycles & Deload</h4>
 
                 <div class="settings-section">
                     <h4 class="settings-section-title">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
                         </svg>
-                        Durée du cycle
+                        Semaines d'accumulation
                     </h4>
-                    <p class="settings-description">Nombre de semaines avant une semaine de deload suggérée</p>
+                    <p class="settings-description">Nombre de semaines de travail avant une semaine de deload suggérée. C'est informatif: tu gardes la main séance par séance.</p>
                     <div class="settings-slider-container">
-                        <input type="range" id="setting-cycle-length" class="settings-slider" min="3" max="8" value="5">
+                        <input type="range" id="setting-accumulation-weeks" class="settings-slider" min="4" max="6" value="4">
                         <div class="settings-slider-value">
-                            <span id="setting-cycle-length-value">5</span> semaines (dont 1 deload)
+                            <span id="setting-accumulation-weeks-value">4</span> semaines + 1 semaine deload
                         </div>
                     </div>
                 </div>
@@ -1306,9 +1354,9 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                         </svg>
-                        Détection auto deload
+                        Préselection deload
                     </h4>
-                    <p class="settings-description">Suggérer un deload après plusieurs "journées froides" consécutives</p>
+                    <p class="settings-description">Pendant la semaine de deload, l'app peut pré-cocher automatiquement "Oui". Tu peux toujours repasser sur "Non".</p>
                     <div class="settings-toggle-container">
                         <label class="toggle-switch">
                             <input type="checkbox" id="setting-auto-deload" checked>
@@ -1332,6 +1380,17 @@
                             <span id="setting-deload-volume-value">50</span>% de réduction
                         </div>
                     </div>
+                </div>
+
+                <div class="settings-section settings-section-cycle-note">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 1 1-3.2-6.9"/>
+                            <path d="M21 3v6h-6"/>
+                        </svg>
+                        Comment ça marche
+                    </h4>
+                    <p class="settings-description">L'app t'indique où tu en es dans ton cycle et peut te suggérer un deload au bon moment. Rien n'est forcé: tu choisis oui ou non au début de la séance.</p>
                 </div>
 
                 <div class="settings-divider"></div>
@@ -1365,7 +1424,30 @@
                 <div class="sheet-handle"></div>
                 <div class="lms-header">
                     <h3><span class="lms-title-icon"></span>Check-in Récupération</h3>
-                    <p class="lms-subtitle">Comment se sentent tes muscles aujourd'hui ?</p>
+                    <p class="lms-subtitle">Récup du jour, position dans le cycle, puis tu lances ta séance.</p>
+                </div>
+
+                <div class="cycle-checkin-card" id="cycle-checkin-card">
+                    <div class="cycle-checkin-top">
+                        <div>
+                            <div class="cycle-checkin-kicker" id="cycle-checkin-kicker">Cycle</div>
+                            <h4 id="cycle-checkin-title">Semaine 1</h4>
+                        </div>
+                        <span class="cycle-checkin-phase" id="cycle-checkin-phase">Accumulation</span>
+                    </div>
+                    <p class="cycle-checkin-objective" id="cycle-checkin-objective">Objectif de la semaine</p>
+                    <div class="cycle-checkin-progress" id="cycle-checkin-progress"></div>
+                    <div class="cycle-checkin-deload" id="cycle-checkin-deload">
+                        <div class="cycle-checkin-deload-copy">
+                            <strong id="cycle-deload-title">Deload cette séance ?</strong>
+                            <p id="cycle-deload-copy">Tu peux l'activer si tu veux alléger la séance.</p>
+                        </div>
+                        <div class="cycle-deload-selector" id="cycle-deload-selector">
+                            <button type="button" class="cycle-deload-option is-active" data-deload-choice="off">Non</button>
+                            <button type="button" class="cycle-deload-option" data-deload-choice="on">Oui</button>
+                        </div>
+                    </div>
+                    <p class="cycle-checkin-note" id="cycle-checkin-note">Le deload réduit un peu le volume pour dissiper la fatigue et repartir plus frais, sans casser le rythme.</p>
                 </div>
                 
                 <div class="lms-muscle-list" id="lms-muscle-list">

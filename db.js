@@ -199,19 +199,16 @@ class Database {
 
     // Current workout
     async getCurrentWorkout() {
-        const workouts = await this.getAll('currentWorkout');
-        return workouts[0] || null;
+        return this.get('currentWorkout', 'current');
     }
 
     async saveCurrentWorkout(workout) {
-        await this.clear('currentWorkout');
-        if (workout) {
-            return this.put('currentWorkout', { id: 'current', ...workout });
-        }
+        if (!workout) return this.clearCurrentWorkout();
+        return this.put('currentWorkout', { ...workout, id: 'current' });
     }
 
     async clearCurrentWorkout() {
-        return this.clear('currentWorkout');
+        return this.delete('currentWorkout', 'current');
     }
 
     async getStorageInfo() {
@@ -546,6 +543,77 @@ class Database {
                 });
                 collections.currentWorkout.forEach((workout) => {
                     transaction.objectStore('currentWorkout').put(workout);
+                });
+            } catch (error) {
+                transaction.abort();
+                finishWithError(error);
+            }
+        });
+    }
+
+    // Import only the session plan while preserving all workout history.
+    async importSessionPlanData(data, options = {}) {
+        const collections = this.validateImportData({
+            ...data,
+            workoutHistory: Array.isArray(data?.workoutHistory) ? data.workoutHistory : [],
+            setHistory: Array.isArray(data?.setHistory) ? data.setHistory : [],
+            settings: Array.isArray(data?.settings) ? data.settings : [],
+            currentWorkout: Array.isArray(data?.currentWorkout) ? data.currentWorkout : []
+        });
+        const clearCurrentWorkout = options.clearCurrentWorkout === true;
+        const storeNames = clearCurrentWorkout
+            ? ['sessions', 'slots', 'currentWorkout']
+            : ['sessions', 'slots'];
+        const [preservedWorkouts, preservedSets, currentWorkout] = await Promise.all([
+            this.getAll('workoutHistory'),
+            this.getAll('setHistory'),
+            this.getAll('currentWorkout')
+        ]);
+
+        const counts = {
+            sessions: collections.sessions.length,
+            slots: collections.slots.length,
+            workouts: preservedWorkouts.length,
+            sets: preservedSets.length,
+            settings: 0,
+            currentWorkout: clearCurrentWorkout ? 0 : currentWorkout.length,
+            currentWorkoutCleared: clearCurrentWorkout
+        };
+
+        console.log('📥 Import du programme uniquement...');
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(storeNames, 'readwrite');
+            let settled = false;
+
+            const finishWithError = (error) => {
+                if (settled) return;
+                settled = true;
+                reject(error instanceof Error ? error : new Error('Import du programme interrompu'));
+            };
+
+            transaction.onerror = () => finishWithError(transaction.error || new Error('Import du programme interrompu'));
+            transaction.onabort = () => finishWithError(transaction.error || new Error('Import du programme annulé'));
+            transaction.oncomplete = () => {
+                if (settled) return;
+                settled = true;
+                console.log('✅ Programme importé, historique conservé:', counts);
+                resolve(counts);
+            };
+
+            try {
+                transaction.objectStore('sessions').clear();
+                transaction.objectStore('slots').clear();
+
+                if (clearCurrentWorkout) {
+                    transaction.objectStore('currentWorkout').clear();
+                }
+
+                collections.sessions.forEach((session) => {
+                    transaction.objectStore('sessions').put(session);
+                });
+                collections.slots.forEach((slot) => {
+                    transaction.objectStore('slots').put(slot);
                 });
             } catch (error) {
                 transaction.abort();
