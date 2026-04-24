@@ -273,38 +273,36 @@
                         </div>
                     </div>
 
-                    <div class="finish-modal-progress-block">
-                        <div class="finish-modal-progress-header">
-                            <span id="finish-progress-label">Progression</span>
-                            <span id="finish-progress-value">0%</span>
+                    <div class="finish-modal-summary">
+                        <div class="finish-modal-progress-block">
+                            <div class="finish-modal-progress-header">
+                                <span id="finish-progress-label">Progression</span>
+                                <span id="finish-progress-value">0%</span>
+                            </div>
+                            <div class="finish-modal-progress-track" aria-hidden="true">
+                                <div class="finish-modal-progress-fill" id="finish-progress-fill"></div>
+                            </div>
                         </div>
-                        <div class="finish-modal-progress-track" aria-hidden="true">
-                            <div class="finish-modal-progress-fill" id="finish-progress-fill"></div>
+
+                        <div class="finish-modal-quick-stats">
+                            <div class="finish-quick-stat">
+                                <span class="finish-quick-stat-label">Exercices</span>
+                                <span class="finish-quick-stat-value" id="finish-stat-exercises">0/0</span>
+                            </div>
+                            <div class="finish-quick-stat">
+                                <span class="finish-quick-stat-label">Séries</span>
+                                <span class="finish-quick-stat-value" id="finish-stat-sets">0</span>
+                            </div>
+                            <div class="finish-quick-stat">
+                                <span class="finish-quick-stat-label">Temps</span>
+                                <span class="finish-quick-stat-value" id="finish-stat-duration">0 min</span>
+                            </div>
                         </div>
+
+                        <div class="finish-modal-helper" id="finish-note">Tu peux encore faire un tour, ou valider maintenant.</div>
                     </div>
 
-                    <div class="finish-modal-stats">
-                        <div class="finish-stat-card">
-                            <span class="finish-stat-label">Exos validés</span>
-                            <span class="finish-stat-value" id="finish-stat-exercises">0/0</span>
-                            <span class="finish-stat-note" id="finish-stat-exercises-note">Full clear en vue</span>
-                        </div>
-                        <div class="finish-stat-card">
-                            <span class="finish-stat-label">Séries jouées</span>
-                            <span class="finish-stat-value" id="finish-stat-sets">0</span>
-                            <span class="finish-stat-note" id="finish-stat-sets-note">Rythme lancé</span>
-                        </div>
-                        <div class="finish-stat-card">
-                            <span class="finish-stat-label">Temps investi</span>
-                            <span class="finish-stat-value" id="finish-stat-duration">0 min</span>
-                            <span class="finish-stat-note" id="finish-stat-duration-note">Présence validée</span>
-                        </div>
-                    </div>
-
-                    <div class="finish-modal-wins" id="finish-micro-wins"></div>
-                    <div class="finish-modal-note" id="finish-note">Tu peux encore faire un tour, ou valider maintenant.</div>
-
-                    <div class="modal-actions">
+                    <div class="modal-actions finish-modal-actions">
                         <button class="btn btn-secondary" id="btn-cancel-finish">Continuer</button>
                         <button class="btn btn-primary" id="btn-confirm-finish">Valider</button>
                     </div>

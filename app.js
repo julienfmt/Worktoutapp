@@ -2341,6 +2341,45 @@ class App {
         </svg>`;
     }
 
+    getStimulusMicroWinIconSVG(type) {
+        if (type === 'weight') {
+            return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7 7h10"></path>
+                <path d="M6 9.5h12"></path>
+                <path d="M5 12h14"></path>
+                <path d="M6 14.5h12"></path>
+                <path d="M7 17h10"></path>
+                <path d="M4 9v6"></path>
+                <path d="M20 9v6"></path>
+            </svg>`;
+        }
+
+        if (type === 'volume') {
+            return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 19V11"></path>
+                <path d="M12 19V5"></path>
+                <path d="M19 19v-8"></path>
+                <path d="M3 19h18"></path>
+            </svg>`;
+        }
+
+        if (type === 'focus') {
+            return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="7"></circle>
+                <circle cx="12" cy="12" r="2.5"></circle>
+                <path d="M12 3v2.5"></path>
+                <path d="M12 18.5V21"></path>
+                <path d="M3 12h2.5"></path>
+                <path d="M18.5 12H21"></path>
+            </svg>`;
+        }
+
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+        </svg>`;
+    }
+
     colorToRgbObject(color) {
         const fallback = { r: 99, g: 102, b: 241 };
 
@@ -2796,6 +2835,23 @@ class App {
         if (!Number.isFinite(Number(value))) return fallback;
         const rounded = Math.round(Number(value) * 10) / 10;
         return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+    }
+
+    async getSlotRecord(slotId) {
+        if (slotId == null) return null;
+
+        const directSlot = await db.get('slots', slotId);
+        if (directSlot) {
+            return this.normalizeSlotProgressionConfig(directSlot);
+        }
+
+        const numericSlotId = Number(slotId);
+        if (!Number.isFinite(numericSlotId)) {
+            return null;
+        }
+
+        const numericSlot = await db.get('slots', numericSlotId);
+        return numericSlot ? this.normalizeSlotProgressionConfig(numericSlot) : null;
     }
 
     buildExerciseStats(setHistory, slotMap, now = new Date()) {
@@ -3400,6 +3456,7 @@ class App {
     
     renderMotivationMessage(history, thisMonth, totalVolume) {
         const container = document.getElementById('stats-motivation');
+        if (!container) return;
         
         if (history.length === 0) {
             container.innerHTML = `
@@ -3410,7 +3467,7 @@ class App {
         }
         
         // Check recent activity
-        const lastWorkout = history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+        const lastWorkout = [...history].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
         const daysSinceLast = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
         
         let icon, message;
@@ -4413,7 +4470,7 @@ class App {
         const challenge = this.currentWorkout?.challenge;
         if (!challenge || challenge.status !== 'active') return challenge || null;
 
-        const slot = await db.get('slots', challenge.slotId);
+        const slot = await this.getSlotRecord(challenge.slotId);
         const slotData = this.currentWorkout.slots?.[challenge.slotId];
 
         if (slot && slotData && this.isSessionChallengeAchieved(challenge, slot, slotData)) {
@@ -4547,7 +4604,7 @@ class App {
         }
 
         for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots || {})) {
-            const slot = await db.get('slots', slotId);
+            const slot = await this.getSlotRecord(slotId);
             if (!slot || !slotData) continue;
             await this.syncSlotAutoTargetState(slot, slotData);
         }
@@ -6953,7 +7010,7 @@ class App {
     
     // ===== Exercise Screen =====
     async openExercise(slotId) {
-        this.currentSlot = await db.get('slots', slotId);
+        this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
@@ -6988,21 +7045,13 @@ class App {
         if (!this.currentWorkout.slots[slotId]) {
             this.currentWorkout.slots[slotId] = {
                 sets: [],
-                setsLeft: [],  // For unilateral: left side
-                setsRight: [], // For unilateral: right side
                 startTime: Date.now(),
                 meta: this.buildSlotCoachMeta(this.currentSlot)
             };
         }
-        const slotData = this.currentWorkout.slots[slotId];
+        const slotData = this.normalizeWorkoutSlotData(this.currentSlot, this.currentWorkout.slots[slotId]);
         await this.syncSlotAutoTargetState(this.currentSlot, slotData);
         slotData.meta = this.buildSlotCoachMeta(this.currentSlot);
-        
-        // Ensure unilateral arrays exist for existing workout data
-        if (this.isUnilateralMode) {
-            if (!slotData.setsLeft) slotData.setsLeft = [];
-            if (!slotData.setsRight) slotData.setsRight = [];
-        }
         await db.saveCurrentWorkout(this.currentWorkout);
 
         document.getElementById('exercise-slot-label').textContent = this.currentSlot.slotId;
@@ -7202,13 +7251,14 @@ class App {
     
     // Add specific advice about balance between sides
     addUnilateralBalanceAdvice() {
-        const leftWeight = this.unilateralCoachingAdviceLeft?.suggestedWeight;
-        const rightWeight = this.unilateralCoachingAdviceRight?.suggestedWeight;
+        const leftWeight = Number(this.unilateralCoachingAdviceLeft?.suggestedWeight);
+        const rightWeight = Number(this.unilateralCoachingAdviceRight?.suggestedWeight);
         
         // If both sides have data and weights differ significantly
-        if (leftWeight !== '?' && rightWeight !== '?' && leftWeight !== rightWeight) {
+        if (Number.isFinite(leftWeight) && Number.isFinite(rightWeight) && leftWeight !== rightWeight) {
             const diff = Math.abs(leftWeight - rightWeight);
             const maxWeight = Math.max(leftWeight, rightWeight);
+            if (maxWeight <= 0) return;
             const percentDiff = (diff / maxWeight) * 100;
             
             if (percentDiff > 10) {
@@ -7305,11 +7355,11 @@ class App {
     
     // ===== SuperSet Exercise Screen =====
     async openSuperset(slotId) {
-        this.currentSlot = await db.get('slots', slotId);
+        this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
         if (!this.currentSlot || !this.currentSlot.supersetWith) return;
         
-        this.supersetSlot = await db.get('slots', this.currentSlot.supersetWith);
+        this.supersetSlot = await this.getSlotRecord(this.currentSlot.supersetWith);
         this.supersetSlot = this.normalizeSlotProgressionConfig(this.supersetSlot);
         if (!this.supersetSlot) {
             // Fallback to regular exercise
@@ -8516,9 +8566,10 @@ class App {
             html += '</div>';
         });
 
-        if (histories.length >= 2) {
-            const latest = histories[0];
-            const oldest = histories[histories.length - 1];
+        const trendHistories = histories.filter(history => !history?.isDeload);
+        if (trendHistories.length >= 2) {
+            const latest = trendHistories[0];
+            const oldest = trendHistories[trendHistories.length - 1];
             const weightDiff = latest.maxWeight - oldest.maxWeight;
             const repsDiff = latest.totalReps - oldest.totalReps;
 
@@ -8533,7 +8584,9 @@ class App {
             } else if (weightDiff < 0 || repsDiff < 0) {
                 trendIcon = this.getLogbookTrendIconSVG('negative');
                 trendClass = 'negative';
-                trendText = `${weightDiff < 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+                trendText = `${weightDiff < 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff < 0 && repsDiff < 0 ? ' / ' : ''}${repsDiff < 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${trendHistories.length} séances utiles`;
+            } else {
+                trendText = `Stable sur ${trendHistories.length} séances utiles`;
             }
 
             html += `
@@ -8990,10 +9043,12 @@ class App {
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
         this.editingSetIndex = null;
         
-        const totalRepsA = slotAData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-        const totalRepsB = slotBData.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-        const maxWeightA = Math.max(...slotAData.sets.map(s => s.weight || 0));
-        const maxWeightB = Math.max(...slotBData.sets.map(s => s.weight || 0));
+        const completedSetsA = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotAData);
+        const completedSetsB = this.getCompletedStrengthSetsForSummary(this.supersetSlot, slotBData);
+        const totalRepsA = completedSetsA.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const totalRepsB = completedSetsB.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const maxWeightA = completedSetsA.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
+        const maxWeightB = completedSetsB.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
 
         document.getElementById('summary-total-reps').textContent = totalRepsA + totalRepsB;
         document.getElementById('summary-max-weight').textContent = `${Math.max(maxWeightA, maxWeightB)} kg`;
@@ -9242,7 +9297,7 @@ class App {
             if (weightDiff > 0 || repsDiff > 0) {
                 trendIcon = this.getLogbookTrendIconSVG('positive');
                 trendClass = 'positive';
-                trendText = `${weightDiff > 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${histories.length} séances`;
+                trendText = `${weightDiff > 0 ? this.formatLogbookTrendDelta(weightDiff, ' kg') : ''}${weightDiff > 0 && repsDiff > 0 ? ' / ' : ''}${repsDiff > 0 ? this.formatLogbookTrendDelta(repsDiff, ' reps') : ''} sur ${trendHistories.length} séances utiles`;
             } else if (weightDiff < 0 || repsDiff < 0) {
                 trendIcon = this.getLogbookTrendIconSVG('negative');
                 trendClass = 'negative';
@@ -10221,14 +10276,15 @@ class App {
     
     async showUnilateralSummary() {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
-        const setsLeft = slotData.setsLeft || [];
-        const setsRight = slotData.setsRight || [];
+        const completedSets = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotData);
+        const setsLeft = completedSets.filter(set => set.variant === 'left');
+        const setsRight = completedSets.filter(set => set.variant === 'right');
         this.editingSetIndex = null;
         
-        const totalRepsLeft = setsLeft.reduce((sum, s) => sum + (s?.reps || 0), 0);
-        const totalRepsRight = setsRight.reduce((sum, s) => sum + (s?.reps || 0), 0);
-        const maxWeightLeft = Math.max(...setsLeft.map(s => s?.weight || 0));
-        const maxWeightRight = Math.max(...setsRight.map(s => s?.weight || 0));
+        const totalRepsLeft = setsLeft.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const totalRepsRight = setsRight.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const maxWeightLeft = setsLeft.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
+        const maxWeightRight = setsRight.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
 
         document.getElementById('summary-total-reps').textContent = totalRepsLeft + totalRepsRight;
         document.getElementById('summary-max-weight').textContent = `${Math.max(maxWeightLeft, maxWeightRight)} kg`;
@@ -10331,13 +10387,20 @@ class App {
             this.currentDayStatus = dayStatus;
         }
 
+        const completedSets = slotData.sets.filter(s => s?.completed).length;
+        const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
+        const isExerciseFinished = completedSets >= targetSets;
+
+        if (!isExerciseFinished) {
+            await this.refreshWorkoutCoachingState();
+            this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
+        }
+
         this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderSeries();
 
         // Check if all sets are complete against the accepted target only
-        const completedSets = slotData.sets.filter(s => s.completed).length;
-        const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
-        if (completedSets >= targetSets) {
+        if (isExerciseFinished) {
             // Show summary after a brief delay
             setTimeout(() => this.showExerciseSummary(), 300);
         } else {
@@ -11466,22 +11529,68 @@ class App {
         this.updateRestTimer();
     }
 
-    getCompletedStrengthSetsForSummary(slot, slotData = null) {
-        const resolvedSlotData = slotData || this.currentWorkout?.slots?.[slot?.id] || {};
-        if (!slot) return [];
+    hasMeaningfulWorkoutSets(sets = []) {
+        return Array.isArray(sets) && sets.some((set) => {
+            if (!set) return false;
+            return set.completed || Number(set.reps || 0) > 0 || Number(set.weight || 0) > 0;
+        });
+    }
 
-        const collectSets = (sets = [], variant = null) => sets
-            .map((set, index) => ({ ...set, setNumber: index + 1, variant }))
-            .filter(set => set?.completed && Number(set.reps || 0) > 0);
+    hasTrackedUnilateralSetData(slotData = null) {
+        if (!slotData) return false;
+        return this.hasMeaningfulWorkoutSets(slotData.setsLeft) || this.hasMeaningfulWorkoutSets(slotData.setsRight);
+    }
 
-        if (resolvedSlotData.setsLeft || resolvedSlotData.setsRight) {
-            return [
-                ...collectSets(resolvedSlotData.setsLeft || [], 'left'),
-                ...collectSets(resolvedSlotData.setsRight || [], 'right')
-            ];
+    normalizeWorkoutSlotData(slot, slotData = null) {
+        if (!slotData) return slotData;
+
+        if (!Array.isArray(slotData.sets)) {
+            slotData.sets = [];
         }
 
-        return collectSets(resolvedSlotData.sets || []);
+        const isUnilateral = this.isUnilateralExercise(this.getSlotExerciseName(slot));
+        if (isUnilateral) {
+            if (!Array.isArray(slotData.setsLeft)) slotData.setsLeft = [];
+            if (!Array.isArray(slotData.setsRight)) slotData.setsRight = [];
+            return slotData;
+        }
+
+        if (!this.hasTrackedUnilateralSetData(slotData)) {
+            delete slotData.setsLeft;
+            delete slotData.setsRight;
+        }
+
+        return slotData;
+    }
+
+    getCompletedStrengthSetsForSummary(slot, slotData = null) {
+        const resolvedSlotData = this.normalizeWorkoutSlotData(slot, slotData || this.currentWorkout?.slots?.[slot?.id] || {});
+        if (!slot) return [];
+
+        const collectSets = (sets = [], variant = null, requireCompleted = true) => sets
+            .map((set, index) => ({ ...set, setNumber: index + 1, variant }))
+            .filter(set => {
+                const hasReps = Number(set?.reps || 0) > 0;
+                const hasLoad = Number(set?.weight || 0) > 0;
+                if (requireCompleted) return set?.completed && hasReps;
+                return hasReps || hasLoad;
+            });
+
+        const collectAllSets = (requireCompleted = true) => {
+            if (this.hasTrackedUnilateralSetData(resolvedSlotData)) {
+                return [
+                    ...collectSets(resolvedSlotData.setsLeft || [], 'left', requireCompleted),
+                    ...collectSets(resolvedSlotData.setsRight || [], 'right', requireCompleted)
+                ];
+            }
+
+            return collectSets(resolvedSlotData.sets || [], null, requireCompleted);
+        };
+
+        const completedSets = collectAllSets(true);
+        if (completedSets.length > 0) return completedSets;
+
+        return collectAllSets(false);
     }
 
     buildExerciseSummarySnapshot(slot, completedSets = [], historyWorkouts = []) {
@@ -11567,6 +11676,7 @@ class App {
         if (snapshot.isFirstExerciseEntry) {
             badges.push({
                 icon: '🌟',
+                theme: 'neutral',
                 label: 'Première trace',
                 detail: 'Premier résultat enregistré sur cet exercice.'
             });
@@ -11581,8 +11691,10 @@ class App {
                 detail: `${this.formatOneDecimal(snapshot.bestE1RM)} kg estimés`
             });
             badges.push({
-                icon: '💪',
-                label: 'Force en hausse',
+                icon: '🏆',
+                theme: 'record',
+                label: 'PR e1RM',
+                value: `+${this.formatOneDecimal(delta)} kg`,
                 detail: `Meilleur e1RM battu sur ${snapshot.slot.activeExercise || snapshot.slot.name}.`
             });
         }
@@ -11595,8 +11707,10 @@ class App {
                 detail: `${snapshot.bestRepRecord.reps} reps vs ${snapshot.bestRepRecord.previousBest} avant`
             });
             badges.push({
-                icon: '🔁',
-                label: 'Reps débloquées',
+                icon: '📈',
+                theme: 'record',
+                label: 'PR reps',
+                value: `+${snapshot.bestRepRecord.delta} rep${snapshot.bestRepRecord.delta > 1 ? 's' : ''}`,
                 detail: 'Tu fais plus de reps à charge identique.'
             });
         }
@@ -11610,22 +11724,24 @@ class App {
                 detail: `${this.formatVolume(snapshot.totalVolume)} kg déplacés`
             });
             badges.push({
-                icon: '⚡',
-                label: 'Volume record',
+                icon: '📦',
+                theme: 'record',
+                label: 'PR volume',
+                value: this.formatPercentDelta(deltaPct),
                 detail: 'Tu as accumulé plus de volume que sur tes anciennes séances.'
             });
         }
 
         if (snapshot.repsDiffVsLast != null && snapshot.repsDiffVsLast > 0) {
             microWins.push({
-                icon: '➕',
+                icon: 'reps',
                 text: `+${snapshot.repsDiffVsLast} reps vs la dernière fois`
             });
         }
 
         if (snapshot.weightDiffVsLast != null && snapshot.weightDiffVsLast > 0) {
             microWins.push({
-                icon: '🏋️',
+                icon: 'weight',
                 text: `+${this.formatOneDecimal(snapshot.weightDiffVsLast)} kg sur la charge max`
             });
         }
@@ -11634,7 +11750,7 @@ class App {
             const deltaPct = this.percentChange(snapshot.totalVolume, snapshot.totalVolume - snapshot.volumeDiffVsLast);
             if (Number.isFinite(deltaPct) && deltaPct >= 5) {
                 microWins.push({
-                    icon: '📊',
+                    icon: 'volume',
                     text: `Volume ${this.formatPercentDelta(deltaPct)} vs ton dernier passage`
                 });
             }
@@ -11648,35 +11764,32 @@ class App {
         const badgesEl = document.getElementById('summary-badges');
         if (!prListEl || !badgesEl) return;
 
-        if (!prs.length) {
-            prListEl.innerHTML = '';
-        } else {
-            prListEl.innerHTML = prs.map(pr => `
-                <div class="summary-pr-card">
-                    <div class="summary-pr-header">
-                        <span class="summary-pr-icon">${pr.icon}</span>
-                        <span class="summary-pr-title">${this.escapeHtml(pr.title)}</span>
-                    </div>
-                    <div class="summary-pr-value">${this.escapeHtml(pr.value)}</div>
-                    <div class="summary-pr-detail">${this.escapeHtml(pr.detail)}</div>
-                </div>
-            `).join('');
-        }
+        prListEl.innerHTML = '';
 
-        const chips = [
-            ...badges.map(badge => ({ tone: 'badge', icon: badge.icon, label: badge.label, detail: badge.detail })),
-            ...microWins.map(win => ({ tone: 'micro', icon: win.icon, label: win.text, detail: null }))
-        ];
+        const highlightChips = badges
+            .map((badge, index) => ({
+                tone: badge.theme || 'neutral',
+                icon: badge.icon,
+                label: badge.label,
+                value: badge.value || null,
+                priority: badge.theme === 'record' ? 0 : 1,
+                index
+            }))
+            .sort((a, b) => a.priority - b.priority || a.index - b.index)
+            .slice(0, 2);
 
-        if (!chips.length) {
+        if (!highlightChips.length) {
             badgesEl.innerHTML = '';
             return;
         }
 
-        badgesEl.innerHTML = chips.map(chip => `
+        badgesEl.innerHTML = highlightChips.map(chip => `
             <div class="summary-badge-chip ${chip.tone}">
                 <span class="summary-badge-icon">${chip.icon}</span>
-                <span class="summary-badge-text">${this.escapeHtml(chip.label)}</span>
+                <span class="summary-badge-copy">
+                    <span class="summary-badge-text">${this.escapeHtml(chip.label)}</span>
+                    ${chip.value ? `<span class="summary-badge-value">${this.escapeHtml(chip.value)}</span>` : ''}
+                </span>
             </div>
         `).join('');
     }
@@ -11849,49 +11962,35 @@ class App {
 
         let badge = 'Finisher mode';
         let heroIcon = '✨';
-        let title = 'Terminer la séance ?';
-        let message = 'Tu peux encore faire un dernier tour, ou verrouiller ta séance maintenant.';
-        let note = `Ton streak passerait à ${weeklyProgressText}.`;
+        let title = 'Arrêter ici ?';
+        let message = 'On enregistre ce qui est fait maintenant, puis on t’envoie vers le récap final.';
+        let note = `${completedExercises}/${totalExercises || completedExercises} exercices · ${totalSets} séries · ${weeklyProgressText}`;
 
         if (completionRate >= 0.999) {
             badge = 'Full clear';
             heroIcon = '🏁';
-            title = 'Séance clean, bien jouée';
-            message = 'Tout est validé. Tu peux encaisser la séance et repartir avec un vrai screen de fin.';
-            note = `Full clear sécurisé. Ton rythme hebdo passerait à ${weeklyProgressText}.`;
+            title = 'Séance bouclée';
+            message = 'Tout est validé. Tu peux passer directement au récap final.';
+            note = `Full clear sécurisé · ${totalSets} séries · ${durationMinutes} min`;
         } else if (completionRate >= 0.75) {
             badge = 'Quête presque finie';
             heroIcon = '⚡';
-            title = 'Tu es vraiment proche du full clear';
-            message = `Il reste ${remaining} exercice${remaining > 1 ? 's' : ''}. Si tu t'arrêtes là, la séance est quand même comptée.`;
-            note = 'Si tu as encore un peu d’énergie, le full clear est à portée.';
+            title = 'Très proche du full clear';
+            message = `Il reste ${remaining} exercice${remaining > 1 ? 's' : ''}, mais la séance peut déjà être clôturée proprement.`;
+            note = `${completedExercises}/${totalExercises} exercices validés · ${durationMinutes} min`;
         } else if (completionRate >= 0.4) {
             badge = 'Progression validée';
             heroIcon = '🎯';
-            title = 'Séance utile déjà sécurisée';
-            message = `Tu as validé ${completedExercises} exercice${completedExercises > 1 ? 's' : ''}. Tu peux clôturer maintenant, ou pousser encore un peu.`;
-            note = 'Mieux vaut une séance bien validée que de sortir du plan n’importe comment.';
+            title = 'Base de séance sécurisée';
+            message = `Tu as déjà validé ${completedExercises} exercice${completedExercises > 1 ? 's' : ''}. Tu peux arrêter ici, ou continuer un peu.`;
+            note = `${totalSets} séries jouées · ${durationMinutes} min · ${weeklyProgressText}`;
         } else if (completedExercises > 0 || totalSets > 0) {
             badge = 'Sortie stratégique';
             heroIcon = '🛡️';
-            title = 'Tu peux aussi couper proprement';
-            message = `Il reste encore ${remaining} exercice${remaining > 1 ? 's' : ''}. On enregistre ce qui est fait si tu préfères t’arrêter ici.`;
-            note = 'L’idée est de garder une trace propre, pas de forcer à tout prix.';
+            title = 'Finir proprement';
+            message = `On garde ce qui est déjà fait si tu préfères arrêter maintenant.`;
+            note = `${totalSets} séries enregistrées · ${remaining} exercice${remaining > 1 ? 's' : ''} restant${remaining > 1 ? 's' : ''}`;
         }
-
-        const chips = [];
-        if (completionRate >= 0.999) chips.push({ icon: '🏆', text: 'Full clear' });
-        if (totalSets >= Math.max(8, totalExercises * 2)) chips.push({ icon: '🔥', text: 'Bon volume' });
-        if (durationMinutes >= 45) chips.push({ icon: '⏱️', text: 'Focus solide' });
-        if (sessionsAfterFinish >= weeklyGoal) chips.push({ icon: '🚀', text: 'Objectif semaine atteint' });
-        else if (sessionsAfterFinish === weeklyGoal - 1) chips.push({ icon: '📈', text: 'Presque l’objectif' });
-        if (!chips.length) chips.push({ icon: '💪', text: 'Séance lancée' });
-
-        const exercisesNote = remaining === 0
-            ? 'Carte entièrement nettoyée'
-            : `${remaining} restant${remaining > 1 ? 's' : ''}`;
-        const setsNote = totalSets >= 12 ? 'Très bon débit' : totalSets >= 6 ? 'Charge utile' : 'Rythme en construction';
-        const durationNote = durationMinutes >= 50 ? 'Bloc solide' : durationMinutes >= 30 ? 'Bon focus' : 'Même court, ça compte';
 
         document.getElementById('finish-badge').textContent = badge;
         document.getElementById('finish-hero-icon').textContent = heroIcon;
@@ -11902,17 +12001,8 @@ class App {
         document.getElementById('finish-progress-value').textContent = `${completionPercent}%`;
         document.getElementById('finish-progress-fill').style.width = `${completionPercent}%`;
         document.getElementById('finish-stat-exercises').textContent = `${completedExercises}/${totalExercises || completedExercises}`;
-        document.getElementById('finish-stat-exercises-note').textContent = exercisesNote;
         document.getElementById('finish-stat-sets').textContent = `${totalSets}`;
-        document.getElementById('finish-stat-sets-note').textContent = setsNote;
         document.getElementById('finish-stat-duration').textContent = `${durationMinutes} min`;
-        document.getElementById('finish-stat-duration-note').textContent = durationNote;
-        document.getElementById('finish-micro-wins').innerHTML = chips.map(chip => `
-            <div class="finish-win-chip">
-                <span class="finish-win-icon">${this.escapeHtml(chip.icon)}</span>
-                <span>${this.escapeHtml(chip.text)}</span>
-            </div>
-        `).join('');
         document.getElementById('modal-finish').classList.add('active');
     }
 
@@ -11976,7 +12066,7 @@ class App {
             }
 
             for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
-                const slot = await db.get('slots', slotId);
+                const slot = await this.getSlotRecord(slotId);
                 if (!slot) continue;
 
                 const baseExerciseId = slot.activeExercise || slot.name;
@@ -12175,7 +12265,7 @@ class App {
         let prBonus = 0;
         
         for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
-            const slot = await db.get('slots', slotId);
+            const slot = await this.getSlotRecord(slotId);
             const isCompound = slot?.type === 'compound';
             
             // Get last session data to check for PR
@@ -12316,7 +12406,7 @@ class App {
                     <div class="stimulus-micro-wins">
                         ${microWins.map(win => `
                             <div class="stimulus-micro-chip ${this.escapeHtml(win.theme || 'neutral')}">
-                                <span class="stimulus-micro-chip-icon">${this.escapeHtml(win.icon)}</span>
+                                <span class="stimulus-micro-chip-icon">${this.getStimulusMicroWinIconSVG(win.icon)}</span>
                                 <span>${this.escapeHtml(win.text)}</span>
                             </div>
                         `).join('')}
@@ -12424,8 +12514,12 @@ class App {
                         </div>
 
                         ${microWinsHtml}
-                        <div class="stimulus-score-footer-note">${topMusclesText}</div>
-                        <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
+                        <div class="stimulus-score-footer">
+                            <div class="stimulus-score-footer-note">${topMusclesText}</div>
+                            <div class="stimulus-score-action-bar">
+                                <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -16440,6 +16534,45 @@ class App {
         };
     }
 
+    buildCompletedSetHistoryDrafts(slotDataMap = {}, options = {}) {
+        const {
+            workoutId = null,
+            date = new Date().toISOString()
+        } = options;
+        const drafts = [];
+
+        const appendSets = (slotId, sets = [], variant = null) => {
+            sets.forEach((set, index) => {
+                if (!set?.completed || Number(set.reps || 0) <= 0) return;
+                drafts.push({
+                    slotId,
+                    workoutId,
+                    setNumber: index + 1,
+                    weight: Number(set.weight || 0),
+                    reps: Number(set.reps || 0),
+                    rpe: set.rpe ?? null,
+                    rpeSource: set.rpeSource || null,
+                    variant,
+                    date
+                });
+            });
+        };
+
+        Object.entries(slotDataMap || {}).forEach(([slotId, slotData]) => {
+            if (!slotData) return;
+
+            if (this.hasTrackedUnilateralSetData(slotData)) {
+                appendSets(slotId, slotData.setsLeft || [], 'left');
+                appendSets(slotId, slotData.setsRight || [], 'right');
+                return;
+            }
+
+            appendSets(slotId, slotData.sets || []);
+        });
+
+        return drafts;
+    }
+
     getMuscleDisplayName(muscleId) {
         return MUSCLE_GROUPS.find(group => group.id === muscleId)?.name || muscleId;
     }
@@ -16520,7 +16653,7 @@ class App {
             const repDelta = currentStats.totalReps - previousStats.totalReps;
             if (repDelta > 0) {
                 microWins.push({
-                    icon: '➕',
+                    icon: 'reps',
                     theme: 'reps',
                     text: `+${repDelta} reps sur la séance`
                 });
@@ -16529,7 +16662,7 @@ class App {
             const volumeDeltaPct = this.percentChange(currentStats.totalVolume, previousStats.totalVolume);
             if (Number.isFinite(volumeDeltaPct) && volumeDeltaPct >= 5) {
                 microWins.push({
-                    icon: '📦',
+                    icon: 'volume',
                     theme: 'volume',
                     text: `Volume total ${this.formatPercentDelta(volumeDeltaPct)}`
                 });
@@ -16538,7 +16671,7 @@ class App {
 
         if (topMuscles.length > 0 && previousStats) {
             microWins.push({
-                icon: '🎯',
+                icon: 'focus',
                 theme: 'focus',
                 text: `Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}`
             });
@@ -16551,9 +16684,14 @@ class App {
         const sessionSlots = await db.getSlotsBySession(this.currentSession.id);
         const slotMap = new Map(sessionSlots.map(slot => [slot.id, slot]));
         const workoutSets = await db.getByIndex('setHistory', 'workoutId', workoutId);
-        const currentStats = this.buildWorkoutAggregateFromSets(workoutSets, slotMap);
+        const fallbackWorkoutSets = this.buildCompletedSetHistoryDrafts(this.currentWorkout?.slots || {}, {
+            workoutId,
+            date: new Date().toISOString()
+        });
+        const recapSets = workoutSets.length > 0 ? workoutSets : fallbackWorkoutSets;
+        const currentStats = this.buildWorkoutAggregateFromSets(recapSets, slotMap);
         const isDeloadSession = Boolean(this.currentWorkout?.isDeload);
-        const completedSlots = new Set(workoutSets.map(set => String(set.slotId)));
+        const completedSlots = new Set(recapSets.map(set => String(set.slotId)));
         const totalExercises = sessionSlots.length;
         const completedExercises = completedSlots.size;
         const completionRate = totalExercises > 0 ? completedExercises / totalExercises : 0;
@@ -16561,7 +16699,7 @@ class App {
         const trendRows = [];
         let recordCount = 0;
 
-        for (const set of workoutSets) {
+        for (const set of recapSets) {
             const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
             if (!slot || this.isCardioSlot(slot)) continue;
 
@@ -16577,7 +16715,19 @@ class App {
             if (!completedSlots.has(String(slot.id)) || this.isCardioSlot(slot)) continue;
 
             const slotHistorySets = await db.getByIndex('setHistory', 'slotId', slot.id);
-            const workouts = this.buildWorkoutsFromSetHistory(slotHistorySets).filter(workout => !workout.isDeload);
+            const currentSlotFallbackSets = workoutSets.length > 0
+                ? []
+                : recapSets.filter(set => String(set.slotId) === String(slot.id)).map((set, index) => ({
+                    ...set,
+                    slotId: slot.id,
+                    setNumber: set.setNumber || index + 1,
+                    workoutId,
+                    date: set.date || new Date().toISOString()
+                }));
+            const workouts = this.buildWorkoutsFromSetHistory([
+                ...currentSlotFallbackSets,
+                ...slotHistorySets
+            ]).filter(workout => !workout.isDeload);
             if (!workouts.length) continue;
 
             const latest = workouts[0];
