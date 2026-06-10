@@ -676,15 +676,14 @@ class App {
         const cycleState = await this.getCurrentCycleState();
         const autoSelectDeload = (await db.getSetting('autoDeloadEnabled')) ?? true;
         const shouldSuggestDeload = cycleState.phase === 'deload';
-        let suggestionTitle = 'Deload cette séance ?';
-        let suggestionCopy = '';
+        let suggestionTitle = 'Passer cette seance en deload ?';
+        let suggestionCopy = 'Tu peux l activer manuellement aujourd hui pour alleger la seance, meme si le cycle n est pas encore en semaine de deload.';
+        let note = 'Le deload reste optionnel. Coche le si tu veux une seance plus facile pour gerer la fatigue ou reprendre proprement.';
 
         if (cycleState.phase === 'deload') {
-            suggestionTitle = 'Semaine de deload suggérée';
-            suggestionCopy = 'Le but est simple: réduire un peu le volume pour faire redescendre la fatigue et repartir plus frais au cycle suivant.';
-        } else {
-            suggestionTitle = 'Bloc d’accumulation';
-            suggestionCopy = 'Cette semaine sert surtout à accumuler du travail utile sans te disperser.';
+            suggestionTitle = 'Semaine de deload suggeree';
+            suggestionCopy = 'Le but est simple: reduire un peu le volume pour faire redescendre la fatigue et repartir plus frais au cycle suivant.';
+            note = 'Le deload reste facultatif. Il sert surtout a dissiper la fatigue sans casser le rythme.';
         }
 
         return {
@@ -693,9 +692,8 @@ class App {
             suggestionReason: cycleState.phase === 'deload' ? 'cycle' : null,
             suggestionTitle,
             suggestionCopy,
-            note: cycleState.phase === 'deload'
-                ? 'Le deload reste facultatif. Il sert surtout à dissiper la fatigue sans casser le rythme.'
-                : 'Le cycle est donné à titre indicatif pour te situer rapidement dans le bloc.',
+            note,
+            deloadUiMode: shouldSuggestDeload ? 'suggested' : 'manual',
             deloadChoice: shouldSuggestDeload && autoSelectDeload ? 'on' : 'off'
         };
     }
@@ -4642,7 +4640,9 @@ class App {
         deloadTitleEl.textContent = cycleContext.suggestionTitle;
         deloadCopyEl.textContent = cycleContext.suggestionCopy;
         noteEl.textContent = cycleContext.note;
-        deloadBlockEl.style.display = cycleContext.shouldSuggestDeload ? 'grid' : 'none';
+        deloadBlockEl.style.display = 'grid';
+        deloadBlockEl.classList.toggle('is-suggested', cycleContext.deloadUiMode === 'suggested');
+        deloadBlockEl.classList.toggle('is-manual', cycleContext.deloadUiMode === 'manual');
 
         const options = document.querySelectorAll('.cycle-deload-option');
         options.forEach((option) => {

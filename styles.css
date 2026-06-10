@@ -10156,9 +10156,17 @@ body {
     gap: 12px;
     padding: 12px;
     border-radius: 16px;
+    margin-bottom: 10px;
+}
+
+.cycle-checkin-deload.is-suggested {
     background: rgba(245, 158, 11, 0.06);
     border: 1px solid rgba(245, 158, 11, 0.16);
-    margin-bottom: 10px;
+}
+
+.cycle-checkin-deload.is-manual {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.14);
 }
 
 .cycle-checkin-deload-copy strong {
@@ -10194,10 +10202,19 @@ body {
 }
 
 .cycle-deload-option.is-active {
+    transform: translateY(-1px);
+}
+
+.cycle-checkin-deload.is-manual .cycle-deload-option.is-active {
     border-color: rgba(79, 70, 229, 0.35);
     background: rgba(99, 102, 241, 0.1);
     color: #4338ca;
-    transform: translateY(-1px);
+}
+
+.cycle-checkin-deload.is-suggested .cycle-deload-option.is-active {
+    border-color: rgba(245, 158, 11, 0.32);
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
 }
 
 .cycle-deload-option:active {
