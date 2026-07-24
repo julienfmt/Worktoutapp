@@ -2648,12 +2648,12 @@ const FATIGUE_PHENOTYPES = {
 const VOLUME_ADJUSTMENT_MATRIX = {
     // [Performance Trend, Average RPE] -> Action
     'improved_low':     { action: 'increase_load', setChange: 0, message: 'Performance up avec effort faible → Monte la charge' },
-    'improved_moderate': { action: 'add_volume', setChange: 1, message: 'Sweet spot ! Ajoute 1 série pour continuer à progresser' },
+    'improved_moderate': { action: 'increase_reps', setChange: 0, message: 'Sweet spot : ajoute une rep propre par série avant de monter la charge' },
     'improved_high':    { action: 'maintain', setChange: 0, message: 'Bonne progression mais effort max → Maintiens pour récupérer' },
     'stalled_low':      { action: 'increase_effort', setChange: 0, message: 'Pas de progression, effort insuffisant → Pousse plus fort !' },
-    'stalled_moderate': { action: 'add_volume', setChange: 1, message: 'Plateau → Volume additionnel nécessaire' },
+    'stalled_moderate': { action: 'increase_reps', setChange: 0, message: 'Plateau → vise une rep propre de plus sans changer les séries' },
     'stalled_high':     { action: 'maintain', setChange: 0, message: 'Approche du MRV → Ne rajoute pas de fatigue' },
-    'regressed_any':    { action: 'deload', setChange: -2, message: 'MRV dépassé → Deload immédiat pour surcompensation' }
+    'regressed_any':    { action: 'reduce_load', setChange: 0, message: 'Régression confirmée → baisse légèrement la charge, sans retirer de série' }
 };
 
 // ===== LOCAL MUSCLE SORENESS (LMS) - Reactive Volume System =====
@@ -2722,9 +2722,9 @@ const LMS_VOLUME_MODIFIERS = {
     },
     // LMS 3 (Wrecked): Only clear readiness warning should suggest less volume
     3: {
-        improved: { setChange: -1, loadChange: -2.5, message: 'Très courbaturé. Le coach peut suggérer une série de moins.' },
-        stable:   { setChange: -1, loadChange: -5, message: 'Muscle épuisé. Priorité à la qualité, pas au volume.' },
-        regressed:{ setChange: -1, loadChange: -5, message: 'Récupération nécessaire. Le coach peut proposer une séance allégée.' }
+        improved: { setChange: 0, loadChange: -2.5, message: 'Très courbaturé. Garde les séries prévues et allège légèrement la charge si l’échauffement confirme la gêne.' },
+        stable:   { setChange: 0, loadChange: -5, message: 'Muscle très courbaturé. Priorité à une charge prudente et à des reps propres.' },
+        regressed:{ setChange: 0, loadChange: -5, message: 'Récupération incomplète. Garde les séries prévues avec une charge allégée.' }
     }
 };
 
@@ -2896,11 +2896,11 @@ const COACHING_MESSAGES = {
         stable: "Performances stables. C'est normal, la progression n'est pas linéaire.",
         declining: "Petite baisse aujourd'hui. Pas d'inquiétude, vérifie ton sommeil et ta nutrition."
     },
-    // Volume adjustment messages (simplified from LMS)
+    // Readiness messages: the program's set count never changes
     volume: {
-        increase: "Tes muscles récupèrent bien → on ajoute du volume pour stimuler plus de croissance.",
-        maintain: "Volume parfait pour toi aujourd'hui.",
-        decrease: "Muscle encore fatigué → moins de séries mais même intensité. Qualité > quantité."
+        increase: "Tes muscles récupèrent bien → vise une rep propre de plus avec les séries prévues.",
+        maintain: "Garde les séries, la charge et la qualité prévues.",
+        decrease: "Muscle encore fatigué → garde les séries et allège légèrement la charge si l'échauffement le confirme."
     },
     // Effort guidance
     effort: {

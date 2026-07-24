@@ -667,7 +667,7 @@ class App {
             weekInCycle,
             phase,
             objective,
-            objectiveShort: phase === 'deload' ? 'volume allégé' : 'volume utile',
+            objectiveShort: phase === 'deload' ? 'charge et effort allégés' : 'progression utile',
             label: phase === 'deload' ? 'Semaine de deload' : `Semaine d'accumulation ${weekInCycle}/${config.accumulationWeeks}`
         };
     }
@@ -682,7 +682,7 @@ class App {
 
         if (cycleState.phase === 'deload') {
             suggestionTitle = 'Semaine de deload suggeree';
-            suggestionCopy = 'Le but est simple: reduire un peu le volume pour faire redescendre la fatigue et repartir plus frais au cycle suivant.';
+            suggestionCopy = 'Le but est simple: conserver les séries prévues avec moins de charge et davantage de reps en réserve pour repartir plus frais.';
             note = 'Le deload reste facultatif. Il sert surtout a dissiper la fatigue sans casser le rythme.';
         }
 
@@ -699,10 +699,9 @@ class App {
     }
 
     getDeloadTargetSets(baseSets, deloadVolumeReduction = 50) {
-        const programmedSets = Math.max(1, Number(baseSets) || 1);
-        const reduction = Math.min(90, Math.max(0, Number(deloadVolumeReduction) || 0));
-        const reducedSets = Math.ceil(programmedSets * (1 - (reduction / 100)));
-        return Math.max(1, Math.min(programmedSets, reducedSets));
+        // The training plan owns volume. Deload and readiness can change load,
+        // reps, RIR and rest, but never the programmed number of sets.
+        return Math.max(1, Number(baseSets) || 1);
     }
 
     async getConfiguredDeloadTargetSets(slotOrSets) {
@@ -719,18 +718,15 @@ class App {
         const resolvedSlotData = slotData || this.currentWorkout.slots?.[slot.id];
         if (!resolvedSlotData) return null;
 
-        if (this.currentWorkout.isDeload) {
-            const deloadTargetSets = await this.getConfiguredDeloadTargetSets(slot);
-            resolvedSlotData.autoTargetSets = deloadTargetSets;
-            resolvedSlotData.autoTargetSource = 'deload';
-            resolvedSlotData.deloadTargetSets = deloadTargetSets;
-            return resolvedSlotData;
-        }
-
+        // Remove legacy automatic-volume state from resumed workouts. Keeping
+        // these fields would silently finish an exercise before all programmed
+        // sets were completed.
+        delete resolvedSlotData.autoTargetSets;
+        delete resolvedSlotData.autoTargetSource;
         delete resolvedSlotData.deloadTargetSets;
-        if (resolvedSlotData.autoTargetSource === 'deload') {
-            delete resolvedSlotData.autoTargetSets;
-            delete resolvedSlotData.autoTargetSource;
+        if (resolvedSlotData.coachVolumeDecision) {
+            delete resolvedSlotData.coachVolumeDecision.acceptedTargetSets;
+            delete resolvedSlotData.coachVolumeDecision.suggestedSets;
         }
 
         return resolvedSlotData;
@@ -4865,24 +4861,24 @@ class App {
         }
         document.getElementById('adaptation-message').textContent = adaptationMessage;
         
-        // Volume recommendation - simplified
+        // Readiness recommendation: set count always stays as programmed.
         const recContainer = document.getElementById('adaptation-recommendation');
         let recText;
-        if (volumeRec.setChange > 0) {
-            recText = `+${volumeRec.setChange} série${volumeRec.setChange > 1 ? 's' : ''} par exercice`;
-        } else if (volumeRec.setChange < 0) {
-            recText = `${volumeRec.setChange} série${volumeRec.setChange < -1 ? 's' : ''} par exercice`;
+        if (volumeRec.loadChange > 0) {
+            recText = `Charge +${volumeRec.loadChange}% possible si l’échauffement est facile`;
+        } else if (volumeRec.loadChange < 0) {
+            recText = `Charge ${volumeRec.loadChange}% si la gêne persiste`;
         } else {
-            recText = 'Volume normal';
+            recText = 'Charge et séries prévues';
         }
-        const recIcon = volumeRec.setChange > 0
+        const recIcon = volumeRec.loadChange > 0
             ? `<span class="adaptation-recommendation-icon adaptation-recommendation-icon-svg">${this.getTrendArrowSVG('up')}</span>`
-            : volumeRec.setChange < 0
+            : volumeRec.loadChange < 0
                 ? `<span class="adaptation-recommendation-icon adaptation-recommendation-icon-svg">${this.getTrendArrowSVG('down')}</span>`
                 : renderAppIcon('recovery-ready', {
                     className: 'adaptation-recommendation-icon',
                     size: 18,
-                    label: 'Volume normal'
+                    label: 'Plan normal'
                 });
         recContainer.innerHTML = `
             <div class="adaptation-recommendation-item">
@@ -4919,7 +4915,7 @@ class App {
         }
 
         const sessionContext = options.sessionContext || null;
-        const adjusted = { ...modifier };
+        const adjusted = { ...modifier, setChange: 0 };
 
         // LMS is a readiness input, not a second punishment layer on top of session fatigue.
         if (sessionContext?.fatigueLevel === 'high') {
@@ -4961,10 +4957,8 @@ class App {
         // Get volume adjustment based on PRIMARY muscle only
         const rec = this.getVolumeRecommendationFromLMS(worstPrimaryLMS, targetMuscle);
         
-        // Calculate adjusted sets with MINIMUM 2 sets
         const originalSets = slot.sets || 3;
-        let adjustedSets = originalSets + rec.setChange;
-        adjustedSets = Math.max(2, Math.min(6, adjustedSets)); // Min 2, Max 6
+        const adjustedSets = originalSets;
         
         return {
             ...slot,
@@ -5015,13 +5009,8 @@ class App {
         // Get volume adjustment based on PRIMARY muscle LMS only
         const rec = this.getVolumeRecommendationFromLMS(worstPrimaryLMS, worstPrimaryMuscle, options);
         
-        // Calculate adjusted sets with MINIMUM 2 sets (scientific minimum for stimulus)
         const originalSets = slot.sets || 3;
-        let adjustedSets = originalSets + rec.setChange;
-        adjustedSets = Math.max(2, Math.min(6, adjustedSets)); // Min 2, Max 6
-        
-        // Recalculate actual set change after clamping
-        const actualSetChange = adjustedSets - originalSets;
+        const adjustedSets = originalSets;
         
         const muscleInfo = this.getMuscleGroupInfo(worstPrimaryMuscle);
         const lmsInfo = LMS_SCALE[worstPrimaryLMS];
@@ -5039,7 +5028,7 @@ class App {
             mrvStatus: lmsInfo.mrvStatus,
             originalSets,
             adjustedSets,
-            setChange: actualSetChange,
+            setChange: 0,
             loadChange: rec.loadChange,
             message: rec.message,
             performanceTrend: options.performanceTrend || 'stable',
@@ -5385,83 +5374,26 @@ class App {
 
     buildCoachSetPlan(slot = this.currentSlot, advice = this.currentCoachingAdvice) {
         const programmedSets = Math.max(0, Number(slot?.sets) || 0);
-        const slotData = slot?.id ? this.currentWorkout?.slots?.[slot.id] : null;
-        const targetState = this.getSlotTargetState(slot, slotData);
-        const volumeDecision = targetState.decision || null;
-        const lmsAdjustedSets = Number(this.currentLMSData?.adjustedSets);
-        const lmsOriginalSets = Number(this.currentLMSData?.originalSets || programmedSets);
-        const directSuggestedSets = Number.isFinite(Number(advice?.suggestedSets))
-            ? Number(advice.suggestedSets)
-            : Number.isFinite(Number(advice?.deloadSets))
-                ? Number(advice.deloadSets)
-                : null;
-        const isDeloadAdvice = advice?.type === 'deload'
-            || advice?.type === 'reactive_deload'
-            || advice?.type === 'deload_mini'
-            || advice?.isDeload;
-
-        const candidates = [];
-
-        if (Number.isFinite(directSuggestedSets) && directSuggestedSets > 0) {
-            candidates.push({
-                source: isDeloadAdvice ? 'deload' : (advice?.autoAdjustSets || directSuggestedSets < programmedSets ? 'fatigue' : 'coach'),
-                sets: directSuggestedSets
-            });
-        }
-
-        if (Number.isFinite(lmsAdjustedSets) && lmsAdjustedSets > 0 && lmsAdjustedSets !== lmsOriginalSets) {
-            candidates.push({
-                source: 'lms',
-                sets: lmsAdjustedSets
-            });
-        }
-
-        const reductionCandidate = candidates
-            .filter(candidate => candidate.sets < programmedSets)
-            .sort((a, b) => a.sets - b.sets)[0] || null;
-
-        const increaseCandidate = candidates
-            .filter(candidate => candidate.sets > programmedSets)
-            .sort((a, b) => b.sets - a.sets)[0] || null;
-        const suggestedReductionSets = reductionCandidate?.sets || null;
-        const completedSets = (slotData?.sets || []).filter(set => set?.completed).length;
-        const dismissedSuggestedSets = Number.isFinite(Number(volumeDecision?.dismissedSuggestedSets))
-            ? Number(volumeDecision.dismissedSuggestedSets)
-            : null;
-        const activeTargetSets = targetState.activeTargetSets;
-        const activeTargetSource = targetState.source || 'programmed';
-        const isDeloadPlanApplied = activeTargetSource === 'deload'
-            && activeTargetSets < programmedSets;
-        const reductionAccepted = activeTargetSets < programmedSets
-            && (volumeDecision?.acceptedTargetSets != null || activeTargetSource === 'deload');
-
-        const reasonMap = {
-            deload: 'deload',
-            fatigue: 'fatigue / récupération',
-            lms: 'readiness du jour',
-            coach: 'progression'
-        };
-
+        // Set count is deliberately not coachable. Keep the legacy return shape
+        // so the rendering code remains compatible while every volume branch is
+        // permanently disabled.
         return {
             programmedSets,
-            activeTargetSets,
-            activeTargetSource,
-            directSuggestedSets,
-            suggestedReductionSets,
-            reductionCandidate,
-            increaseCandidate,
-            reductionAccepted,
-            isDeloadPlanApplied,
-            acceptedDecision: volumeDecision,
-            hasSuggestedReduction: Boolean(reductionCandidate),
-            hasOptionalIncrease: Boolean(increaseCandidate),
-            showReductionPrompt: Boolean(reductionCandidate)
-                && !reductionAccepted
-                && completedSets >= (suggestedReductionSets || programmedSets + 1)
-                && dismissedSuggestedSets !== suggestedReductionSets,
-            reductionReason: reductionCandidate ? (reasonMap[reductionCandidate.source] || 'gestion du volume') : '',
-            displayDelta: (reductionAccepted ? activeTargetSets : suggestedReductionSets || programmedSets) - programmedSets,
-            optionalDelta: increaseCandidate ? increaseCandidate.sets - programmedSets : 0
+            activeTargetSets: programmedSets,
+            activeTargetSource: 'programmed',
+            directSuggestedSets: null,
+            suggestedReductionSets: null,
+            reductionCandidate: null,
+            increaseCandidate: null,
+            reductionAccepted: false,
+            isDeloadPlanApplied: false,
+            acceptedDecision: null,
+            hasSuggestedReduction: false,
+            hasOptionalIncrease: false,
+            showReductionPrompt: false,
+            reductionReason: '',
+            displayDelta: 0,
+            optionalDelta: 0
         };
     }
 
@@ -5923,14 +5855,7 @@ class App {
             .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
         for (const set of sortedSets) {
-            const slotInfo = set.slotId ? slotLookup.get(String(set.slotId)) : null;
-            const candidates = [
-                set.exerciseId,
-                this.getBaseExerciseHistoryName(set.exerciseId),
-                ...this.getHistoricalSlotExerciseNames(slotInfo)
-            ]
-                .map(name => String(name || '').trim())
-                .filter(Boolean);
+            const candidates = this.getSetHistoryCandidateExerciseNames(set, slotLookup);
 
             for (const candidate of candidates) {
                 const normalized = this.normalizeExerciseText(candidate);
@@ -6029,16 +5954,27 @@ class App {
     getSetHistoryCandidateExerciseNames(set, slotLookup = new Map()) {
         if (!set) return [];
 
-        const slotInfo = set.slotId ? slotLookup.get(String(set.slotId)) : null;
-        const candidates = [
+        const explicitCandidates = [
             set.exerciseId,
-            this.getBaseExerciseHistoryName(set.exerciseId),
-            ...this.getHistoricalSlotExerciseNames(slotInfo)
+            this.getBaseExerciseHistoryName(set.exerciseId)
         ]
             .map(name => String(name || '').trim())
             .filter(Boolean);
 
-        return Array.from(new Set(candidates));
+        // exerciseId is the identity captured when the set was performed. A slotId
+        // only describes a position in a program and can legitimately be reused
+        // after a program import/reorder. Mixing both identities is what made old
+        // sets from different exercises appear in the same logbook.
+        if (explicitCandidates.length) {
+            return Array.from(new Set(explicitCandidates));
+        }
+
+        const slotInfo = set.slotId ? slotLookup.get(String(set.slotId)) : null;
+        return Array.from(new Set(
+            this.getHistoricalSlotExerciseNames(slotInfo)
+                .map(name => String(name || '').trim())
+                .filter(Boolean)
+        ));
     }
 
     setMatchesExerciseIdentity(set, exerciseId, slotLookup = new Map()) {
@@ -7488,27 +7424,148 @@ class App {
 
     evaluateWorkoutAgainstTargets(workout, slot, options = {}) {
         if (!workout?.sets?.length) {
-            return { successRate: 0, allSetsHitTargets: false, inEffortZone: true };
+            return {
+                successRate: 0,
+                allSetsHitTargets: false,
+                allSetsAtUpperBound: false,
+                allSetsAtMinimum: false,
+                completedRequiredSets: false,
+                inEffortZone: true
+            };
         }
 
         const repCeiling = options.repCeiling || slot.repsMax;
-        const targetSetCount = Math.max(workout.targetSetCount || workout.sets.length, 1);
-        const targetArray = this.genTargetReps(slot.repsMin, repCeiling, targetSetCount);
-        const threshold = options.threshold ?? (slot.type === 'isolation' ? 1 : 0.75);
-        const hits = workout.sets.reduce((count, set, index) => {
-            return count + ((set.reps || 0) >= (targetArray[index] || repCeiling) ? 1 : 0);
+        const targetSetCount = Math.max(Number(slot.sets) || Number(workout.programmedSetCount) || workout.sets.length, 1);
+        const sets = [...workout.sets]
+            .filter(set => Number(set?.reps) > 0)
+            .sort((a, b) => Number(a.setNumber || 0) - Number(b.setNumber || 0))
+            .slice(0, targetSetCount);
+        const targetArray = Array.isArray(options.targetArray) && options.targetArray.length
+            ? options.targetArray
+            : this.genTargetReps(slot.repsMin, repCeiling, targetSetCount);
+        const hits = sets.reduce((count, set, index) => {
+            const savedTarget = Number(set.targetReps);
+            const target = Number.isFinite(savedTarget) && savedTarget > 0
+                ? savedTarget
+                : (targetArray[index] || repCeiling);
+            return count + (Number(set.reps || 0) >= target ? 1 : 0);
         }, 0);
         const successRate = hits / targetSetCount;
-        const avgRpe = workout.avgRpe ?? null;
-        const inEffortZone = avgRpe == null || (avgRpe >= 7 && avgRpe <= 9.5);
+        const completedRequiredSets = sets.length >= targetSetCount;
+        const effort = this.getWorkoutEffortEvidence(workout);
+        const inEffortZone = !effort.isReliable || (effort.avgRpe >= 7 && effort.avgRpe <= 9.5);
+        const allSetsAtUpperBound = completedRequiredSets
+            && sets.every(set => Number(set.reps || 0) >= repCeiling);
+        const allSetsAtMinimum = completedRequiredSets
+            && sets.every(set => Number(set.reps || 0) >= Number(slot.repsMin || 0));
 
         return {
             successRate,
             hits,
-            threshold,
-            allSetsHitTargets: successRate >= threshold,
-            inEffortZone
+            threshold: 1,
+            completedRequiredSets,
+            allSetsHitTargets: completedRequiredSets && hits >= targetSetCount,
+            allSetsAtUpperBound,
+            allSetsAtMinimum,
+            belowMinimumCount: sets.filter(set => Number(set.reps || 0) < Number(slot.repsMin || 0)).length,
+            inEffortZone,
+            effort
         };
+    }
+
+    normalizeLoadPrecision(value) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) return value;
+        return Math.round(numericValue * 100) / 100;
+    }
+
+    getWorkoutEffortEvidence(workout) {
+        const sets = Array.isArray(workout?.sets) ? workout.sets : [];
+        const userRpeSets = sets.filter(set => set?.rpe != null && this.getSetRpeSource(set) === 'user');
+        const legacyRpeSets = sets.filter(set => set?.rpe != null && this.getSetRpeSource(set) === 'legacy');
+        const sample = userRpeSets.length ? userRpeSets : legacyRpeSets;
+        const avgRpe = sample.length
+            ? sample.reduce((sum, set) => sum + Number(set.rpe), 0) / sample.length
+            : null;
+        const reliability = userRpeSets.length
+            ? Math.min(1, userRpeSets.length / Math.max(1, Math.min(sets.length, 3)))
+            : (legacyRpeSets.length ? 0.35 : 0);
+
+        return {
+            avgRpe,
+            reliability,
+            isReliable: reliability >= 0.65,
+            source: userRpeSets.length ? 'user' : (legacyRpeSets.length ? 'legacy' : 'none'),
+            sampleSize: sample.length
+        };
+    }
+
+    getWorkoutRepVector(workout, setCount) {
+        const count = Math.max(1, Number(setCount) || 1);
+        return [...(workout?.sets || [])]
+            .filter(set => Number(set?.reps) > 0)
+            .sort((a, b) => Number(a.setNumber || 0) - Number(b.setNumber || 0))
+            .slice(0, count)
+            .map(set => Number(set.reps));
+    }
+
+    inferExerciseLoadIncrement(workouts = [], slot = {}, fallbackIncrement = 1) {
+        const configuredStep = Number(slot.machineStepKg || slot.incrementKg);
+        if (Number.isFinite(configuredStep) && configuredStep > 0) {
+            return this.normalizeLoadPrecision(configuredStep);
+        }
+
+        const fallback = Math.max(
+            Number(slot.minIncrementKg) || 0,
+            Number(fallbackIncrement) || 1,
+            0.25
+        );
+        const referenceWeights = workouts
+            .slice(0, 8)
+            .map(workout => Number(this.getReferenceWeight(workout, slot)))
+            .filter(weight => Number.isFinite(weight) && weight > 0);
+        const candidates = [];
+
+        for (let index = 0; index < referenceWeights.length - 1; index++) {
+            const current = referenceWeights[index];
+            const previous = referenceWeights[index + 1];
+            const difference = Math.abs(current - previous);
+            const upperBound = Math.max(fallback * 5, Math.min(current, previous) * 0.15);
+            if (difference >= 0.25 && difference <= upperBound) {
+                candidates.push(this.normalizeLoadPrecision(difference));
+            }
+        }
+
+        if (!candidates.length) return this.normalizeLoadPrecision(fallback);
+
+        const recentPlausible = candidates.find(candidate => candidate <= fallback * 3);
+        const inferred = recentPlausible || Math.min(...candidates);
+        return this.normalizeLoadPrecision(Math.max(Number(slot.minIncrementKg) || 0.25, inferred));
+    }
+
+    getAdaptiveRepTargets(slot, workout, mode = 'maintain') {
+        const setCount = Math.max(1, Number(slot?.sets) || 1);
+        const repsMin = Math.max(1, Number(slot?.repsMin) || 1);
+        const repsMax = Math.max(repsMin, Number(slot?.repsMax) || repsMin);
+        const previousReps = this.getWorkoutRepVector(workout, setCount);
+
+        if (!previousReps.length) {
+            const calibrationTarget = Math.round((repsMin + repsMax) / 2);
+            return Array(setCount).fill(calibrationTarget);
+        }
+
+        return Array.from({ length: setCount }, (_, index) => {
+            const previous = previousReps[index] ?? previousReps[previousReps.length - 1] ?? repsMin;
+            let target;
+            if (mode === 'increase_load') {
+                target = previous - 2;
+            } else if (mode === 'reduce_load') {
+                target = previous + 1;
+            } else {
+                target = previous < repsMin ? repsMin : previous + 1;
+            }
+            return Math.max(repsMin, Math.min(repsMax, Math.round(target)));
+        });
     }
 
     async buildProgressionContext(slot, options = {}) {
@@ -7516,32 +7573,79 @@ class App {
         const exerciseId = normalizedSlot.activeExercise || normalizedSlot.name;
         const workouts = await this.getExerciseWorkoutHistory(exerciseId, { excludeDeload: true });
         const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
-        const incrementKg = normalizedSlot.incrementKg ?? (normalizedSlot.type === 'isolation'
+        const fallbackIncrement = normalizedSlot.type === 'isolation'
             ? Math.min(baseWeightIncrement, normalizedSlot.minIncrementKg || 1)
-            : Math.max(baseWeightIncrement, normalizedSlot.minIncrementKg || 1));
-        const weightIncrement = normalizedSlot.loadingProfile === 'machine_stack' && normalizedSlot.machineStepKg
-            ? normalizedSlot.machineStepKg
-            : incrementKg;
+            : Math.max(baseWeightIncrement, normalizedSlot.minIncrementKg || 1);
+        const weightIncrement = this.inferExerciseLoadIncrement(workouts, normalizedSlot, fallbackIncrement);
 
         const lastWorkout = workouts[0] || null;
         const prevWorkout = workouts[1] || null;
         const lastWeight = lastWorkout ? this.getReferenceWeight(lastWorkout, normalizedSlot) : 0;
-        const avgReps = lastWorkout ? (lastWorkout.totalReps / Math.max(lastWorkout.sets.length, 1)) : 0;
-        const avgRpe = lastWorkout?.avgRpe ?? null;
-        const targetRepsArray = this.genTargetReps(normalizedSlot.repsMin, normalizedSlot.repsMax, normalizedSlot.sets);
+        const lastRepVector = this.getWorkoutRepVector(lastWorkout, normalizedSlot.sets);
+        const avgReps = lastRepVector.length
+            ? lastRepVector.reduce((sum, reps) => sum + reps, 0) / lastRepVector.length
+            : 0;
+        const effortEvidence = this.getWorkoutEffortEvidence(lastWorkout);
+        const avgRpe = effortEvidence.avgRpe;
+        const targetRepsArray = this.getAdaptiveRepTargets(normalizedSlot, lastWorkout, 'maintain');
+        const increaseLoadTargetRepsArray = this.getAdaptiveRepTargets(normalizedSlot, lastWorkout, 'increase_load');
+        const reduceLoadTargetRepsArray = this.getAdaptiveRepTargets(normalizedSlot, lastWorkout, 'reduce_load');
         const targetReps = this.formatTargetReps(targetRepsArray);
-        const nextLoadCandidate = this.roundToHalf(lastWeight + weightIncrement);
+        const nextLoadCandidate = this.normalizeLoadPrecision(lastWeight + weightIncrement);
         const progressionMode = normalizedSlot.progressionMode === 'load' || normalizedSlot.progressionMode === 'bodyweight' || normalizedSlot.progressionMode === 'capped_load'
             ? normalizedSlot.progressionMode
             : (this.isBodyweightProgressionExercise(normalizedSlot, workouts) ? 'bodyweight' : 'load');
         const repUpperBound = this.getExtendedRepUpperBound(normalizedSlot, progressionMode);
         const lastExposure = lastWorkout ? this.evaluateWorkoutAgainstTargets(lastWorkout, normalizedSlot, { repCeiling: repUpperBound }) : null;
         const prevExposure = prevWorkout ? this.evaluateWorkoutAgainstTargets(prevWorkout, normalizedSlot, { repCeiling: repUpperBound }) : null;
-        const consecutiveExposureSuccess = [lastExposure, prevExposure].filter(exposure => exposure?.allSetsHitTargets && exposure?.inEffortZone).length;
+        const lastExposureSuccessful = lastExposure?.allSetsHitTargets && lastExposure?.inEffortZone;
+        const consecutiveExposureSuccess = lastExposureSuccessful
+            ? 1 + (prevExposure?.allSetsHitTargets && prevExposure?.inEffortZone ? 1 : 0)
+            : 0;
+        const exposureSummaries = workouts.slice(0, 3).map(workout => {
+            const reps = this.getWorkoutRepVector(workout, normalizedSlot.sets);
+            const referenceWeight = this.getReferenceWeight(workout, normalizedSlot);
+            return {
+                workout,
+                reps,
+                referenceWeight,
+                avgReps: reps.length ? reps.reduce((sum, value) => sum + value, 0) / reps.length : 0,
+                completedRequiredSets: reps.length >= normalizedSlot.sets,
+                effort: this.getWorkoutEffortEvidence(workout)
+            };
+        });
+        let consecutiveUnderRange = 0;
+        for (const exposure of exposureSummaries) {
+            if (exposure.completedRequiredSets && exposure.avgReps < normalizedSlot.repsMin) {
+                consecutiveUnderRange++;
+            } else {
+                break;
+            }
+        }
+        let stalledExposureCount = 0;
+        for (let index = 0; index < exposureSummaries.length - 1; index++) {
+            const current = exposureSummaries[index];
+            const previous = exposureSummaries[index + 1];
+            const sameLoad = Math.abs(current.referenceWeight - previous.referenceWeight) <= Math.max(0.25, weightIncrement * 0.25);
+            const currentTotal = current.reps.reduce((sum, value) => sum + value, 0);
+            const previousTotal = previous.reps.reduce((sum, value) => sum + value, 0);
+            if (sameLoad && current.completedRequiredSets && previous.completedRequiredSets && currentTotal <= previousTotal) {
+                stalledExposureCount++;
+            } else {
+                break;
+            }
+        }
+        const previousRepVector = this.getWorkoutRepVector(prevWorkout, normalizedSlot.sets);
+        const previousTotalReps = previousRepVector.reduce((sum, reps) => sum + reps, 0);
+        const lastTotalReps = lastRepVector.reduce((sum, reps) => sum + reps, 0);
+        const sameLoadAsPrevious = Boolean(lastWorkout && prevWorkout)
+            && Math.abs(lastWeight - this.getReferenceWeight(prevWorkout, normalizedSlot)) <= Math.max(0.25, weightIncrement * 0.25);
+        const repDeltaVsPrevious = sameLoadAsPrevious ? lastTotalReps - previousTotalReps : null;
         const sessionContext = this.getSessionFatigueContextForSlot(normalizedSlot, options);
         const canIncreaseLoad = normalizedSlot.maxSelectableLoadKg == null || nextLoadCandidate <= normalizedSlot.maxSelectableLoadKg;
         const atCap = normalizedSlot.maxSelectableLoadKg != null && lastWeight >= normalizedSlot.maxSelectableLoadKg;
         const programTargetChange = this.getProgramTargetChange(normalizedSlot, lastWorkout);
+        const trendSummary = this.buildExerciseTrendSummary(workouts, normalizedSlot);
 
         return {
             slot: normalizedSlot,
@@ -7551,9 +7655,13 @@ class App {
             lastWorkout,
             prevWorkout,
             lastWeight,
+            lastRepVector,
             avgReps,
-            avgRpe: avgRpe ?? 8,
+            avgRpe,
+            effortEvidence,
             targetRepsArray,
+            increaseLoadTargetRepsArray,
+            reduceLoadTargetRepsArray,
             targetReps,
             weightIncrement,
             nextLoadCandidate,
@@ -7562,6 +7670,11 @@ class App {
             lastExposure,
             prevExposure,
             consecutiveExposureSuccess,
+            consecutiveUnderRange,
+            stalledExposureCount,
+            repDeltaVsPrevious,
+            sameLoadAsPrevious,
+            trendSummary,
             sessionContext,
             atCap,
             canIncreaseLoad,
@@ -7738,49 +7851,53 @@ class App {
         const lastWeight = Number(context.lastWeight || 0);
         const avgReps = Number(context.avgReps || 0);
         const repsShortfall = Number(slot.repsMin || 0) - avgReps;
+        const effort = context.effortEvidence || {};
+        const confirmedUnderRange = context.consecutiveUnderRange >= 2;
+        const clearHighEffortMiss = effort.isReliable && effort.avgRpe >= 9.5 && repsShortfall >= 1;
 
-        if (context.programTargetChange || !lastWorkout || lastWeight <= 0 || repsShortfall < 1.5) {
+        if (
+            context.programTargetChange
+            || !lastWorkout
+            || lastWeight <= 0
+            || repsShortfall < 1
+            || (!confirmedUnderRange && !clearHighEffortMiss)
+        ) {
             return null;
         }
 
-        const e1rm = this.getBestWorkoutE1RM(lastWorkout);
-        const targetLoad = e1rm > 0
-            ? this.getTargetLoadFromE1RM(e1rm, slot.repsMax, 8.5)
-            : null;
-        const suggestedWeight = Number.isFinite(Number(targetLoad))
-            ? Math.min(lastWeight, Number(targetLoad))
-            : null;
-        const minUsefulDrop = Math.max(0.5, Number(context.weightIncrement || 0) / 2);
-
-        if (!Number.isFinite(Number(suggestedWeight)) || suggestedWeight >= lastWeight - minUsefulDrop) {
-            return null;
-        }
-
+        const suggestedWeight = this.normalizeLoadPrecision(
+            Math.max(0, lastWeight - Math.max(0.25, Number(context.weightIncrement) || 0.5))
+        );
         const avgLabel = Math.round(avgReps * 10) / 10;
+        const confirmationLabel = confirmedUnderRange
+            ? `${context.consecutiveUnderRange} séances de suite sous la plage`
+            : `RPE ${Math.round(effort.avgRpe * 10) / 10} avec reps insuffisantes`;
 
         return {
             type: 'decrease',
             icon: 'decrease',
-            title: 'Charge à recalibrer',
-            message: `La dernière base tourne à ${avgLabel} reps en moyenne, sous la fourchette actuelle ${slot.repsMin}-${slot.repsMax}. Baisser la charge est normal pour retrouver des reps propres avant de remonter.`,
+            title: 'Baisse confirmée d’un palier',
+            message: `${confirmationLabel}: la base tourne à ${avgLabel} reps, sous ${slot.repsMin}-${slot.repsMax}. Descends d’un seul palier, garde toutes les séries et reconstruis les reps.`,
             suggestedWeight,
             weightTrend: 'down',
-            suggestedReps: context.targetReps,
+            suggestedReps: this.formatTargetReps(context.reduceLoadTargetRepsArray),
+            suggestedRir: slot.type === 'isolation' ? 1 : 2,
             referenceWeight: lastWeight,
             rangeFitRecalibration: true
         };
     }
 
     getLoadProgressionAdvice(slot, context) {
-        const { lastWorkout, lastWeight, avgReps, targetReps, weightIncrement } = context;
+        const { lastWorkout, lastWeight, avgReps, targetReps } = context;
 
         if (!lastWorkout) {
             return {
                 type: 'new',
-                title: 'Premier essai',
-                message: 'Commence léger pour calibrer ta charge de travail.',
+                title: 'Séance de calibration',
+                message: `Choisis une charge qui permet ${targetReps} avec ${slot.type === 'isolation' ? '1 à 2' : '2'} reps en réserve. Le nombre de séries reste celui du programme.`,
                 suggestedWeight: '?',
                 suggestedReps: targetReps,
+                suggestedRir: slot.type === 'isolation' ? 1 : 2,
                 weightTrend: 'neutral'
             };
         }
@@ -7795,34 +7912,82 @@ class App {
             return rangeFitAdvice;
         }
 
-        if (avgReps >= slot.repsMax) {
+        const effort = context.effortEvidence || {};
+        const allSetsAtUpperBound = context.lastExposure?.allSetsAtUpperBound;
+        const effortTooHighToProgress = effort.isReliable && effort.avgRpe > 9.5;
+        const standardRir = slot.type === 'isolation' ? 1 : 2;
+
+        if (allSetsAtUpperBound && !effortTooHighToProgress) {
             return {
                 type: 'increase',
-                title: 'Progression 📈',
-                message: `Tu as validé le haut de fourchette. Monte à ${this.roundToHalf(lastWeight + weightIncrement)}kg.`,
-                suggestedWeight: this.roundToHalf(lastWeight + weightIncrement),
-                suggestedReps: targetReps,
+                icon: 'increase',
+                title: 'Double progression validée',
+                message: `Toutes les séries ont atteint ${slot.repsMax} reps. Monte d’un seul palier (${context.weightIncrement}kg), puis repars plus bas dans la fourchette sans aller à l’échec.`,
+                suggestedWeight: context.nextLoadCandidate,
+                suggestedReps: this.formatTargetReps(context.increaseLoadTargetRepsArray),
+                suggestedRir: standardRir,
+                progressionAxis: 'load',
                 weightTrend: 'up'
+            };
+        }
+
+        if (allSetsAtUpperBound && effortTooHighToProgress) {
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Valide sans échec',
+                message: `Les reps sont là, mais l’effort moyen est trop proche de l’échec (RPE ${Math.round(effort.avgRpe * 10) / 10}). Garde la charge une séance et vise la même performance plus propre avant de monter.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: this.formatTargetReps(Array(Math.max(1, slot.sets)).fill(slot.repsMax)),
+                suggestedRir: 1,
+                weightTrend: 'neutral'
+            };
+        }
+
+        if (context.stalledExposureCount >= 2 && effort.isReliable && effort.avgRpe >= 9) {
+            const resetWeight = this.normalizeLoadPrecision(
+                Math.max(0, lastWeight - Math.max(0.25, Number(context.weightIncrement) || 0.5))
+            );
+            return {
+                type: 'decrease',
+                icon: 'decrease',
+                title: 'Micro-reset ciblé',
+                message: `Deux expositions sans gain de reps avec un effort élevé. Baisse d’un palier à ${resetWeight}kg, conserve toutes les séries et reconstruis avant de remonter.`,
+                suggestedWeight: resetWeight,
+                suggestedReps: this.formatTargetReps(context.reduceLoadTargetRepsArray),
+                suggestedRir: standardRir,
+                progressionAxis: 'reps',
+                weightTrend: 'down'
             };
         }
 
         if (avgReps < slot.repsMin) {
             return {
                 type: 'maintain',
-                title: 'Consolide',
-                message: `Reste à ${lastWeight}kg et remonte d'abord les reps dans la fourchette.`,
+                icon: 'target',
+                title: 'Une séance de confirmation',
+                message: `La dernière moyenne (${Math.round(avgReps * 10) / 10}) est sous la plage, mais un seul passage ne suffit pas pour couper la charge. Reste à ${lastWeight}kg et vise au moins ${slot.repsMin} reps sur chaque série; si cela se répète, le coach baissera d’un palier.`,
                 suggestedWeight: lastWeight,
-                suggestedReps: targetReps,
+                suggestedReps: this.formatTargetReps(Array(Math.max(1, slot.sets)).fill(slot.repsMin)),
+                suggestedRir: standardRir,
+                progressionAxis: 'reps',
                 weightTrend: 'neutral'
             };
         }
 
+        const repProgressLabel = context.repDeltaVsPrevious != null && context.repDeltaVsPrevious > 0
+            ? `+${context.repDeltaVsPrevious} reps totales à charge comparable.`
+            : 'La charge reste productive.';
+
         return {
             type: 'maintain',
-            title: 'Continue',
-            message: `Bonne base. Vise le haut de la fourchette avant d'augmenter la charge.`,
+            icon: 'target',
+            title: 'Progression en répétitions',
+            message: `${repProgressLabel} Garde ${lastWeight}kg et ajoute une rep propre là où elle est disponible; la charge ne monte que lorsque toutes les séries atteignent ${slot.repsMax}.`,
             suggestedWeight: lastWeight,
             suggestedReps: targetReps,
+            suggestedRir: standardRir,
+            progressionAxis: 'reps',
             weightTrend: 'neutral'
         };
     }
@@ -7831,14 +7996,12 @@ class App {
         if (!advice || !slot || !this.currentWorkout?.isDeload) return advice;
 
         const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
-        const targetSets = await this.getConfiguredDeloadTargetSets(slot);
+        const targetSets = Math.max(1, Number(slot.sets) || 1);
         const overlay = {
             ...advice,
             type: 'deload',
             icon: 'warning',
             title: 'Deload actif',
-            suggestedSets: targetSets,
-            deloadSets: targetSets,
             isDeload: true
         };
 
@@ -7853,7 +8016,7 @@ class App {
             overlay.suggestedWeight = null;
             overlay.suggestedWeightLabel = `${overlay.suggestedAssistanceKg}kg assistance`;
             overlay.weightTrend = 'down';
-            overlay.message = `Deload sur ce bloc: prends un peu plus d’assistance et garde ${targetSets} séries faciles, loin de l’échec.`;
+            overlay.message = `Deload sur ce bloc: prends un peu plus d’assistance, conserve les ${targetSets} séries prévues et reste loin de l’échec.`;
             return overlay;
         }
 
@@ -7862,12 +8025,12 @@ class App {
             overlay.suggestedWeight = deloadWeight;
             overlay.referenceWeight = numericBaseWeight;
             overlay.weightTrend = 'down';
-            overlay.message = `Deload sur cette séance: vise ${deloadWeight}kg et ${targetSets} séries propres. On baisse un peu la charge et le volume pour refaire du jus.`;
+            overlay.message = `Deload sur cette séance: vise ${deloadWeight}kg, conserve les ${targetSets} séries prévues et garde 3 à 4 reps en réserve.`;
             return overlay;
         }
 
         overlay.weightTrend = 'neutral';
-        overlay.message = `Deload sur cette séance: garde un effort facile et limite-toi à ${targetSets} séries propres pour récupérer.`;
+        overlay.message = `Deload sur cette séance: conserve les ${targetSets} séries prévues avec un effort facile et 3 à 4 reps en réserve.`;
         return overlay;
     }
 
@@ -7908,7 +8071,6 @@ class App {
     getCappedLoadProgressionAdvice(slot, context) {
         const currentAxis = slot.progressionState?.primaryAxis || 'reps';
         const nextAxis = this.getNextProgressionAxis('capped_load', currentAxis, slot);
-        const maxSets = slot.type === 'isolation' ? 6 : 5;
 
         if (!context.lastWorkout) {
             return {
@@ -7929,7 +8091,7 @@ class App {
             return {
                 type: 'maintain',
                 title: 'Cap machine détecté',
-                message: `Le prochain palier dépasse ${slot.maxSelectableLoadKg}kg. On bascule sur une surcharge multi-axes: reps, séries, tempo puis variante.`,
+                message: `Le prochain palier dépasse ${slot.maxSelectableLoadKg}kg. On bascule sur une surcharge multi-axes: reps, tempo, pause puis variante.`,
                 suggestedWeight: slot.maxSelectableLoadKg,
                 suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, slot.sets)),
                 weightTrend: 'neutral',
@@ -7941,20 +8103,6 @@ class App {
         if (currentAxis === 'reps') {
             const cappedTargets = this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, slot.sets));
             if (context.consecutiveExposureSuccess >= 2) {
-                if (slot.sets < maxSets) {
-                    return {
-                        type: 'volume_up',
-                        title: 'Cap validé, on ajoute du volume',
-                        message: `Le plafond de charge est validé sur 2 expositions. Garde ${context.lastWeight}kg et passe à ${slot.sets + 1} séries.`,
-                        suggestedWeight: context.lastWeight,
-                        suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, slot.sets + 1)),
-                        suggestedSets: slot.sets + 1,
-                        weightTrend: 'neutral',
-                        progressionAxis: 'sets',
-                        nextProgressionAxis: 'tempo'
-                    };
-                }
-
                 return {
                     type: 'maintain',
                     title: 'Cap validé, on durcit l’exécution',
@@ -7980,17 +8128,15 @@ class App {
         }
 
         if (currentAxis === 'sets') {
-            const targetSets = Math.min(maxSets, slot.sets + 1);
             return {
-                type: 'volume_up',
-                title: 'Volume avant tout',
-                message: `Le plafond est atteint. Garde la charge et vise ${targetSets} séries productives avant de passer au tempo.`,
+                type: 'maintain',
+                title: 'Tempo avant volume',
+                message: `Le plafond est atteint. Le nombre de séries reste fixe: garde la charge et rends chaque rep plus stricte avant de changer de variante.`,
                 suggestedWeight: context.lastWeight,
-                suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, targetSets)),
-                suggestedSets: targetSets,
+                suggestedReps: this.formatTargetReps(this.genTargetReps(slot.repsMin, context.repUpperBound, slot.sets)),
                 weightTrend: 'neutral',
                 progressionAxis: 'tempo',
-                nextProgressionAxis: 'tempo'
+                nextProgressionAxis: 'pause'
             };
         }
 
@@ -8214,6 +8360,12 @@ class App {
         const constrained = { ...advice };
         const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
 
+        // Hard invariant: coaching never changes program volume.
+        delete constrained.suggestedSets;
+        delete constrained.deloadSets;
+        constrained.autoAdjustSets = false;
+        constrained.programmedSets = Math.max(1, Number(normalizedSlot.sets) || 1);
+
         if (normalizedSlot.progressionMode === 'capped_load' && typeof constrained.suggestedWeight === 'number' && normalizedSlot.maxSelectableLoadKg != null) {
             constrained.suggestedWeight = Math.min(constrained.suggestedWeight, normalizedSlot.maxSelectableLoadKg);
             if (constrained.suggestedWeight === normalizedSlot.maxSelectableLoadKg && advice.weightTrend === 'up' && context.atCap) {
@@ -8319,13 +8471,17 @@ class App {
             advice = this.applyUnilateralSpecificAdjustments(advice, normalizedSlot, context, options);
         }
 
+        if (typeof context.lastWeight === 'number' && context.lastWeight > 0) {
+            advice.referenceWeight = context.lastWeight;
+        }
+        advice.weightIncrement = context.weightIncrement;
+        advice.targetRepsArray = this.getAdviceTargetRepsArray(advice, context.targetRepsArray);
+        advice.suggestedRir ??= normalizedSlot.type === 'isolation' ? 1 : 2;
+
         const coachContext = await this.buildCoachContextForSlot(normalizedSlot, options);
         advice = this.applyContextualAdjustmentsToAdvice(advice, normalizedSlot, coachContext);
         advice = await this.applyDeloadOverlayToAdvice(advice, normalizedSlot, context);
         advice = this.enforceProgressionConstraints(advice, normalizedSlot, context);
-        if (typeof context.lastWeight === 'number' && context.lastWeight > 0) {
-            advice.referenceWeight = context.lastWeight;
-        }
         await this.syncSlotProgressionStateFromAdvice(normalizedSlot, advice, context);
 
         return advice;
@@ -9006,9 +9162,29 @@ class App {
         // Save both sets
         const slotAData = this.currentWorkout.slots[this.currentSlot.id];
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
+        const targetsA = this.getAdviceTargetRepsArray(
+            this.supersetCoachingAdviceA,
+            this.genTargetReps(this.currentSlot.repsMin, this.currentSlot.repsMax, this.currentSlot.sets)
+        );
+        const targetsB = this.getAdviceTargetRepsArray(
+            this.supersetCoachingAdviceB,
+            this.genTargetReps(this.supersetSlot.repsMin, this.supersetSlot.repsMax, this.supersetSlot.sets)
+        );
         
-        slotAData.sets[setIndex] = { weight: weightA, reps: repsA, completed: true, timestamp: Date.now() };
-        slotBData.sets[setIndex] = { weight: weightB, reps: repsB, completed: true, timestamp: Date.now() };
+        slotAData.sets[setIndex] = {
+            weight: weightA,
+            reps: repsA,
+            targetReps: targetsA[setIndex] || this.currentSlot.repsMax,
+            completed: true,
+            timestamp: Date.now()
+        };
+        slotBData.sets[setIndex] = {
+            weight: weightB,
+            reps: repsB,
+            targetReps: targetsB[setIndex] || this.supersetSlot.repsMax,
+            completed: true,
+            timestamp: Date.now()
+        };
 
         await db.saveCurrentWorkout(this.currentWorkout);
 
@@ -9980,56 +10156,13 @@ class App {
     }
     
     async continueSetsOverride() {
-        const slotData = this.currentWorkout?.slots?.[this.currentSlot?.id];
-        const setPlan = this.buildCoachSetPlan(this.currentSlot, this.currentCoachingAdvice);
-        if (!slotData || !setPlan.suggestedReductionSets) return;
-
-        this.userOverrideSets = true;
-        slotData.coachVolumeDecision = {
-            ...(slotData.coachVolumeDecision || {}),
-            status: 'continue_programmed',
-            dismissedSuggestedSets: setPlan.suggestedReductionSets,
-            programmedSets: setPlan.programmedSets,
-            suggestedSets: setPlan.suggestedReductionSets,
-            source: setPlan.reductionCandidate?.source || null,
-            reason: setPlan.reductionReason,
-            decidedAt: Date.now()
-        };
-
-        await db.saveCurrentWorkout(this.currentWorkout);
-
-        if (this.isUnilateralMode) {
-            this.renderUnilateralSeries();
-        } else {
-            this.renderSeries();
-        }
+        // Kept for compatibility with an old rendered workout. Volume choices
+        // are no longer accepted; the programmed sets are already displayed.
+        this.renderSeries();
     }
 
     async acceptSuggestedSetReduction() {
-        const slotData = this.currentWorkout?.slots?.[this.currentSlot?.id];
-        const setPlan = this.buildCoachSetPlan(this.currentSlot, this.currentCoachingAdvice);
-        if (!slotData || !setPlan.suggestedReductionSets) return;
-
-        slotData.coachVolumeDecision = {
-            ...(slotData.coachVolumeDecision || {}),
-            status: 'accepted_reduction',
-            acceptedTargetSets: setPlan.suggestedReductionSets,
-            programmedSets: setPlan.programmedSets,
-            suggestedSets: setPlan.suggestedReductionSets,
-            source: setPlan.reductionCandidate?.source || null,
-            reason: setPlan.reductionReason,
-            decidedAt: Date.now(),
-            protectedFromTrend: true
-        };
-
-        await db.saveCurrentWorkout(this.currentWorkout);
-
-        const completedSets = slotData.sets.filter(s => s?.completed).length;
-        if (completedSets >= setPlan.suggestedReductionSets && !this.isReviewMode) {
-            setTimeout(() => this.showExerciseSummary(), 150);
-            return;
-        }
-
+        this.showCoachToast('Le nombre de séries reste celui du programme.', 'hot', '🎯');
         this.renderSeries();
     }
     
@@ -10241,9 +10374,28 @@ class App {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         if (!slotData.setsLeft) slotData.setsLeft = [];
         if (!slotData.setsRight) slotData.setsRight = [];
+        const defaultTargets = this.genTargetReps(
+            this.currentSlot.repsMin,
+            this.currentSlot.repsMax,
+            this.currentSlot.sets
+        );
+        const leftTargets = this.getAdviceTargetRepsArray(this.unilateralCoachingAdviceLeft, defaultTargets);
+        const rightTargets = this.getAdviceTargetRepsArray(this.unilateralCoachingAdviceRight, defaultTargets);
         
-        slotData.setsLeft[setIndex] = { weight: weightLeft, reps: repsLeft, completed: true, timestamp: Date.now() };
-        slotData.setsRight[setIndex] = { weight: weightRight, reps: repsRight, completed: true, timestamp: Date.now() };
+        slotData.setsLeft[setIndex] = {
+            weight: weightLeft,
+            reps: repsLeft,
+            targetReps: leftTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
+            completed: true,
+            timestamp: Date.now()
+        };
+        slotData.setsRight[setIndex] = {
+            weight: weightRight,
+            reps: repsRight,
+            targetReps: rightTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
+            completed: true,
+            timestamp: Date.now()
+        };
 
         await db.saveCurrentWorkout(this.currentWorkout);
 
@@ -10358,9 +10510,16 @@ class App {
 
         // Save set data (RPE will be added during rest timer)
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
+        const defaultTargets = this.genTargetReps(
+            this.currentSlot.repsMin,
+            this.currentSlot.repsMax,
+            this.currentSlot.sets
+        );
+        const advisedTargets = this.getAdviceTargetRepsArray(this.currentCoachingAdvice, defaultTargets);
         slotData.sets[setIndex] = {
             weight,
             reps,
+            targetReps: advisedTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
             completed: true,
             timestamp: Date.now(),
             rpe: null, // Will be set during rest timer if user provides it
@@ -12098,7 +12257,7 @@ class App {
                             rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                             targetSetCount,
                             programmedSetCount,
-                            targetReps: targetRepsArray[i] || slot.repsMax,
+                            targetReps: setData.targetReps || targetRepsArray[i] || slot.repsMax,
                             targetRepsMin: slot.repsMin,
                             targetRepsMax: slot.repsMax,
                             targetRir: slot.rir,
@@ -12129,7 +12288,7 @@ class App {
                             rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                             targetSetCount,
                             programmedSetCount,
-                            targetReps: targetRepsArray[i] || slot.repsMax,
+                            targetReps: setData.targetReps || targetRepsArray[i] || slot.repsMax,
                             targetRepsMin: slot.repsMin,
                             targetRepsMax: slot.repsMax,
                             targetRir: slot.rir,
@@ -12164,7 +12323,7 @@ class App {
                         rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                         targetSetCount,
                         programmedSetCount,
-                        targetReps: targetRepsArray[i] || slot.repsMax,
+                        targetReps: setData.targetReps || targetRepsArray[i] || slot.repsMax,
                         targetRepsMin: slot.repsMin,
                         targetRepsMax: slot.repsMax,
                         targetRir: slot.rir,
@@ -15544,15 +15703,11 @@ class App {
         
         const adjustment = VOLUME_ADJUSTMENT_MATRIX[matrixKey] || VOLUME_ADJUSTMENT_MATRIX['stalled_moderate'];
         
-        // Calculate new sets respecting limits
-        let newSets = currentSets + adjustment.setChange;
-        newSets = Math.max(2, Math.min(maxSets, newSets)); // Clamp to valid range
-        
         return {
             ...adjustment,
+            setChange: 0,
             currentSets,
-            suggestedSets: newSets,
-            atVolumeLimit: newSets >= maxSets,
+            atVolumeLimit: currentSets >= maxSets,
             effortLevel
         };
     }
@@ -16167,6 +16322,9 @@ class App {
             romConstraint: null,
             ...(slot.progressionState || {})
         };
+        if (slot.progressionState.primaryAxis === 'sets') {
+            slot.progressionState.primaryAxis = progressionMode === 'load' ? 'load' : 'tempo';
+        }
 
         slot.capDetection = {
             userFlag: false,
@@ -16198,7 +16356,7 @@ class App {
     getNextProgressionAxis(mode, currentAxis, slot) {
         const bodyweightFamily = slot?.bodyweightProfile?.family || 'generic';
         const ladders = {
-            capped_load: ['reps', 'sets', 'tempo', 'pause', 'rom', 'density', 'variant', 'switch'],
+            capped_load: ['reps', 'tempo', 'pause', 'rom', 'density', 'variant', 'switch'],
             bodyweight_pullup: ['reps', slot?.bodyweightProfile?.allowExternalLoad ? 'load' : (slot?.bodyweightProfile?.allowAssistance ? 'assistance' : 'tempo'), 'tempo', 'pause', 'variant', 'switch'],
             bodyweight_dip: ['reps', slot?.bodyweightProfile?.allowExternalLoad ? 'load' : (slot?.bodyweightProfile?.allowAssistance ? 'assistance' : 'tempo'), 'tempo', 'pause', 'variant', 'switch'],
             bodyweight_pushup: ['reps', 'variant', 'tempo', 'pause', slot?.bodyweightProfile?.allowExternalLoad ? 'load' : 'rom', 'switch'],
@@ -16208,7 +16366,7 @@ class App {
 
         const ladder = mode === 'bodyweight'
             ? (ladders[`bodyweight_${bodyweightFamily}`] || ladders.bodyweight_generic)
-            : (ladders[mode] || ['load', 'sets', 'switch']);
+            : (ladders[mode] || ['load', 'reps', 'tempo', 'switch']);
         const currentIndex = ladder.indexOf(currentAxis);
         if (currentIndex === -1) return ladder[0];
         return ladder[Math.min(currentIndex + 1, ladder.length - 1)];
@@ -16303,32 +16461,13 @@ class App {
     getSlotTargetState(slot = this.currentSlot, slotData = null) {
         const programmedSets = Math.max(0, Number(slot?.sets) || 0);
         const resolvedSlotData = slotData || (slot?.id ? this.currentWorkout?.slots?.[slot.id] : null) || null;
-        const decision = resolvedSlotData?.coachVolumeDecision || null;
-        const acceptedTargetSets = Number.isFinite(Number(decision?.acceptedTargetSets))
-            && Number(decision.acceptedTargetSets) > 0
-            ? Number(decision.acceptedTargetSets)
-            : null;
-        const autoTargetSets = Number.isFinite(Number(resolvedSlotData?.autoTargetSets))
-            && Number(resolvedSlotData.autoTargetSets) > 0
-            ? Number(resolvedSlotData.autoTargetSets)
-            : null;
-        let activeTargetSets = programmedSets;
-        let source = 'programmed';
-
-        if (acceptedTargetSets != null) {
-            activeTargetSets = Math.min(programmedSets, acceptedTargetSets);
-            source = 'manual';
-        } else if (autoTargetSets != null) {
-            activeTargetSets = Math.min(programmedSets, autoTargetSets);
-            source = resolvedSlotData?.autoTargetSource || 'auto';
-        }
 
         return {
             programmedSets,
-            activeTargetSets,
-            autoTargetSets,
-            decision,
-            source
+            activeTargetSets: programmedSets,
+            autoTargetSets: null,
+            decision: resolvedSlotData?.coachVolumeDecision || null,
+            source: 'programmed'
         };
     }
 
@@ -16423,10 +16562,12 @@ class App {
                     sets: workout.programmedSetCount || workout.targetSetCount || workout.sets.length
                 };
             }
-            const setsWithExplicitRpe = workout.sets.filter(set => this.hasExplicitRpe(set));
-            workout.hasRealRpe = setsWithExplicitRpe.length > 0;
-            workout.avgRpe = setsWithExplicitRpe.length > 0
-                ? setsWithExplicitRpe.reduce((sum, set) => sum + set.rpe, 0) / setsWithExplicitRpe.length
+            const setsWithUserRpe = workout.sets.filter(set => (
+                set?.rpe != null && this.getSetRpeSource(set) === 'user'
+            ));
+            workout.hasRealRpe = setsWithUserRpe.length > 0;
+            workout.avgRpe = setsWithUserRpe.length > 0
+                ? setsWithUserRpe.reduce((sum, set) => sum + set.rpe, 0) / setsWithUserRpe.length
                 : null;
         }
 
@@ -17287,16 +17428,26 @@ class App {
             || adjusted.type === 'reactive_deload'
             || adjusted.type === 'deload_mini'
             || adjusted.isDeload;
-        let volumeSuggestionSource = isDeloadAdvice ? 'deload' : null;
 
         if (lmsData) {
             this.currentLMSData = lmsData;
-            if (lmsData.adjustedSets !== lmsData.originalSets) {
-                adjusted.suggestedSets = Math.min(
-                    adjusted.suggestedSets || lmsData.adjustedSets,
-                    lmsData.adjustedSets
+            const readinessLoadChange = Number(lmsData.loadChange || 0);
+            const suggestedWeight = Number(adjusted.suggestedWeight);
+            if (
+                !isDeloadAdvice
+                && readinessLoadChange < 0
+                && Number.isFinite(suggestedWeight)
+                && suggestedWeight > 0
+            ) {
+                const referenceWeight = Number(adjusted.referenceWeight || suggestedWeight);
+                const readinessWeight = this.normalizeLoadPrecision(
+                    referenceWeight * (1 + (readinessLoadChange / 100))
                 );
-                volumeSuggestionSource = volumeSuggestionSource || 'lms';
+                adjusted.suggestedWeight = Math.min(suggestedWeight, readinessWeight);
+                adjusted.referenceWeight = referenceWeight;
+                adjusted.weightTrend = adjusted.suggestedWeight < referenceWeight ? 'down' : adjusted.weightTrend;
+                adjusted.title = 'Version prudente';
+                adjusted.message = `${lmsData.message} Conserve toutes les séries prévues et ajuste seulement la charge si l’échauffement confirme la gêne.`;
             }
         }
 
@@ -17316,8 +17467,8 @@ class App {
 
         adjusted.decisionReasons = reasons.slice(0, 3);
         adjusted.autoAdjustSets = false;
-        adjusted.volumeSuggestionSource = volumeSuggestionSource;
-        adjusted.volumeSuggestionOnly = Boolean(volumeSuggestionSource);
+        adjusted.volumeSuggestionSource = null;
+        adjusted.volumeSuggestionOnly = false;
 
         adjusted.contextConfidence = Math.round((((trendSummary?.confidence || 0.35) + ((sessionContext?.readinessScore || 70) / 100)) / 2) * 100) / 100;
         adjusted.sessionContext = sessionContext || null;
@@ -17617,12 +17768,8 @@ class App {
         // Isolation: RPE 10 allowed, Compound: max RPE 9 for safety
         const maxSafeRpe = isIsolation ? 10 : 9;
         
-        // VOLUME MANAGEMENT: Track current slot sets for potential volume ramp
-        // Apply LMS adjustment if available
-        let currentProgrammedSets = slot.sets || 3;
-        if (lmsData && lmsData.adjustedSets !== undefined) {
-            currentProgrammedSets = lmsData.adjustedSets;
-        }
+        // The program owns volume; LMS never changes set count.
+        const currentProgrammedSets = slot.sets || 3;
         const maxSetsPerExercise = isIsolation ? 6 : 5; // MRV caps (scientific: diminishing returns)
         const minSetsPerExercise = 2; // MEV floor
         
@@ -17788,11 +17935,10 @@ class App {
                 type: 'reactive_deload',
                 icon: 'warning',
                 title: '🔋 Semaine légère conseillée',
-                message: `Ton corps montre des signes de fatigue. Fais ${Math.max(2, Math.ceil(slot.sets * 0.5))} séries au lieu de ${slot.sets} pour récupérer et revenir plus fort.`,
-                suggestedWeight: workouts[0]?.maxWeight || '?',
-                weightTrend: 'same',
+                message: `Ton corps montre plusieurs signes de fatigue. Conserve les ${slot.sets} séries prévues, baisse légèrement la charge et garde 3 à 4 reps en réserve.`,
+                suggestedWeight: workouts[0]?.maxWeight ? this.normalizeLoadPrecision(workouts[0].maxWeight * 0.925) : '?',
+                weightTrend: 'down',
                 suggestedReps: targetReps,
-                suggestedSets: Math.max(2, Math.ceil(slot.sets * 0.5)),
                 advancedData: advancedAnalysis
             };
         }
@@ -18353,34 +18499,13 @@ class App {
             }
         }
         
-        // === STAGNATION RESPONSES - VOLUME-FIRST APPROACH FOR HYPERTROPHY ===
-        // Scientific basis: Volume is PRIMARY driver of hypertrophy (Schoenfeld, Israetel)
-        // Progressive overload via VOLUME before switching exercises
+        // === STAGNATION RESPONSES ===
+        // The program owns set volume; coaching changes reps/load only.
         
         if (consecutiveStagnation >= 1 && consecutiveStagnation <= 2) {
-            // Light stagnation - first check if we can add volume
-            const canAddVolume = currentProgrammedSets < maxSetsPerExercise;
             const deficitMsg = totalTargetDeficit > 0 
                 ? `Il te manque ${totalTargetDeficit} reps pour valider. ` 
                 : '';
-            
-            // STAGNATION 2: Suggest adding 1 set (volume ramp) if possible
-            if (consecutiveStagnation === 2 && canAddVolume) {
-                const newSets = currentProgrammedSets + 1;
-                const newTargetReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, newSets));
-                return {
-                    type: 'volume_up',
-                    icon: 'increase',
-                    title: '📈 Augmente le volume !',
-                    message: `2 séances sans progression = signal d'adaptation. Passe à ${newSets} séries pour forcer une nouvelle réponse. Le volume est le levier #1 pour la masse.`,
-                    suggestedWeight: lastWeight,
-                    weightTrend: 'same',
-                    suggestedReps: newTargetReps,
-                    suggestedSets: newSets,
-                    volumeAction: 'add_set',
-                    scienceNote: 'Volume = driver principal d\'hypertrophie (MEV → MRV)'
-                };
-            }
             
             return {
                 type: 'maintain',
@@ -18394,37 +18519,15 @@ class App {
         }
         
         if (consecutiveStagnation === 3) {
-            // 3 sessions: Try volume increase FIRST, not deload
-            const canAddVolume = currentProgrammedSets < maxSetsPerExercise;
-            
-            if (canAddVolume) {
-                const newSets = currentProgrammedSets + 1;
-                const newTargetReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, newSets));
-                return {
-                    type: 'volume_up',
-                    icon: 'increase',
-                    title: '📈 Volume = Progression',
-                    message: `3 séances au même niveau. Ajoute 1 série (${newSets} total) : plus de stimulus = plus de croissance. Tu n'as pas encore atteint ton MRV.`,
-                    suggestedWeight: lastWeight,
-                    weightTrend: 'same',
-                    suggestedReps: newTargetReps,
-                    suggestedSets: newSets,
-                    volumeAction: 'add_set'
-                };
-            }
-            
-            // At MRV: mini-deload then reset volume
-            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, minSetsPerExercise));
+            const deloadReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, slot.sets));
             return {
                 type: 'deload_mini',
                 icon: 'warning',
-                title: '🔋 Mini-deload stratégique',
-                message: `Volume max atteint (${currentProgrammedSets} séries). Fais ${minSetsPerExercise} séries cette fois, puis reprends à 3 séries avec un poids légèrement supérieur.`,
-                suggestedWeight: lastWeight,
-                weightTrend: 'same',
-                suggestedReps: deloadReps,
-                suggestedSets: minSetsPerExercise,
-                volumeAction: 'reset_cycle'
+                title: '🔋 Micro-reset stratégique',
+                message: `Trois séances au même niveau. Conserve les ${slot.sets} séries et baisse la charge d’un palier pour reconstruire les reps propres.`,
+                suggestedWeight: this.normalizeLoadPrecision(Math.max(0, lastWeight - weightIncrement)),
+                weightTrend: 'down',
+                suggestedReps: deloadReps
             };
         }
         
@@ -18493,8 +18596,8 @@ class App {
                 return {
                     type: 'very_hot',
                     title: '🔥 Journée exceptionnelle !',
-                    message: `Performance +10% vs moyenne ! C'est le moment de pousser : vise le haut de ta plage ou ajoute une série bonus pour capitaliser.`,
-                    actionable: 'Ajoute 1 série ou +2-3 reps par série',
+                    message: `Performance +10% vs moyenne ! Vise le haut de ta plage avec les séries prévues, sans aller à l’échec.`,
+                    actionable: 'Ajoute 1 à 2 reps propres par série',
                     scienceNote: 'Pics de performance = fenêtre d\'adaptation maximale'
                 };
             }
@@ -18594,20 +18697,14 @@ class App {
         const adjustedAdvice = { ...baseAdvice };
         
         if (phenotype === 'HIGH_RESPONDER') {
-            // Fast-twitch dominant: fewer sets, more rest, lower rep ranges
-            if (adjustedAdvice.suggestedSets) {
-                adjustedAdvice.suggestedSets = Math.max(2, adjustedAdvice.suggestedSets - 1);
-            }
-            adjustedAdvice.phenotypeNote = 'Ton profil (fatigue rapide) suggère moins de séries mais plus intenses';
+            adjustedAdvice.phenotypeNote = 'Ton profil fatigue vite: conserve les séries prévues avec davantage de repos';
             adjustedAdvice.restRecommendation = '2-3 min de repos entre séries';
         } else if (phenotype === 'LOW_RESPONDER') {
-            // Slow-twitch dominant: more sets tolerated, shorter rest OK
-            if (adjustedAdvice.suggestedSets && adjustedAdvice.suggestedSets < 6) {
-                adjustedAdvice.suggestedSets = adjustedAdvice.suggestedSets + 1;
-            }
-            adjustedAdvice.phenotypeNote = 'Ton profil (endurance) te permet plus de volume';
+            adjustedAdvice.phenotypeNote = 'Ton profil est endurant: conserve les séries prévues et cherche les reps propres';
             adjustedAdvice.restRecommendation = '60-90s de repos suffisent';
         }
+
+        delete adjustedAdvice.suggestedSets;
         
         return adjustedAdvice;
     }

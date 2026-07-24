@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '2026-06-10-1';
+const SW_VERSION = '4.7.0';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';

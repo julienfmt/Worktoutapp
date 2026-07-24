@@ -9,6 +9,7 @@
     <meta name="theme-color" content="#ffffff">
     <title>Muscu - Training App</title>
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -218,7 +219,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.6</span>
+                    <span class="app-version">v4.7.0</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -1530,7 +1531,16 @@
     <script>
         // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(reg => {
+            const APP_VERSION = '4.7.0';
+            let isReloadingForUpdate = false;
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (isReloadingForUpdate) return;
+                isReloadingForUpdate = true;
+                window.location.reload();
+            });
+
+            navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).then(reg => {
                 // Check for updates on load
                 reg.update();
                 
@@ -1540,11 +1550,10 @@
                     if (!newSW) return;
                     
                     newSW.addEventListener('statechange', () => {
-                        // When new SW is installed and there's an existing controller (old SW)
+                        // The worker calls skipWaiting(); controllerchange reloads only
+                        // after the new version has actually taken control.
                         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-                            // New version available - reload to activate it
-                            console.log('New version available - reloading...');
-                            window.location.reload();
+                            console.log(`Muscu v${APP_VERSION} prête à être activée.`);
                         }
                     });
                 });
