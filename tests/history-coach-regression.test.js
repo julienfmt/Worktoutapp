@@ -4,7 +4,15 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
-const backup = JSON.parse(fs.readFileSync(path.join(root, 'muscu-backup-2026-07-24.json'), 'utf8'));
+const backupCandidates = [
+    process.env.MUSCU_BACKUP_PATH,
+    path.join(root, 'muscu-backup-2026-07-24.json')
+].filter(Boolean);
+const backupPath = backupCandidates.find(candidate => fs.existsSync(candidate));
+if (!backupPath) {
+    throw new Error('Backup de test introuvable. Définis MUSCU_BACKUP_PATH vers un export Muscu valide.');
+}
+const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
 const settings = new Map((backup.settings || []).map(setting => [setting.key, setting.value]));
 const stores = {
     sessions: backup.sessions || [],
@@ -82,6 +90,14 @@ async function run() {
     const app = new App();
     const curlName = 'Curl marteau à la corde';
     const reversePecDeck = 'Reverse pec deck';
+
+    const unmappedStrengthSlots = stores.slots.filter(slot => slot.trackingMode !== 'cardio')
+        .filter(slot => app.getExerciseMuscleContributions(slot.activeExercise || slot.name, slot).length === 0);
+    assert.equal(
+        unmappedStrengthSlots.length,
+        0,
+        `all imported strength slots need a muscle mapping: ${unmappedStrengthSlots.map(slot => slot.name).join(', ')}`
+    );
 
     const curlSets = await app.getSetHistoryForExercise(curlName);
     assert.ok(curlSets.some(set => set.id === 2637), 'the real F6 curl session must remain');

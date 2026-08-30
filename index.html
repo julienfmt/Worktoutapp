@@ -14,8 +14,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="streak-score.css">
+    <link rel="stylesheet" href="styles.css?v=4.9.4">
+    <link rel="stylesheet" href="streak-score.css?v=4.9.4">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -219,7 +219,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.7.0</span>
+                    <span class="app-version">v4.9.4</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -322,6 +322,7 @@
                 <div class="header-center">
                     <div class="exercise-slot-label" id="exercise-slot-label">A1</div>
                     <h1 id="current-exercise-name">Exercice</h1>
+                    <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
                 <div class="header-spacer"></div>
             </header>
@@ -503,8 +504,17 @@
                 <!-- Unilateral Coaching Advice (shown only for unilateral exercises) -->
                 <div class="coaching-advice coaching-advice-unilateral" id="unilateral-coaching-container" style="display: none;">
                     <div class="coaching-advice-header">
-                        <span class="coaching-advice-icon">🔄</span>
-                        <span class="coaching-advice-title">Conseils Unilatéral</span>
+                        <div class="coaching-advice-heading">
+                            <span class="coaching-advice-icon" aria-hidden="true">↔</span>
+                            <div class="coaching-advice-heading-copy">
+                                <span class="coaching-advice-eyebrow">Coach</span>
+                                <span class="coaching-advice-title">Lecture gauche / droite</span>
+                            </div>
+                        </div>
+                        <span class="coaching-advice-chip">Optionnel</span>
+                    </div>
+                    <div class="coaching-advice-summary coaching-summary-primary">
+                        Les deux côtés sont suivis séparément. Tu peux suivre, modifier ou ignorer chaque conseil.
                     </div>
                     
                     <!-- Left Side Advice -->
@@ -554,6 +564,38 @@
                 <div class="series-list" id="series-list">
                     <!-- Séries générées dynamiquement -->
                 </div>
+
+                <section class="exercise-control-card" id="exercise-control-card" aria-label="Contrôle libre de l'exercice" hidden>
+                    <div class="exercise-control-copy">
+                        <span class="exercise-control-eyebrow">Contrôle libre</span>
+                        <strong id="exercise-volume-value">3 séries programmées</strong>
+                        <small id="exercise-volume-note">Le plan est une suggestion : tu gardes toujours la main.</small>
+                    </div>
+                    <div class="exercise-control-actions">
+                        <button type="button" class="btn btn-control-step" id="btn-volume-minus" aria-label="Retirer une série">−</button>
+                        <button type="button" class="btn btn-control-step" id="btn-volume-plus" aria-label="Ajouter une série">+</button>
+                        <button type="button" class="btn btn-secondary btn-skip-exercise" id="btn-skip-exercise">Passer l’exercice</button>
+                    </div>
+                </section>
+
+                <section class="live-adaptation-card" id="live-adaptation-card" aria-live="polite" hidden>
+                    <div class="live-adaptation-header">
+                        <div>
+                            <span class="live-adaptation-eyebrow">Lecture en séance</span>
+                            <strong id="live-adaptation-title">Signal détecté</strong>
+                        </div>
+                        <span class="live-adaptation-badge" id="live-adaptation-badge">Suggestion</span>
+                    </div>
+                    <p class="live-adaptation-message" id="live-adaptation-message"></p>
+                    <div class="live-adaptation-metrics" id="live-adaptation-metrics"></div>
+                    <div class="live-adaptation-actions">
+                        <button type="button" class="btn btn-primary" id="btn-live-apply-load" hidden>Appliquer</button>
+                        <button type="button" class="btn btn-secondary" id="btn-live-apply-volume" hidden>Réduire le volume</button>
+                        <button type="button" class="btn btn-secondary" id="btn-live-open-substitution" hidden>Voir les variantes</button>
+                        <button type="button" class="btn btn-ghost" id="btn-live-dismiss">Ignorer</button>
+                    </div>
+                    <small class="live-adaptation-footnote">Aucune modification n’est appliquée sans ton accord.</small>
+                </section>
 
                 <!-- Logbook - Dernière séance -->
                 <div class="exercise-progress-card" id="exercise-progress-card" style="display: none;">
@@ -829,6 +871,9 @@
                         <button class="btn btn-timer-skip" id="btn-timer-skip" type="button">Passer</button>
                         <button class="btn btn-timer" id="btn-timer-plus" type="button">+15s</button>
                     </div>
+                    <button class="btn btn-timer-notification" id="btn-timer-notification" type="button" hidden>
+                        🔔 Activer la notification de fin de repos
+                    </button>
                     <button class="btn btn-timer-stop" id="btn-timer-stop" type="button">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                             <rect x="6" y="6" width="12" height="12" rx="2"/>
@@ -1104,12 +1149,12 @@
                 <div class="pool-header" id="pool-header">
                     <!-- Message de stagnation si applicable -->
                 </div>
-                <h3>Choisir une variante</h3>
-                <p class="pool-subtitle">Remplace l'exercice actuel par une variante de la pool</p>
+                <h3 id="pool-title">Choisir une variante</h3>
+                <p class="pool-subtitle" id="pool-subtitle">Remplace l'exercice actuel par une variante de la pool</p>
                 <div class="pool-list" id="pool-list">
                     <!-- Exercices de la pool générés dynamiquement -->
                 </div>
-                <button class="btn btn-ghost pool-ignore" id="btn-pool-ignore">
+                <button class="btn btn-ghost pool-ignore" id="btn-pool-ignore" type="button">
                     Ignorer pour l'instant
                 </button>
             </div>
@@ -1525,13 +1570,13 @@
     </div>
 
     <script src="db.js"></script>
-    <script src="data.js"></script>
-    <script src="app.js"></script>
+    <script src="data.js?v=4.9.4"></script>
+    <script src="app.js?v=4.9.4"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
-            const APP_VERSION = '4.7.0';
+            const APP_VERSION = '4.9.4';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

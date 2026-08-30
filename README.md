@@ -8,6 +8,10 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 📈 Statistiques : volume, fréquence des séances, XP, motivation dynamique.
 - ⏱️ Timer de repos avec persistance même si l’app passe en arrière-plan.
 - 📒 Logbook automatique des séries (setHistory) et recommandations/coaching.
+- 🧠 Adaptation facultative en séance : lecture des chutes de reps/charge, repos conseillé, charge suivante et volume ajustable sans modification automatique.
+- ↔️ Exercices unilatéraux suivis côté gauche/droit, avec suggestions indépendantes, équilibre estimé et validation d’un seul côté à la fois.
+- 🔁 Pools de substitutions enrichies : groupe musculaire, format, équipement et compatibilité visibles avant tout changement.
+- 🗂️ Une substitution en cours de séance archive les séries déjà réalisées avec le bon exercice pour préserver l’historique et les statistiques.
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
@@ -21,7 +25,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 ## Structure des fichiers
 - `index.html` : structure des écrans (accueil, séance, exercice, paramètres, bottom sheets, modals).
 - `styles.css` : design mobile-first et composants (cards, boutons, charts, overlays, etc.).
-- `app.js` : logique principale (navigation, timers, logbook, coaching, charts, import/export, superset, progression, etc.).
+- `app.js` : logique principale (navigation, timers, logbook, coaching adaptatif, analyse gauche/droite, substitutions, charts, import/export, superset, progression, etc.).
 - `data.js` : données de départ (séances Bras/Pecs A/B et slots associés).
 - `db.js` : couche IndexedDB (stores `sessions`, `slots`, `workoutHistory`, `setHistory`, `settings`, `currentWorkout`).
 - `sw.js` : service worker et cache des assets.

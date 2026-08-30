@@ -1,16 +1,17 @@
 // Service Worker for offline support
-const SW_VERSION = '4.7.0';
+const SW_VERSION = '4.9.4';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css',
-    './streak-score.css',
+    './styles.css?v=4.9.4',
+    './streak-score.css?v=4.9.4',
     './db.js',
-    './data.js',
+    './data.js?v=4.9.4',
     './app.js',
+    './app.js?v=4.9.4',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'
@@ -125,4 +126,19 @@ self.addEventListener('fetch', (event) => {
     }
 
     event.respondWith(handleAsset(event.request));
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil((async () => {
+        const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const existingClient = windowClients.find(client => 'focus' in client);
+        if (existingClient) {
+            await existingClient.focus();
+            return;
+        }
+        if (self.clients.openWindow) {
+            await self.clients.openWindow('./');
+        }
+    })());
 });

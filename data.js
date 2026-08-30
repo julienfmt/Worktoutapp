@@ -2783,6 +2783,7 @@ const EXERCISE_MUSCLE_MAP = {
     'db shoulder press': { primary: ['epaules'], secondary: ['triceps'] },
     'landmine press': { primary: ['epaules'], secondary: ['pectoraux', 'triceps'] },
     'développé militaire': { primary: ['epaules'], secondary: ['triceps'] },
+    'développé haltères épaules': { primary: ['epaules'], secondary: ['triceps'] },
     'overhead': { primary: ['epaules'], secondary: ['triceps'] },
     'élévation latérale': { primary: ['epaules'], secondary: [] },
     'élévations latérales': { primary: ['epaules'], secondary: [] },
@@ -2806,6 +2807,8 @@ const EXERCISE_MUSCLE_MAP = {
     'rowing poitrine appuyée': { primary: ['dos'], secondary: ['biceps'] },
     'rowing bas machine': { primary: ['dos'], secondary: ['biceps'] },
     'rowing unilatéral': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing horizontal assis': { primary: ['dos'], secondary: ['biceps'] },
+    'rowing assis haut coudes ouverts': { primary: ['dos'], secondary: ['epaules', 'biceps'] },
     'lat pulldown prise large': { primary: ['dos'], secondary: ['biceps'] },
     'lat pulldown prise neutre': { primary: ['dos'], secondary: ['biceps'] },
     'lat pulldown unilatéral': { primary: ['dos'], secondary: ['biceps'] },
@@ -2854,6 +2857,8 @@ const EXERCISE_MUSCLE_MAP = {
     
     // ABS / CORE
     'abdominal crunch machine': { primary: ['abdominaux'], secondary: [] },
+    'cable woodchopper': { primary: ['abdominaux'], secondary: ['lombaires'] },
+    'captain chair knee raise': { primary: ['abdominaux'], secondary: [] },
     'cable crunch': { primary: ['abdominaux'], secondary: [] },
     'crunch': { primary: ['abdominaux'], secondary: [] },
     
