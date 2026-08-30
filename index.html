@@ -14,8 +14,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=4.9.4">
-    <link rel="stylesheet" href="streak-score.css?v=4.9.4">
+    <link rel="stylesheet" href="styles.css?v=4.10.6">
+    <link rel="stylesheet" href="streak-score.css?v=4.10.6">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -219,7 +219,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.9.4</span>
+                    <span class="app-version">v4.10.6</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -324,7 +324,24 @@
                     <h1 id="current-exercise-name">Exercice</h1>
                     <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
-                <div class="header-spacer"></div>
+                <div class="exercise-header-actions">
+                    <button
+                        type="button"
+                        class="exercise-header-tool"
+                        id="btn-open-exercise-insights"
+                        aria-label="Ouvrir les outils optionnels de l'exercice"
+                        title="Outils optionnels"
+                        aria-controls="sheet-exercise-insights"
+                        hidden
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                            <path d="M4 6h16M4 12h16M4 18h16"></path>
+                            <circle cx="9" cy="6" r="1.8" fill="currentColor" stroke="none"></circle>
+                            <circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none"></circle>
+                            <circle cx="11" cy="18" r="1.8" fill="currentColor" stroke="none"></circle>
+                        </svg>
+                    </button>
+                </div>
             </header>
 
             <main class="exercise-content">
@@ -787,6 +804,10 @@
                         <div class="timer-context-title" id="timer-context-title">Exercice</div>
                         <div class="timer-context-metrics" id="timer-context-metrics"></div>
                         <p class="timer-context-note" id="timer-context-note"></p>
+                        <div class="timer-rest-suggestion" id="timer-rest-suggestion" hidden>
+                            <span id="timer-rest-suggestion-copy"></span>
+                            <button type="button" class="btn btn-timer-suggestion" id="btn-use-rest-suggestion">Utiliser la suggestion</button>
+                        </div>
                     </div>
 
                     <div class="timer-ring">
@@ -903,6 +924,9 @@
                     </div>
                     <div class="summary-pr-list" id="summary-pr-list"></div>
                     <div class="summary-badges" id="summary-badges"></div>
+                    <button class="btn btn-secondary btn-large summary-ghost-button" id="btn-share-exercise-ghost" type="button">
+                        ↗ Partager ce résultat (optionnel)
+                    </button>
                     <button class="btn btn-primary btn-large" id="btn-back-to-session">
                         Retour à la séance
                     </button>
@@ -1160,6 +1184,57 @@
             </div>
         </div>
 
+        <!-- Bottom Sheet Outils optionnels de l'exercice -->
+        <div class="bottom-sheet" id="sheet-exercise-insights">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large exercise-insights-sheet">
+                <div class="sheet-handle"></div>
+                <div class="sheet-titlebar exercise-insights-titlebar">
+                    <div class="sheet-titlebar-spacer"></div>
+                    <div class="exercise-insights-heading">
+                        <span class="exercise-insights-eyebrow">À la demande</span>
+                        <h3>Outils de l'exercice</h3>
+                    </div>
+                    <button type="button" class="btn-icon-small exercise-insights-close" id="btn-close-exercise-insights" aria-label="Fermer les outils">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M6 6l12 12M18 6L6 18"></path>
+                        </svg>
+                    </button>
+                </div>
+                <p class="exercise-insights-subtitle">Des aides facultatives pour cette séance. Rien ne modifie ton plan sans ton accord.</p>
+
+                <section class="optional-insight-card warmup-card" id="warmup-card" aria-label="Échauffement optionnel" hidden>
+                    <div class="optional-insight-header">
+                        <div>
+                            <span class="optional-insight-eyebrow">Optionnel · hors statistiques</span>
+                            <strong>Échauffement intelligent</strong>
+                            <small>Quelques rampes proposées selon ta charge. Tu peux les ignorer ou cocher uniquement les étapes utiles.</small>
+                        </div>
+                        <button type="button" class="btn btn-ghost optional-insight-toggle" id="btn-warmup-toggle" aria-expanded="false">Afficher</button>
+                    </div>
+                    <div class="optional-insight-body" id="warmup-body" hidden>
+                        <div class="warmup-list" id="warmup-list"></div>
+                        <small class="optional-insight-footnote">Ces étapes ne comptent jamais comme séries de travail.</small>
+                    </div>
+                </section>
+
+                <section class="optional-insight-card recovery-map-card" id="recovery-map-card" aria-label="Carte de récupération" hidden>
+                    <div class="optional-insight-header">
+                        <div>
+                            <span class="optional-insight-eyebrow">Lecture indicative</span>
+                            <strong>Carte de récupération</strong>
+                            <small>Expositions récentes, séries effectives estimées et recouvrements secondaires.</small>
+                        </div>
+                        <button type="button" class="btn btn-ghost optional-insight-toggle" id="btn-recovery-map-toggle" aria-expanded="false">Voir la carte</button>
+                    </div>
+                    <div class="optional-insight-body" id="recovery-map-body" hidden>
+                        <div class="recovery-map-list" id="recovery-map-list"></div>
+                        <small class="optional-insight-footnote" id="recovery-map-note">Estimation indicative.</small>
+                    </div>
+                </section>
+            </div>
+        </div>
+
         <!-- Modal Reprendre Séance -->
         <div class="modal" id="modal-resume-session">
             <div class="modal-backdrop"></div>
@@ -1334,6 +1409,27 @@
                         <div class="settings-slider-value">
                             <span id="setting-lock-weeks-value">4</span> semaines minimum
                         </div>
+                    </div>
+                </div>
+
+                <div class="settings-divider"></div>
+                <h4 class="settings-group-title">📲 Confort pendant la séance</h4>
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="2" width="14" height="20" rx="2"/>
+                            <path d="M9 18h6"/>
+                            <path d="M8 6h8"/>
+                        </svg>
+                        Garder l’écran actif
+                    </h4>
+                    <p class="settings-description">Le navigateur peut empêcher l’écran de se verrouiller pendant un exercice. C’est facultatif, dépend de l’appareil et peut consommer davantage de batterie.</p>
+                    <div class="settings-toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-wake-lock" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Autoriser si disponible</span>
                     </div>
                 </div>
 
@@ -1570,13 +1666,13 @@
     </div>
 
     <script src="db.js"></script>
-    <script src="data.js?v=4.9.4"></script>
-    <script src="app.js?v=4.9.4"></script>
+    <script src="data.js?v=4.10.6"></script>
+    <script src="app.js?v=4.10.6"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
-            const APP_VERSION = '4.9.4';
+            const APP_VERSION = '4.10.6';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

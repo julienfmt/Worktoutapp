@@ -494,9 +494,11 @@ class App {
         this.restTimerCompletionTimeout = null;
         this.restTimeLeft = 0;
         this.restTimeTotal = 0;
+        this.restTimerStartedAt = null;
         this.restOverlayReady = false;
         this.restFeedbackCaptured = false;
         this.restTimerReason = '';
+        this.restTimerRecommendation = null;
         this.overlayTimerMode = null;
         this.cardioTimerState = null;
         this.restTimerStyle = null;
@@ -540,6 +542,10 @@ class App {
         this.exerciseHistoryIndexPromise = null;
         this.exerciseHistoryResultCache = new Map();
         this.activeExerciseLoadToken = null;
+        this.wakeLock = null;
+        this.wakeLockRequestInFlight = false;
+        this.exerciseInsightRenderToken = 0;
+        this.currentExerciseGhostData = null;
     }
 
     async init() {
@@ -559,6 +565,11 @@ class App {
         
         await this.loadCurrentWorkout();
         await this.loadCustomExerciseLibrary();
+        await this.migrateExerciseIdentityMetadata();
+        const storedWakeLockPreference = await db.getSetting('wakeLockEnabled');
+        if (storedWakeLockPreference != null && typeof localStorage !== 'undefined') {
+            localStorage.setItem('wakeLockEnabled', storedWakeLockPreference === false ? 'disabled' : 'enabled');
+        }
         this.renderExerciseLibraryDatalist();
         this.bindEvents();
         this.setupVisibilityHandler();
@@ -570,6 +581,7 @@ class App {
         if (!onboardingShown) {
             await this.checkPendingSession();
         }
+        this.checkGhostHash();
     }
 
     createEmptyHomeDataSnapshot() {
@@ -1968,6 +1980,7 @@ class App {
 
         window.addEventListener('pagehide', () => {
             void this.flushPendingWorkoutSave();
+            void this.releaseScreenWakeLock();
         });
 
         window.addEventListener('beforeunload', () => {
@@ -1976,6 +1989,7 @@ class App {
     }
     
     onAppResume() {
+        void this.syncScreenWakeLock();
         // Check if there's an active timer in localStorage
         const timerEndTime = localStorage.getItem('restTimerEndTime');
         if (timerEndTime) {
@@ -1988,7 +2002,19 @@ class App {
                 const storedTotal = Number(localStorage.getItem('restTimerTotalTime'));
                 this.restTimeTotal = Number.isFinite(storedTotal) && storedTotal > 0 ? storedTotal : remaining;
                 this.restTimeLeft = remaining;
+                const storedStart = Number(localStorage.getItem('restTimerStartedAt'));
+                this.restTimerStartedAt = Number.isFinite(storedStart) && storedStart > 0
+                    ? storedStart
+                    : this.restTimerEndTime - (this.restTimeTotal * 1000);
                 this.restTimerReason = localStorage.getItem('restTimerReason') || '';
+                try {
+                    const storedRecommendation = JSON.parse(localStorage.getItem('restTimerRecommendation') || 'null');
+                    this.restTimerRecommendation = Number(storedRecommendation?.seconds) > remaining
+                        ? storedRecommendation
+                        : null;
+                } catch (error) {
+                    this.restTimerRecommendation = null;
+                }
                 this.restFeedbackCaptured = false;
                 
                 // Show timer overlay if not already visible
@@ -2011,6 +2037,9 @@ class App {
                 localStorage.removeItem('restTimerEndTime');
                 localStorage.removeItem('restTimerTotalTime');
                 localStorage.removeItem('restTimerReason');
+                localStorage.removeItem('restTimerStartedAt');
+                localStorage.removeItem('restTimerRecommendation');
+                this.restTimerRecommendation = null;
                 if (this.currentScreen === 'exercise') {
                     this.onTimerComplete();
                 }
@@ -2023,6 +2052,7 @@ class App {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(`screen-${screenId}`).classList.add('active');
         this.currentScreen = screenId;
+        void this.syncScreenWakeLock();
     }
 
     getSuggestedSessionIndex(sessions, history, fallbackIndex = 0) {
@@ -2881,6 +2911,7 @@ class App {
             const rpe = this.getStatsRpe(set, slot) || 8;
             const e1rm = this.calculateE1RM(weight, reps, rpe);
             if (e1rm <= 0) continue;
+            const progressionEligible = !this.isSetExcludedFromProgression(set);
 
             const setDate = this.getSafeDate(set.date);
             const exerciseId = this.resolveHistoricalSetExerciseId(set, slotMap);
@@ -2901,25 +2932,29 @@ class App {
             }
 
             const workout = workouts.get(workoutId);
-            workout.bestE1RM = Math.max(workout.bestE1RM, e1rm);
+            if (progressionEligible) {
+                workout.bestE1RM = Math.max(workout.bestE1RM, e1rm);
+            }
             workout.volume += this.getSetLoadedVolume(set, slot);
             workout.sets += 1;
             workout.reps += reps;
 
-            const previousBest = bestByExercise.get(exerciseId) || 0;
-            if (previousBest > 0 && e1rm > previousBest * 1.002 && setDate && setDate >= start30) {
-                prCount30 += 1;
-            }
-            bestByExercise.set(exerciseId, Math.max(previousBest, e1rm));
+            if (progressionEligible) {
+                const previousBest = bestByExercise.get(exerciseId) || 0;
+                if (previousBest > 0 && e1rm > previousBest * 1.002 && setDate && setDate >= start30) {
+                    prCount30 += 1;
+                }
+                bestByExercise.set(exerciseId, Math.max(previousBest, e1rm));
 
-            if (!bestLift || e1rm > bestLift.e1rm) {
-                bestLift = {
-                    exerciseId,
-                    e1rm,
-                    weight,
-                    reps,
-                    date: set.date
-                };
+                if (!bestLift || e1rm > bestLift.e1rm) {
+                    bestLift = {
+                        exerciseId,
+                        e1rm,
+                        weight,
+                        reps,
+                        date: set.date
+                    };
+                }
             }
         }
 
@@ -5034,7 +5069,6 @@ class App {
             primaryMuscles,
             secondaryMuscles,
             muscleName: muscleInfo.name,
-            muscleIconKey: muscleInfo.iconKey,
             lmsScore: worstPrimaryLMS,
             lmsLabel: lmsInfo.label,
             lmsIconKey: lmsInfo.iconKey,
@@ -5749,7 +5783,30 @@ class App {
 
     async loadCustomExerciseLibrary() {
         const savedLibrary = await db.getSetting('customExerciseLibrary');
-        this.customExerciseLibrary = Array.isArray(savedLibrary) ? savedLibrary : [];
+        const rawLibrary = Array.isArray(savedLibrary) ? savedLibrary : [];
+        let changed = false;
+        this.customExerciseLibrary = rawLibrary.map(entry => {
+            if (!entry || typeof entry !== 'object' || !entry.name) return entry;
+            const stableId = entry.stableId || entry.exerciseStableId
+                || `exercise:${this.slugifyExerciseIdentity(entry.identityKey || entry.name)}`;
+            const familyId = entry.familyId || entry.exerciseFamilyId
+                || `family:${this.slugifyExerciseIdentity(entry.identityKey || entry.name)}`;
+            const nextEntry = {
+                ...entry,
+                stableId,
+                exerciseId: entry.exerciseId || stableId,
+                familyId
+            };
+            if (nextEntry.stableId !== entry.stableId
+                || nextEntry.exerciseId !== entry.exerciseId
+                || nextEntry.familyId !== entry.familyId) {
+                changed = true;
+            }
+            return nextEntry;
+        });
+        if (changed) {
+            await db.setSetting('customExerciseLibrary', this.customExerciseLibrary);
+        }
     }
 
     async saveCustomExerciseLibrary(library) {
@@ -5842,6 +5899,7 @@ class App {
             || !exerciseName
             || this.normalizeExerciseText(sourceExerciseName) === this.normalizeExerciseText(exerciseName);
         const definition = this.findExerciseLibraryEntry(exerciseName)
+            || this.findSemanticLibraryEntry(exerciseName)
             || this.inferCustomExerciseTemplate(exerciseName || 'Exercice custom', {
                 preferLibraryMatch: true,
                 allowCardioInference: true
@@ -5912,7 +5970,7 @@ class App {
             .filter(Boolean);
         const tags = [];
         if (primaryMuscle) {
-            tags.push(`<span class="exercise-header-tag exercise-header-tag-muscle">${renderAppIcon(primaryMuscle.iconKey, { size: 13, label: primaryMuscle.name })}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`);
+            tags.push(`<span class="exercise-header-tag exercise-header-tag-muscle">${renderMuscleMarker()}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`);
         }
         if (secondaryNames.length > 0) {
             tags.push(`<span class="exercise-header-tag">avec ${this.escapeHtml(secondaryNames.join(' · '))}</span>`);
@@ -5958,6 +6016,342 @@ class App {
             ];
             return searchableNames.some(name => this.normalizeExerciseText(name) === normalizedName);
         }) || null;
+    }
+
+    slugifyExerciseIdentity(value = '') {
+        return String(value || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 96) || 'custom-exercise';
+    }
+
+    stripExerciseIdentityModifiers(exerciseName = '') {
+        return this.normalizeExerciseText(exerciseName)
+            .replace(/\([^)]*\)/g, ' ')
+            .replace(/\b(unilateral|unilat(?:e|é)ral|unilat|single arm|single leg|one arm|one leg|left|right|gauche|droite)\b/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    getExerciseSideFromIdentity(exerciseName = '') {
+        const normalized = this.normalizeExerciseText(exerciseName);
+        if (/\b(gauche|left)\b/.test(normalized) || /\(gauche\)$/.test(normalized)) return 'left';
+        if (/\b(droite|right)\b/.test(normalized) || /\(droite\)$/.test(normalized)) return 'right';
+        return null;
+    }
+
+    findExerciseLibraryEntryByStableId(stableId) {
+        const target = String(stableId || '').trim();
+        if (!target) return null;
+        return this.getExerciseLibrary().find(entry =>
+            String(entry?.stableId || entry?.exerciseId || '') === target
+        ) || null;
+    }
+
+    findSemanticLibraryEntry(exerciseName) {
+        const rawName = String(exerciseName || '').trim();
+        if (!rawName) return null;
+
+        const direct = this.findExerciseLibraryEntryByNameOrAlias(rawName);
+        if (direct) return direct;
+
+        const rawNormalized = this.normalizeExerciseText(rawName);
+        const normalized = this.stripExerciseIdentityModifiers(rawName);
+        if (!normalized) return null;
+        const rawWithoutSide = rawNormalized.replace(/\s+(gauche|droite|left|right)$/i, '').trim();
+        const identityAlias = (typeof EXERCISE_IDENTITY_ALIASES !== 'undefined'
+            ? EXERCISE_IDENTITY_ALIASES[rawNormalized]
+                || EXERCISE_IDENTITY_ALIASES[rawWithoutSide]
+                || EXERCISE_IDENTITY_ALIASES[normalized]
+            : null);
+        if (identityAlias) {
+            const aliasedEntry = this.findExerciseLibraryEntryByNameOrAlias(identityAlias);
+            if (aliasedEntry) return aliasedEntry;
+        }
+        const semanticAliases = {
+            'cable lateral raise': ['élévation latérale poulie'],
+            'cable lateral raise unilateral': ['élévation latérale poulie'],
+            'machine lateral raise': ['élévation latérale machine'],
+            'dumbbell lateral raise': ['élévation latérale'],
+            'cable row': ['rowing poulie assise', 'rowing horizontal assis'],
+            'seated cable row': ['rowing poulie assise', 'rowing horizontal assis'],
+            'chest press machine convergente': ['Chest press machine convergente'],
+            'incline smith machine press': ['Développé incliné smith'],
+            'low to high cable fly': ['Low-to-high cable fly', 'Écarté poulie basse'],
+            'high to low cable fly': ['Crossover haut vers bas']
+        };
+        const aliases = semanticAliases[normalized] || [];
+        const aliasNormalized = new Set(aliases.map(alias => this.normalizeExerciseText(alias)));
+
+        return this.getExerciseLibrary().find(entry => {
+            const candidates = [
+                entry?.name,
+                ...(entry?.aliases || []),
+                entry?.identityKey
+            ].filter(Boolean).map(name => this.stripExerciseIdentityModifiers(name));
+            return candidates.includes(normalized) || candidates.some(candidate => aliasNormalized.has(candidate));
+        }) || null;
+    }
+
+    getStableExerciseId(exerciseOrName) {
+        if (!exerciseOrName) return '';
+        if (typeof exerciseOrName === 'object') {
+            const explicit = exerciseOrName.exerciseStableId || exerciseOrName.stableId;
+            if (explicit) return String(explicit);
+            if (exerciseOrName.exerciseId && String(exerciseOrName.exerciseId).startsWith('exercise:')) {
+                return String(exerciseOrName.exerciseId);
+            }
+        }
+
+        const name = this.getSlotExerciseName(exerciseOrName) || String(exerciseOrName || '');
+        const cleanName = this.getBaseExerciseHistoryName(name).replace(/:(left|right)$/i, '');
+        if (cleanName.startsWith('exercise:')) return cleanName;
+        const entry = this.findExerciseLibraryEntry(cleanName) || this.findSemanticLibraryEntry(cleanName);
+        return String(entry?.stableId || entry?.exerciseId || `exercise:${this.slugifyExerciseIdentity(cleanName)}`);
+    }
+
+    getExerciseFamilyId(exerciseOrName) {
+        if (!exerciseOrName) return '';
+        if (typeof exerciseOrName === 'object' && exerciseOrName.exerciseFamilyId) {
+            return String(exerciseOrName.exerciseFamilyId);
+        }
+        const name = this.getSlotExerciseName(exerciseOrName) || String(exerciseOrName || '');
+        const cleanName = this.getBaseExerciseHistoryName(name);
+        const entry = this.findExerciseLibraryEntry(cleanName) || this.findSemanticLibraryEntry(cleanName);
+        if (entry?.familyId || entry?.movementFamilyId) {
+            return String(entry.familyId || entry.movementFamilyId);
+        }
+        return `family:${this.slugifyExerciseIdentity(this.stripExerciseIdentityModifiers(cleanName))}`;
+    }
+
+    getUnilateralStableExerciseId(exerciseOrName, side = null) {
+        const stableId = this.getStableExerciseId(exerciseOrName);
+        const normalizedSide = side === 'gauche' || side === 'left' ? 'left'
+            : side === 'droite' || side === 'right' ? 'right' : null;
+        return normalizedSide ? `${stableId}:${normalizedSide}` : stableId;
+    }
+
+    getSemanticExerciseProfile(exerciseOrName, fallbackSlot = null) {
+        const descriptor = this.getExerciseDescriptor(exerciseOrName, fallbackSlot);
+        const name = this.getSlotExerciseName(exerciseOrName) || descriptor.name || '';
+        const normalized = this.normalizeExerciseText(name);
+        const equipmentText = this.normalizeExerciseText([descriptor.equipment, name].filter(Boolean).join(' '));
+        const includes = (...keywords) => keywords.some(keyword => normalized.includes(this.normalizeExerciseText(keyword)));
+        let movementPattern = 'other';
+        if (descriptor.trackingMode === 'cardio' || includes('course', 'marche', 'natation', 'vélo', 'bike', 'corde à sauter', 'prowler', 'sled')) {
+            movementPattern = 'cardio';
+        } else if (includes('rotation externe', 'cuban', 'face pull')) {
+            movementPattern = 'rear_delt_rotation';
+        } else if (includes('élévation latérale', 'lateral raise', 'élévation y')) {
+            movementPattern = 'shoulder_abduction';
+        } else if (includes('oiseau', 'reverse pec', 'rear delt')) {
+            movementPattern = 'rear_delt';
+        } else if (includes('woodchopper', 'rotation', 'crunch', 'ab wheel', 'relevé', 'knee raise', 'gainage', 'dead bug', 'pallof')) {
+            movementPattern = includes('rotation', 'woodchopper', 'pallof') ? 'trunk_rotation' : 'trunk_flexion';
+        } else if (includes('leg curl', 'curl jambes', 'nordic')) {
+            movementPattern = 'knee_flexion';
+        } else if (includes('squat', 'presse à cuisses', 'leg press', 'fente', 'split squat', 'leg extension', 'extension quadriceps')) {
+            movementPattern = 'knee_dominant';
+        } else if (includes('soulevé de terre', 'deadlift', 'romanian', 'rdl', 'hip thrust', 'pull through', 'back extension', 'extension lombaire')) {
+            movementPattern = 'hip_hinge';
+        } else if (includes('mollet', 'calf')) {
+            movementPattern = 'calf_raise';
+        } else if (includes('curl', 'flexion biceps', 'hammer')) {
+            movementPattern = 'elbow_flexion';
+        } else if (includes('pushdown', 'extension triceps', 'barre au front', 'kickback', 'dips triceps')) {
+            movementPattern = 'elbow_extension';
+        } else if (includes('tirage vertical', 'lat pulldown', 'traction', 'pull up', 'chin up')) {
+            movementPattern = 'vertical_pull';
+        } else if (includes('rowing', 'row', 'tirage horizontal', 'seated row')) {
+            movementPattern = 'horizontal_pull';
+        } else if (includes('développé militaire', 'shoulder press', 'overhead press', 'arnold press', 'landmine press')) {
+            movementPattern = 'vertical_push';
+        } else if (includes('développé', 'chest press', 'bench press', 'pompe', 'push up', 'écarté', 'fly', 'pec deck', 'dips')) {
+            movementPattern = 'horizontal_push';
+        }
+
+        let equipmentCategory = 'other';
+        if (descriptor.trackingMode === 'cardio') equipmentCategory = 'cardio';
+        else if (includes('poulie', 'cable')) equipmentCategory = 'cable';
+        else if (includes('machine', 'pec deck', 'smith')) equipmentCategory = 'machine';
+        else if (includes('haltère', 'dumbbell')) equipmentCategory = 'dumbbell';
+        else if (includes('barre', 'barbell', 'ez')) equipmentCategory = 'barbell';
+        else if (includes('élastique', 'band')) equipmentCategory = 'band';
+        else if (includes('poids du corps', 'bodyweight', 'gainage', 'pompe', 'traction')) equipmentCategory = 'bodyweight';
+
+        const loadingProfile = descriptor.loadingProfile || fallbackSlot?.loadingProfile || '';
+        const resistanceProfile = loadingProfile === 'bodyweight' || equipmentCategory === 'bodyweight'
+            ? 'bodyweight'
+            : equipmentCategory === 'cable' || loadingProfile === 'machine_stack' ? 'cable_constant'
+                : equipmentCategory === 'machine' ? 'machine_curve'
+                    : equipmentCategory === 'band' ? 'band_variable'
+                        : descriptor.trackingMode === 'cardio' ? 'cardio' : 'free_weight';
+        const stretch = this.getStretchBiasCue(name);
+        const primaryMuscles = Array.from(new Set(descriptor.primaryMuscles || [])).filter(Boolean);
+        const secondaryMuscles = Array.from(new Set(descriptor.secondaryMuscles || [])).filter(muscle => !primaryMuscles.includes(muscle));
+
+        return {
+            stableId: this.getStableExerciseId(exerciseOrName),
+            familyId: this.getExerciseFamilyId(exerciseOrName),
+            name,
+            primaryMuscles,
+            secondaryMuscles,
+            movementPattern,
+            unilateral: this.isUnilateralExercise(name),
+            equipment: descriptor.equipment || equipmentCategory,
+            equipmentCategory,
+            resistanceProfile,
+            lengthBias: stretch?.bias || 'neutral',
+            type: descriptor.type || 'compound',
+            trackingMode: descriptor.trackingMode || 'strength',
+            confidence: primaryMuscles.length > 0 && movementPattern !== 'other' ? 'high' : primaryMuscles.length > 0 ? 'medium' : 'low'
+        };
+    }
+
+    getExerciseSubstitutionEquivalence(activeExercise, candidateExercise, options = {}) {
+        const active = this.getSemanticExerciseProfile(activeExercise, options.fallbackSlot || null);
+        const candidate = this.getSemanticExerciseProfile(candidateExercise, options.fallbackSlot || null);
+        const jaccard = (a = [], b = []) => {
+            const left = new Set(a);
+            const right = new Set(b);
+            if (!left.size && !right.size) return 1;
+            const union = new Set([...left, ...right]);
+            const intersection = [...left].filter(value => right.has(value));
+            return union.size ? intersection.length / union.size : 0;
+        };
+        const primary = jaccard(active.primaryMuscles, candidate.primaryMuscles);
+        const secondary = jaccard(active.secondaryMuscles, candidate.secondaryMuscles);
+        const movement = active.movementPattern === candidate.movementPattern ? 1
+            : (active.movementPattern === 'other' || candidate.movementPattern === 'other' ? 0.35 : 0);
+        const unilateral = active.unilateral === candidate.unilateral ? 1 : 0.35;
+        const equipment = active.equipmentCategory === candidate.equipmentCategory ? 1
+            : (['cable', 'machine'].includes(active.equipmentCategory) && ['cable', 'machine'].includes(candidate.equipmentCategory) ? 0.65 : 0.35);
+        const resistance = active.resistanceProfile === candidate.resistanceProfile ? 1
+            : (active.resistanceProfile === 'free_weight' && candidate.resistanceProfile === 'machine_curve' ? 0.55 : 0.3);
+        const length = active.lengthBias === candidate.lengthBias ? 1 : 0.45;
+        const type = active.type === candidate.type ? 1 : 0.45;
+        const score = Math.round(100 * (
+            primary * 0.30
+            + movement * 0.20
+            + secondary * 0.10
+            + unilateral * 0.10
+            + equipment * 0.08
+            + resistance * 0.08
+            + length * 0.06
+            + type * 0.08
+        ));
+        const warnings = [];
+        if (primary === 0) warnings.push('groupe principal différent');
+        if (movement === 0) warnings.push('pattern de mouvement différent');
+        if (active.unilateral !== candidate.unilateral) warnings.push('format gauche/droite différent');
+        if (active.trackingMode !== candidate.trackingMode) warnings.push('suivi charge/reps ou durée différent');
+        const level = score >= 85 ? 'high' : score >= 70 ? 'good' : score >= 50 ? 'partial' : 'low';
+        const labels = {
+            high: 'Très proche',
+            good: 'Bonne équivalence',
+            partial: 'Équivalence partielle',
+            low: 'Cible différente'
+        };
+        return {
+            score,
+            percent: score,
+            level,
+            label: labels[level],
+            sameStimulus: score >= 70,
+            confidence: active.confidence === 'high' && candidate.confidence === 'high' ? 'haute' : 'moyenne',
+            details: [
+                primary > 0 ? `${Math.round(primary * 100)}% muscles principaux communs` : 'Muscles principaux différents',
+                movement === 1 ? 'même pattern de mouvement' : 'pattern à vérifier',
+                equipment === 1 ? 'même famille de matériel' : 'matériel différent',
+                resistance === 1 ? 'profil de résistance similaire' : 'courbe de résistance différente'
+            ],
+            warnings,
+            profileA: active,
+            profileB: candidate
+        };
+    }
+
+    async migrateExerciseIdentityMetadata({ force = false } = {}) {
+        const version = await db.getSetting('exerciseIdentityVersion');
+        if (!force && version >= 3) return;
+
+        try {
+            const [slots, setHistory, currentWorkout] = await Promise.all([
+                db.getAll('slots'),
+                db.getAll('setHistory'),
+                db.getCurrentWorkout()
+            ]);
+            for (const slot of slots) {
+                if (!slot) continue;
+                const stableId = this.getStableExerciseId(slot);
+                const familyId = this.getExerciseFamilyId(slot);
+                if (slot.exerciseStableId !== stableId || slot.exerciseFamilyId !== familyId) {
+                    await db.put('slots', { ...slot, exerciseStableId: stableId, exerciseFamilyId: familyId });
+                }
+            }
+            for (const set of setHistory) {
+                if (!set) continue;
+                const legacyName = set.exerciseName || set.exerciseId || '';
+                const side = set.side || this.getExerciseSideFromIdentity(legacyName);
+                const baseName = this.getBaseExerciseHistoryName(legacyName);
+                const stableId = set.exerciseStableId || this.getStableExerciseId(baseName);
+                const familyId = set.exerciseFamilyId || this.getExerciseFamilyId(baseName);
+                const nextSet = {
+                    ...set,
+                    exerciseStableId: side ? this.getUnilateralStableExerciseId(baseName, side) : stableId,
+                    exerciseFamilyId: familyId,
+                    ...(side ? { side } : {})
+                };
+                if (nextSet.exerciseStableId !== set.exerciseStableId || nextSet.exerciseFamilyId !== set.exerciseFamilyId || (side && set.side !== side)) {
+                    await db.put('setHistory', nextSet);
+                }
+            }
+
+            // A workout can be resumed before it is archived. Migrate that
+            // snapshot too, otherwise the first post-update sets would still
+            // use the old name-only identity.
+            if (currentWorkout?.slots && typeof currentWorkout.slots === 'object') {
+                let workoutTouched = false;
+                const nextWorkout = {
+                    ...currentWorkout,
+                    slots: { ...currentWorkout.slots }
+                };
+                for (const [slotId, slotData] of Object.entries(currentWorkout.slots)) {
+                    if (!slotData || typeof slotData !== 'object') continue;
+                    const slot = slots.find(item => String(item?.id) === String(slotId));
+                    const exerciseName = slot?.activeExercise || slot?.name
+                        || slotData.meta?.activeExercise || slotData.meta?.exerciseName
+                        || slotData.exerciseName || '';
+                    if (!exerciseName) continue;
+                    const stableId = this.getStableExerciseId(exerciseName);
+                    const familyId = this.getExerciseFamilyId(exerciseName);
+                    const previousMeta = slotData.meta && typeof slotData.meta === 'object' ? slotData.meta : {};
+                    const nextMeta = {
+                        ...previousMeta,
+                        exerciseStableId: stableId,
+                        exerciseFamilyId: familyId
+                    };
+                    const nextSlotData = {
+                        ...slotData,
+                        meta: nextMeta,
+                        exerciseStableId: slotData.exerciseStableId || stableId,
+                        exerciseFamilyId: slotData.exerciseFamilyId || familyId
+                    };
+                    if (JSON.stringify(nextSlotData) !== JSON.stringify(slotData)) {
+                        nextWorkout.slots[slotId] = nextSlotData;
+                        workoutTouched = true;
+                    }
+                }
+                if (workoutTouched) await db.saveCurrentWorkout(nextWorkout);
+            }
+            await db.setSetting('exerciseIdentityVersion', 3);
+            this.invalidateExerciseHistoryCaches();
+        } catch (error) {
+            console.warn('Migration des identités d’exercices ignorée:', error);
+        }
     }
 
     getBaseExerciseHistoryName(exerciseId) {
@@ -6053,7 +6447,8 @@ class App {
         const exactHistoryName = historyNames.get(this.normalizeExerciseText(rawName));
         if (exactHistoryName) return exactHistoryName;
 
-        const libraryEntry = this.findExerciseLibraryEntryByNameOrAlias(rawName);
+        const libraryEntry = this.findExerciseLibraryEntryByNameOrAlias(rawName)
+            || this.findSemanticLibraryEntry(rawName);
         const identityCandidates = [
             libraryEntry?.name,
             ...(libraryEntry?.aliases || [])
@@ -6072,13 +6467,17 @@ class App {
         if (!rawName) return [];
 
         const baseName = this.getBaseExerciseHistoryName(rawName);
+        const stableEntry = this.findExerciseLibraryEntryByStableId(rawName.replace(/:(left|right)$/i, ''));
         const libraryEntry = this.findExerciseLibraryEntryByNameOrAlias(rawName)
-            || this.findExerciseLibraryEntryByNameOrAlias(baseName);
+            || this.findExerciseLibraryEntryByNameOrAlias(baseName)
+            || this.findSemanticLibraryEntry(baseName)
+            || stableEntry;
         const candidates = [
             rawName,
             baseName,
             libraryEntry?.name,
-            ...(libraryEntry?.aliases || [])
+            ...(libraryEntry?.aliases || []),
+            libraryEntry?.identityKey
         ]
             .map(name => String(name || '').trim())
             .filter(Boolean);
@@ -6113,6 +6512,14 @@ class App {
     }
 
     setMatchesExerciseIdentity(set, exerciseId, slotLookup = new Map()) {
+        const targetStableId = this.getStableExerciseId(exerciseId);
+        if (targetStableId && set?.exerciseStableId) {
+            const targetSide = this.getExerciseSideFromIdentity(exerciseId)
+                || (String(exerciseId).endsWith(':left') ? 'left' : String(exerciseId).endsWith(':right') ? 'right' : null);
+            const setSide = set.side || (String(set.exerciseStableId).endsWith(':left') ? 'left' : String(set.exerciseStableId).endsWith(':right') ? 'right' : null);
+            const stableMatches = String(set.exerciseStableId).replace(/:(left|right)$/i, '') === targetStableId;
+            if (stableMatches && (!targetSide || !setSide || targetSide === setSide)) return true;
+        }
         const targetNames = this.getExerciseIdentityCandidates(exerciseId);
         if (!targetNames.length) return false;
 
@@ -6131,23 +6538,35 @@ class App {
         if (!cleanExerciseId) return [];
 
         const includeLegacy = options.includeLegacy !== false;
-        const cacheKey = `${includeLegacy ? 'legacy' : 'direct'}:${this.normalizeExerciseText(cleanExerciseId)}`;
+        const stableId = this.getStableExerciseId(cleanExerciseId);
+        const requestedSide = this.getExerciseSideFromIdentity(cleanExerciseId)
+            || (/:left$/i.test(cleanExerciseId) ? 'left' : /:right$/i.test(cleanExerciseId) ? 'right' : null);
+        const cacheKey = `${includeLegacy ? 'legacy' : 'direct'}:${stableId || this.normalizeExerciseText(cleanExerciseId)}:${requestedSide || 'both'}`;
         if (this.exerciseHistoryResultCache.has(cacheKey)) {
             return [...this.exerciseHistoryResultCache.get(cacheKey)];
         }
 
         const directSets = await db.getByIndex('setHistory', 'exerciseId', cleanExerciseId);
+        const allSets = stableId ? await db.getAll('setHistory') : [];
+        const stableSets = allSets.filter(set => {
+            if (!set?.exerciseStableId) return false;
+            const setStableId = String(set.exerciseStableId).replace(/:(left|right)$/i, '');
+            if (setStableId !== stableId) return false;
+            const setSide = set.side || (String(set.exerciseStableId).match(/:(left|right)$/i)?.[1]?.toLowerCase() || null);
+            return !requestedSide || !setSide || setSide === requestedSide;
+        });
         if (!includeLegacy) {
-            this.exerciseHistoryResultCache.set(cacheKey, directSets);
-            return [...directSets];
+            const directMerged = [...directSets, ...stableSets.filter(set => !directSets.some(item => item?.id === set?.id))];
+            this.exerciseHistoryResultCache.set(cacheKey, directMerged);
+            return [...directMerged];
         }
 
         const [historyIndex, targetNames] = await Promise.all([
             this.getExerciseHistoryLegacyIndex(),
             Promise.resolve(this.getExerciseIdentityCandidates(cleanExerciseId))
         ]);
-        const seen = new Set(directSets.map((set, index) => set?.id ?? `direct-${index}`));
-        const merged = [...directSets];
+        const seen = new Set([...directSets, ...stableSets].map((set, index) => set?.id ?? `direct-${index}`));
+        const merged = [...directSets, ...stableSets.filter(set => !directSets.some(item => item?.id === set?.id))];
 
         targetNames.forEach((name) => {
             const normalizedName = this.normalizeExerciseText(name);
@@ -6549,6 +6968,8 @@ class App {
             muscleGroup: exercise.muscleGroup || '',
             instructions: exercise.instructions || '',
             activeExercise,
+            exerciseStableId: this.getStableExerciseId(exercise),
+            exerciseFamilyId: this.getExerciseFamilyId(exercise),
             pool,
             trackingMode: exercise.trackingMode || 'strength'
         };
@@ -6584,6 +7005,8 @@ class App {
             trackingMode: slot?.trackingMode || this.getTrackingMode(activeExercise),
             progressionMode: slot?.progressionMode || null,
             loadingProfile: slot?.loadingProfile || null,
+            stableId: slot?.exerciseStableId || null,
+            familyId: slot?.exerciseFamilyId || null,
             variants
         };
     }
@@ -6967,7 +7390,7 @@ class App {
         const safeSlotId = this.escapeHtml(slot.slotId || '');
         const safeExerciseName = this.escapeHtml(exerciseName);
         const muscleBadge = primaryMuscle
-            ? `<span class="slot-muscle-tag">${renderAppIcon(primaryMuscle.iconKey, { size: 13, label: primaryMuscle.name })}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`
+            ? `<span class="slot-muscle-tag">${renderMuscleMarker()}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`
             : '';
         const formatBadge = this.isUnilateralExercise(exerciseName)
             ? '<span class="slot-format-tag">Unilatéral</span>'
@@ -7161,6 +7584,9 @@ class App {
     
     // ===== Exercise Screen =====
     async openExercise(slotId) {
+        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
+        if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
+        this.closeExerciseInsightsSheet();
         this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
         this.supersetSlot = null; // Reset superset
@@ -7169,6 +7595,9 @@ class App {
         this.isReviewMode = this.areSlotsCompleted([slotId]);
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.nextUnilateralSuggestedWeights = null;
+        this.currentExerciseGhostData = null;
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) ghostButton.hidden = true;
         this.userOverrideSets = false; // Reset deload override when changing exercise
         this.editingSetIndex = null; // Reset edit mode
         this.liveAdaptationAnalysis = null;
@@ -7283,6 +7712,8 @@ class App {
         }
         
         this.showScreen('exercise');
+        void this.syncScreenWakeLock();
+        void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
         
         // Check if there's an active timer from before
         this.onAppResume();
@@ -7303,6 +7734,7 @@ class App {
                 this.renderUnilateralLogbook();
                 this.renderExerciseNotes();
                 this.renderUnilateralSeries();
+                void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
                 return;
             }
 
@@ -7326,6 +7758,7 @@ class App {
                 this.getDisplayedSetCount(this.currentSlot, this.currentCoachingAdvice, slotData);
             this.renderExerciseNotes();
             this.renderSeries();
+            void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
         })();
     }
     
@@ -7377,7 +7810,8 @@ class App {
                 totalReps: workout.totalReps,
                 maxWeight: workout.maxWeight,
                 isDeload: workout.isDeload,
-                cycleWeek: workout.cycleWeek
+                cycleWeek: workout.cycleWeek,
+                ...this.buildExerciseHistoryMetrics(workout.sets, this.currentSlot)
             };
         });
     }
@@ -7507,7 +7941,30 @@ class App {
             for (const set of history.sets) {
                 html += `<span class="unilateral-logbook-set">${this.formatSetResult(set, set.exerciseId || this.currentSlot)}</span>`;
             }
-            html += '</div></div>';
+            html += `</div>
+                <div class="logbook-summary">
+                    <div class="logbook-summary-item">
+                        <span class="logbook-summary-label">TOTAL REPS</span>
+                        <span class="logbook-summary-value">${history.totalReps}</span>
+                    </div>
+                    <div class="logbook-summary-item">
+                        <span class="logbook-summary-label">CHARGE MAX</span>
+                        <span class="logbook-summary-value">${history.maxWeight > 0 ? `${history.maxWeight} kg` : 'PDC'}</span>
+                    </div>
+                    ${history.bestE1RM > 0 ? `
+                    <div class="logbook-summary-item logbook-summary-item-derived">
+                        <span class="logbook-summary-label">e1RM ESTIMÉ</span>
+                        <span class="logbook-summary-value">${this.normalizeLoadPrecision(history.bestE1RM)} kg</span>
+                    </div>
+                    ` : ''}
+                </div>
+                ${history.qualityLabels?.length || history.averageRestSeconds ? `
+                    <div class="logbook-session-annotations">
+                        ${history.qualityLabels?.length ? `<span>🏷️ ${this.escapeHtml(history.qualityLabels.join(' · '))}</span>` : ''}
+                        ${history.averageRestSeconds ? `<span>⏱️ repos moyen ${history.averageRestSeconds}s</span>` : ''}
+                    </div>
+                ` : ''}
+            </div>`;
         });
         
         contentEl.innerHTML = html;
@@ -7515,6 +7972,9 @@ class App {
     
     // ===== SuperSet Exercise Screen =====
     async openSuperset(slotId) {
+        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
+        if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
+        this.closeExerciseInsightsSheet();
         this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
         if (!this.currentSlot || !this.currentSlot.supersetWith) return;
@@ -7528,6 +7988,9 @@ class App {
         
         this.isSupersetMode = true;
         this.isReviewMode = this.areSlotsCompleted([slotId, this.currentSlot.supersetWith]);
+        this.currentExerciseGhostData = null;
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) ghostButton.hidden = true;
         document.getElementById('exercise-control-card')?.setAttribute('hidden', '');
         document.getElementById('live-adaptation-card')?.setAttribute('hidden', '');
         this.supersetCoachingAdviceA = null;
@@ -7596,6 +8059,7 @@ class App {
         this.renderUnifiedSupersetLogbook();
         this.renderSupersetSeries();
         this.showScreen('exercise');
+        void this.renderOptionalExerciseInsights(this.currentSlot, this.currentWorkout.slots[slotId]);
         
         // Check if there's an active timer from before
         this.onAppResume();
@@ -7649,7 +8113,8 @@ class App {
     }
 
     evaluateWorkoutAgainstTargets(workout, slot, options = {}) {
-        if (!workout?.sets?.length) {
+        const progressionSets = this.getProgressionEligibleSets(workout?.sets || []);
+        if (!progressionSets.length) {
             return {
                 successRate: 0,
                 allSetsHitTargets: false,
@@ -7661,9 +8126,8 @@ class App {
         }
 
         const repCeiling = options.repCeiling || slot.repsMax;
-        const targetSetCount = Math.max(Number(slot.sets) || Number(workout.programmedSetCount) || workout.sets.length, 1);
-        const sets = [...workout.sets]
-            .filter(set => Number(set?.reps) > 0)
+        const targetSetCount = Math.max(Number(slot.sets) || Number(workout.programmedSetCount) || progressionSets.length, 1);
+        const sets = [...progressionSets]
             .sort((a, b) => Number(a.setNumber || 0) - Number(b.setNumber || 0))
             .slice(0, targetSetCount);
         const targetArray = Array.isArray(options.targetArray) && options.targetArray.length
@@ -7706,7 +8170,7 @@ class App {
     }
 
     getWorkoutEffortEvidence(workout) {
-        const sets = Array.isArray(workout?.sets) ? workout.sets : [];
+        const sets = this.getProgressionEligibleSets(workout?.sets || []);
         const userRpeSets = sets.filter(set => set?.rpe != null && this.getSetRpeSource(set) === 'user');
         const legacyRpeSets = sets.filter(set => set?.rpe != null && this.getSetRpeSource(set) === 'legacy');
         const sample = userRpeSets.length ? userRpeSets : legacyRpeSets;
@@ -7728,11 +8192,15 @@ class App {
 
     getWorkoutRepVector(workout, setCount) {
         const count = Math.max(1, Number(setCount) || 1);
-        return [...(workout?.sets || [])]
-            .filter(set => Number(set?.reps) > 0)
+        return [...this.getProgressionEligibleSets(workout?.sets || [])]
             .sort((a, b) => Number(a.setNumber || 0) - Number(b.setNumber || 0))
             .slice(0, count)
             .map(set => Number(set.reps));
+    }
+
+    getWorkoutProgressionTotalReps(workout) {
+        return this.getProgressionEligibleSets(workout?.sets || [])
+            .reduce((sum, set) => sum + Number(set.reps || 0), 0);
     }
 
     inferExerciseLoadIncrement(workouts = [], slot = {}, fallbackIncrement = 1) {
@@ -7925,7 +8393,7 @@ class App {
 
         this.currentHistoricalBestE1RM = workouts.length
             ? Math.max(
-                ...workouts.flatMap(workout => workout.sets.map(set =>
+                ...workouts.flatMap(workout => this.getProgressionEligibleSets(workout.sets).map(set =>
                     this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)
                 )),
                 0
@@ -7987,8 +8455,9 @@ class App {
 
     getBestWorkoutE1RM(workout) {
         if (!workout?.sets?.length) return 0;
+        const progressionSets = this.getProgressionEligibleSets(workout.sets);
         return Math.max(
-            ...workout.sets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
+            ...progressionSets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
             0
         );
     }
@@ -9023,7 +9492,8 @@ class App {
                 totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
                 maxWeight: Math.max(...workout.sets.map(s => s.weight || 0)),
                 isDeload: workout.isDeload,
-                cycleWeek: workout.cycleWeek
+                cycleWeek: workout.cycleWeek,
+                ...this.buildExerciseHistoryMetrics(workout.sets, this.supersetSlot)
             };
         });
         this.supersetProgressHistory = trendWorkouts.map(wId => {
@@ -9035,7 +9505,8 @@ class App {
                 totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
                 maxWeight: Math.max(...workout.sets.map(s => s.weight || 0)),
                 isDeload: workout.isDeload,
-                cycleWeek: workout.cycleWeek
+                cycleWeek: workout.cycleWeek,
+                ...this.buildExerciseHistoryMetrics(workout.sets, this.supersetSlot)
             };
         });
         
@@ -9095,7 +9566,25 @@ class App {
                     <span class="logbook-summary-label">CHARGE MAX</span>
                     <span class="logbook-summary-value">${history.maxWeight} kg</span>
                 </div>
+                ${history.bestE1RM > 0 ? `
+                <div class="logbook-summary-item logbook-summary-item-derived">
+                    <span class="logbook-summary-label">e1RM ESTIMÉ</span>
+                    <span class="logbook-summary-value">${this.normalizeLoadPrecision(history.bestE1RM)} kg</span>
+                </div>
+                ` : ''}
+                ${history.totalVolume > 0 ? `
+                <div class="logbook-summary-item logbook-summary-item-derived">
+                    <span class="logbook-summary-label">VOLUME</span>
+                    <span class="logbook-summary-value">${this.formatVolume(history.totalVolume)} kg</span>
+                </div>
+                ` : ''}
             </div>
+            ${history.qualityLabels?.length || history.averageRestSeconds ? `
+                <div class="logbook-session-annotations">
+                    ${history.qualityLabels?.length ? `<span>🏷️ ${this.escapeHtml(history.qualityLabels.join(' · '))}</span>` : ''}
+                    ${history.averageRestSeconds ? `<span>⏱️ repos moyen ${history.averageRestSeconds}s</span>` : ''}
+                </div>
+            ` : ''}
         `;
         
         logbookContent.innerHTML = html;
@@ -9258,11 +9747,13 @@ class App {
                             <span class="superset-completed-badge badge-a">A</span>
                             <span class="superset-completed-name">${nameA}</span>
                             <span class="superset-completed-value">${this.formatSetResult(setAData, this.currentSlot)}</span>
+                            ${this.renderSetQualityControls(setAData, i, 'superset-a', this.currentSlot.id)}
                         </div>
                         <div class="superset-completed-exercise exercise-b">
                             <span class="superset-completed-badge badge-b">B</span>
                             <span class="superset-completed-name">${nameB}</span>
                             <span class="superset-completed-value">${this.formatSetResult(setBData, this.supersetSlot)}</span>
+                            ${this.renderSetQualityControls(setBData, i, 'superset-b', this.supersetSlot.id)}
                         </div>
                     </div>
                 `;
@@ -9445,6 +9936,9 @@ class App {
     async showSupersetSummary() {
         const slotAData = this.currentWorkout.slots[this.currentSlot.id];
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
+        this.currentExerciseGhostData = null;
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) ghostButton.hidden = true;
         this.editingSetIndex = null;
         
         const completedSetsA = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotAData);
@@ -9543,34 +10037,12 @@ class App {
         // Build history for the logbook (last 3) and trend sparkline (last 6)
         const recentWorkouts = workoutIds.slice(0, 3);
         const trendWorkouts = workoutIds.slice(0, 6);
-        this.lastExerciseHistoryAll = recentWorkouts.map(wId => {
-            const workout = workoutGroups[wId];
-            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
-            const totalReps = workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-            const maxWeight = Math.max(...workout.sets.map(s => s.weight || 0));
-            return {
-                date: workout.date,
-                sets: workout.sets,
-                totalReps,
-                maxWeight,
-                isDeload: workout.sets.some(set => set.isDeload),
-                cycleWeek: workout.sets[0]?.cycleWeek ?? null
-            };
-        });
-        this.exerciseProgressHistory = trendWorkouts.map(wId => {
-            const workout = workoutGroups[wId];
-            workout.sets.sort((a, b) => a.setNumber - b.setNumber);
-            const totalReps = workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0);
-            const maxWeight = Math.max(...workout.sets.map(s => s.weight || 0));
-            return {
-                date: workout.date,
-                sets: workout.sets,
-                totalReps,
-                maxWeight,
-                isDeload: workout.sets.some(set => set.isDeload),
-                cycleWeek: workout.sets[0]?.cycleWeek ?? null
-            };
-        });
+        this.lastExerciseHistoryAll = recentWorkouts.map(wId =>
+            this.buildExerciseHistorySession(workoutGroups[wId], this.currentSlot)
+        );
+        this.exerciseProgressHistory = trendWorkouts.map(wId =>
+            this.buildExerciseHistorySession(workoutGroups[wId], this.currentSlot)
+        );
         
         // Keep backward compatibility: lastExerciseHistory = most recent
         this.lastExerciseHistory = this.lastExerciseHistoryAll[0];
@@ -9592,6 +10064,66 @@ class App {
         const formatted = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.0$/, '');
         const sign = rounded > 0 ? '+' : '';
         return `${sign}${formatted}${suffix}`;
+    }
+
+    buildExerciseHistoryMetrics(sets = [], slot = this.currentSlot) {
+        const safeSets = Array.isArray(sets) ? sets : [];
+        const progressionSets = this.getProgressionEligibleSets(safeSets);
+        const isCardio = this.isCardioSlot(slot);
+        const bestE1RM = !isCardio
+            ? Math.max(
+                ...progressionSets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
+                0
+            )
+            : 0;
+        const qualityCounts = {};
+        safeSets.forEach(set => this.getSetQualityTags(set).forEach(tag => {
+            qualityCounts[tag] = (qualityCounts[tag] || 0) + 1;
+        }));
+
+        const names = Array.from(new Set(safeSets
+            .map(set => String(set?.exerciseName || '').replace(/\s*\((?:gauche|droite|left|right)\)\s*$/i, '').trim())
+            .filter(Boolean)));
+        const currentName = this.getSlotExerciseName(slot);
+        const currentNormalized = this.normalizeExerciseText(currentName);
+        const alternateNames = names.filter(name => this.normalizeExerciseText(name) !== currentNormalized);
+        const restValues = safeSets
+            .map(set => Number(set?.restAfterSeconds))
+            .filter(value => Number.isFinite(value) && value > 0);
+        const qualityLabels = Object.entries(qualityCounts).map(([tag, count]) => {
+            const label = SET_QUALITY_TAGS?.[tag]?.shortLabel || tag;
+            return `${label} ${count}`;
+        });
+
+        return {
+            totalVolume: safeSets.reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0),
+            bestE1RM,
+            progressionEligibleSetCount: progressionSets.length,
+            annotatedSetCount: Object.values(qualityCounts).reduce((sum, count) => sum + count, 0),
+            qualityCounts,
+            qualityLabels,
+            alternateNames: alternateNames.slice(0, 2),
+            averageRestSeconds: restValues.length
+                ? Math.round(restValues.reduce((sum, value) => sum + value, 0) / restValues.length)
+                : null
+        };
+    }
+
+    buildExerciseHistorySession(workout = {}, slot = this.currentSlot) {
+        const sets = Array.isArray(workout?.sets) ? workout.sets : [];
+        sets.sort((a, b) => Number(a?.setNumber || 0) - Number(b?.setNumber || 0));
+        const totalReps = sets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const maxWeight = Math.max(...sets.map(set => Number(set?.weight || 0)), 0);
+
+        return {
+            date: workout?.date,
+            sets,
+            totalReps,
+            maxWeight,
+            isDeload: sets.some(set => set?.isDeload),
+            cycleWeek: sets[0]?.cycleWeek ?? null,
+            ...this.buildExerciseHistoryMetrics(sets, slot)
+        };
     }
 
     getLogbookTrendIconSVG(direction = 'neutral') {
@@ -9641,6 +10173,9 @@ class App {
         
         let html = '';
         
+        const slot = this.currentSlot || {};
+        const isCardio = this.isCardioSlot(slot);
+
         histories.forEach((history, idx) => {
             const dateText = this.formatLogbookDate(history.date);
             const isLatest = idx === 0;
@@ -9669,19 +10204,60 @@ class App {
                 `;
             }
             html += '</div>';
-            
+
+            const totalRepsLabel = isCardio ? 'Total min' : 'Total reps';
+            const totalRepsValue = isCardio
+                ? (this.formatSetInputValue(history.totalReps, slot) || '0')
+                : history.totalReps;
+            const maxWeightLabel = isCardio ? 'Niveau max' : 'Charge max';
+            const maxWeightValue = isCardio
+                ? (history.maxWeight > 0 ? history.maxWeight : '—')
+                : (this.isPureBodyweightSlot(slot) && history.maxWeight === 0 ? 'PDC' : `${history.maxWeight} kg`);
+            const additionalMetrics = [];
+            if (!isCardio && history.bestE1RM > 0) {
+                additionalMetrics.push(`
+                    <div class="logbook-summary-item logbook-summary-item-derived">
+                        <div class="logbook-summary-label">e1RM estimé</div>
+                        <div class="logbook-summary-value">${this.normalizeLoadPrecision(history.bestE1RM)} kg</div>
+                    </div>
+                `);
+            }
+            if (history.totalVolume > 0) {
+                additionalMetrics.push(`
+                    <div class="logbook-summary-item logbook-summary-item-derived">
+                        <div class="logbook-summary-label">Volume</div>
+                        <div class="logbook-summary-value">${this.formatVolume(history.totalVolume)} kg</div>
+                    </div>
+                `);
+            }
+
             html += `
                 <div class="logbook-summary">
                     <div class="logbook-summary-item">
-                        <div class="logbook-summary-label">Total reps</div>
-                        <div class="logbook-summary-value">${history.totalReps}</div>
+                        <div class="logbook-summary-label">${totalRepsLabel}</div>
+                        <div class="logbook-summary-value">${totalRepsValue}</div>
                     </div>
                     <div class="logbook-summary-item">
-                        <div class="logbook-summary-label">Charge max</div>
-                        <div class="logbook-summary-value">${this.isPureBodyweightSlot(this.currentSlot) && history.maxWeight === 0 ? 'PDC' : `${history.maxWeight} kg`}</div>
+                        <div class="logbook-summary-label">${maxWeightLabel}</div>
+                        <div class="logbook-summary-value">${maxWeightValue}</div>
                     </div>
+                    ${additionalMetrics.join('')}
                 </div>
             `;
+
+            const annotations = [];
+            if (history.qualityLabels?.length) {
+                annotations.push(`Qualité notée : ${history.qualityLabels.join(' · ')}`);
+            }
+            if (history.alternateNames?.length) {
+                annotations.push(`Ancienne variante : ${history.alternateNames.join(' · ')}`);
+            }
+            if (history.averageRestSeconds) {
+                annotations.push(`Repos moyen enregistré : ${history.averageRestSeconds}s`);
+            }
+            if (annotations.length) {
+                html += `<div class="logbook-session-annotations">${annotations.map(text => `<span>${this.escapeHtml(text)}</span>`).join('')}</div>`;
+            }
             
             html += '</div>';
         });
@@ -9723,7 +10299,8 @@ class App {
 
     calculateWorkoutQualityScore(sets = []) {
         if (!sets.length) return 0;
-        const bestE1RM = Math.max(...sets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0);
+        const progressionSets = this.getProgressionEligibleSets(sets);
+        const bestE1RM = Math.max(...progressionSets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0);
         const totalReps = sets.reduce((sum, set) => sum + (set.reps || 0), 0);
         return bestE1RM + (totalReps * 0.35);
     }
@@ -10177,7 +10754,7 @@ class App {
             : [];
         return sets
             .map((set, index) => ({ set, index }))
-            .filter(({ set }) => set?.completed && Number(set.reps || 0) > 0);
+            .filter(({ set }) => set?.completed && Number(set.reps || 0) > 0 && !this.isSetExcludedFromProgression(set));
     }
 
     getLiveUnilateralSideAnalysis(slot, slotData, side) {
@@ -10277,6 +10854,8 @@ class App {
         const activeTargetSets = Math.max(1, this.getActiveTargetSets(slot, slotData) || Number(slot.sets) || 1);
         const leftCount = left?.entries.length || 0;
         const rightCount = right?.entries.length || 0;
+        const leftSequence = this.analyzeSetSequence(left?.entries?.map(entry => entry.set) || [], slot);
+        const rightSequence = this.analyzeSetSequence(right?.entries?.map(entry => entry.set) || [], slot);
         const pairCount = Math.min(leftCount, rightCount);
         const balancedSetIndex = Math.min(leftCount, rightCount) - 1;
         const leftPair = balancedSetIndex >= 0 ? left.entries.find(entry => entry.index === balancedSetIndex)?.set : null;
@@ -10356,7 +10935,12 @@ class App {
                 right: right?.side === calibrationSide.side ? calibrationSide.suggestedWeight : right?.lastWeight ?? null
             };
         } else {
-            return null;
+            const sequenceSignal = [...(leftSequence.signals || []), ...(rightSequence.signals || [])][0];
+            if (!sequenceSignal) return null;
+            kind = 'insight';
+            title = sequenceSignal.label;
+            badge = 'Lecture optionnelle';
+            message = `${sequenceSignal.detail} Tu peux garder ce repère ou l’ignorer complètement.`;
         }
 
         const keyPart = [
@@ -10384,6 +10968,7 @@ class App {
             completedSets: pairCount,
             activeTargetSets,
             canReduceVolume: canSuggestVolume,
+            sequenceAnalysis: { left: leftSequence, right: rightSequence },
             metrics: [
                 { label: 'Gauche', value: left ? `${formatWeight(left.lastWeight)} × ${left.lastReps}` : '—' },
                 { label: 'Droite', value: right ? `${formatWeight(right.lastWeight)} × ${right.lastReps}` : '—' },
@@ -10412,7 +10997,13 @@ class App {
         const entries = (Array.isArray(slotData.sets) ? slotData.sets : [])
             .map((set, index) => ({ set, index }))
             .filter(({ set }) => set?.completed && Number(set.reps || 0) > 0);
-        if (!entries.length) return null;
+        const progressionEntries = entries.filter(({ set }) => !this.isSetExcludedFromProgression(set));
+        if (!progressionEntries.length) return null;
+        const sequenceAnalysis = this.analyzeSetSequence(
+            progressionEntries.map(({ set }) => set),
+            slot,
+            { referenceE1RM: this.lastExerciseHistory?.bestE1RM || 0 }
+        );
 
         const analysisSessionKey = String(
             this.currentWorkout?.startTime
@@ -10421,9 +11012,9 @@ class App {
             || 'session'
         );
 
-        const lastEntry = entries[entries.length - 1];
-        const previousEntry = entries.length > 1 ? entries[entries.length - 2] : null;
-        const firstEntry = entries[0];
+        const lastEntry = progressionEntries[progressionEntries.length - 1];
+        const previousEntry = progressionEntries.length > 1 ? progressionEntries[progressionEntries.length - 2] : null;
+        const firstEntry = progressionEntries[0];
         const last = lastEntry.set;
         const previous = previousEntry?.set || null;
         const first = firstEntry.set;
@@ -10478,7 +11069,7 @@ class App {
             && currentE1rm > 0
             && currentE1rm <= historicalE1rm * 0.9
             && belowMinimum;
-        const fatigueSignal = entries.length >= 2 && (
+        const fatigueSignal = progressionEntries.length >= 2 && (
             sharpRepDrop
             || highLoadMiss
             || historicalRegression
@@ -10487,7 +11078,7 @@ class App {
         const recoveredAfterLoadDrop = significantLoadDrop
             && lastReps >= repsMin
             && lastReps >= previousReps - 1;
-        const singleSetCalibration = entries.length === 1 && lastReps < repsMin - 2;
+        const singleSetCalibration = progressionEntries.length === 1 && lastReps < repsMin - 2;
 
         const formatWeight = (weight) => weight > 0
             ? `${this.normalizeLoadPrecision(weight)} kg`
@@ -10534,6 +11125,7 @@ class App {
                     ...(previous ? [{ label: 'Écart reps', value: `-${Math.round(repsDropPercent)}%` }] : []),
                     ...(significantLoadDrop ? [{ label: 'Écart charge', value: `${Math.round(loadDropPercent)}%` }] : [])
                 ],
+                sequenceAnalysis,
                 canReduceVolume: Boolean(suggestedSets && suggestedSets < activeTargetSets)
             };
         }
@@ -10553,6 +11145,7 @@ class App {
                     ...baseMetrics,
                     { label: 'Charge', value: `${Math.round(loadDropPercent)}% vs série précédente` }
                 ],
+                sequenceAnalysis,
                 canReduceVolume: false
             };
         }
@@ -10572,6 +11165,29 @@ class App {
                     ...baseMetrics,
                     { label: 'e1RM estimé', value: `${this.normalizeLoadPrecision(currentE1rm)} kg` }
                 ],
+                sequenceAnalysis,
+                canReduceVolume: false
+            };
+        }
+
+        if (sequenceAnalysis.signals.length > 0) {
+            const firstSignal = sequenceAnalysis.signals[0];
+            const sequenceSuggestion = sequenceAnalysis.suggestions.find(item => item.key === firstSignal.key);
+            return {
+                key: `${analysisSessionKey}:${slot.id}:${lastEntry.index}:${lastWeight}:${lastReps}:sequence:${sequenceAnalysis.classifications.join('-')}`,
+                kind: 'insight',
+                badge: 'Lecture optionnelle',
+                title: firstSignal.label,
+                message: `${firstSignal.detail} ${sequenceSuggestion?.message || 'Tu peux simplement garder ce repère en tête.'}`,
+                suggestedWeight: null,
+                suggestedSets: null,
+                completedSets: entries.length,
+                activeTargetSets,
+                metrics: [
+                    ...baseMetrics,
+                    { label: 'Séquence', value: sequenceAnalysis.summary }
+                ],
+                sequenceAnalysis,
                 canReduceVolume: false
             };
         }
@@ -10785,7 +11401,6 @@ class App {
         if (completedSets > 0) {
             return this.finishExerciseWithCurrentVolume();
         }
-        if (hasPartialData) return this.skipExerciseForToday();
         return this.skipExerciseForToday();
     }
 
@@ -11030,6 +11645,7 @@ class App {
                     ${isCompleted && !isEditing ? `
                         <div class="series-check-container">
                             <span class="series-result">${this.formatSetResult(setData, this.currentSlot)}</span>
+                            ${this.renderSetQualityControls(setData, i)}
                             ${canEditValidatedSet ? `
                             <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -11129,6 +11745,9 @@ class App {
 
         this.renderExerciseControlBar(this.currentSlot, slotData);
         this.renderLiveAdaptationCard(this.currentSlot, slotData);
+        if (!document.getElementById('recovery-map-body')?.hidden) {
+            void this.renderRecoveryMap();
+        }
     }
     
     async continueSetsOverride() {
@@ -11254,11 +11873,13 @@ class App {
                             <span class="unilateral-input-badge badge-left">G</span>
                             <span class="unilateral-completed-label">Gauche</span>
                             <span class="unilateral-completed-value">${setLeftData.weight}kg × ${setLeftData.reps}</span>
+                            ${this.renderSetQualityControls(setLeftData, i, 'left')}
                         </div>
                         <div class="unilateral-completed-side side-right">
                             <span class="unilateral-input-badge badge-right">D</span>
                             <span class="unilateral-completed-label">Droite</span>
                             <span class="unilateral-completed-value">${setRightData.weight}kg × ${setRightData.reps}</span>
+                            ${this.renderSetQualityControls(setRightData, i, 'right')}
                         </div>
                     </div>
                 `;
@@ -11361,6 +11982,9 @@ class App {
 
         this.renderExerciseControlBar(this.currentSlot, slotData);
         this.renderLiveAdaptationCard(this.currentSlot, slotData);
+        if (!document.getElementById('recovery-map-body')?.hidden) {
+            void this.renderRecoveryMap();
+        }
     }
     
     async completeUnilateralSet(setIndex) {
@@ -11406,6 +12030,12 @@ class App {
 
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
         const now = Date.now();
+        const previousCompletedSet = [...(slotData.setsLeft || []), ...(slotData.setsRight || [])]
+            .filter(set => set?.completed && Number(set.timestamp) > 0)
+            .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))[0];
+        const restAfterSeconds = previousCompletedSet
+            ? Math.max(0, Math.round((now - Number(previousCompletedSet.timestamp)) / 1000))
+            : null;
         let newlyCompletedSides = 0;
         if (left.shouldComplete && !existingLeft.completed) {
             slotData.setsLeft[setIndex] = {
@@ -11414,7 +12044,10 @@ class App {
                 targetReps: leftTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
                 completed: true,
                 exerciseName,
-                timestamp: now
+                timestamp: now,
+                ...(restAfterSeconds != null ? { restAfterSeconds } : {}),
+                qualityTags: this.getSetQualityTags(existingLeft),
+                excludeFromProgression: this.isSetExcludedFromProgression(existingLeft)
             };
             newlyCompletedSides++;
         }
@@ -11425,7 +12058,10 @@ class App {
                 targetReps: rightTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
                 completed: true,
                 exerciseName,
-                timestamp: now
+                timestamp: now,
+                ...(restAfterSeconds != null ? { restAfterSeconds } : {}),
+                qualityTags: this.getSetQualityTags(existingRight),
+                excludeFromProgression: this.isSetExcludedFromProgression(existingRight)
             };
             newlyCompletedSides++;
         }
@@ -11461,10 +12097,11 @@ class App {
 
         let liveAnalysis = null;
         let nextRestSeconds = Number(this.currentSlot.rest) || 0;
+        let recommendedRestSeconds = null;
         if (!isExerciseFinished) {
             liveAnalysis = this.getLiveUnilateralPerformanceAnalysis(this.currentSlot, slotData);
             if (liveAnalysis?.recommendedRestSeconds > nextRestSeconds) {
-                nextRestSeconds = liveAnalysis.recommendedRestSeconds;
+                recommendedRestSeconds = liveAnalysis.recommendedRestSeconds;
             }
         }
 
@@ -11474,8 +12111,9 @@ class App {
         } else {
             this.resetRpeSlider();
             this.startRestTimer(nextRestSeconds, {
-                reason: liveAnalysis?.recommendedRestSeconds > (Number(this.currentSlot.rest) || 0)
-                    ? `Repos ajusté à ${nextRestSeconds}s selon le signal gauche/droite.`
+                recommendedRestSeconds,
+                recommendedRestReason: recommendedRestSeconds
+                    ? `Le signal gauche/droite suggère ${recommendedRestSeconds}s pour comparer proprement les côtés. C’est optionnel.`
                     : ''
             });
         }
@@ -11484,6 +12122,11 @@ class App {
     async showUnilateralSummary() {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         const completedSets = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotData);
+        const historyWorkouts = await this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name);
+        const snapshot = this.buildExerciseSummarySnapshot(this.currentSlot, completedSets, historyWorkouts);
+        this.currentExerciseGhostData = this.buildExerciseGhostPayload(this.currentSlot, completedSets, snapshot);
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) ghostButton.hidden = !this.currentExerciseGhostData;
         const setsLeft = completedSets.filter(set => set.variant === 'left');
         const setsRight = completedSets.filter(set => set.variant === 'right');
         this.editingSetIndex = null;
@@ -11504,8 +12147,12 @@ class App {
         const average = (values) => values.length
             ? values.reduce((sum, value) => sum + value, 0) / values.length
             : 0;
-        const leftE1rms = setsLeft.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8)).filter(Boolean);
-        const rightE1rms = setsRight.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8)).filter(Boolean);
+        const leftE1rms = this.getProgressionEligibleSets(setsLeft)
+            .map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8))
+            .filter(Boolean);
+        const rightE1rms = this.getProgressionEligibleSets(setsRight)
+            .map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8))
+            .filter(Boolean);
         const leftScore = average(leftE1rms) || average(setsLeft.map(set => Number(set.reps || 0)));
         const rightScore = average(rightE1rms) || average(setsRight.map(set => Number(set.reps || 0)));
         const scoreGapPercent = Math.max(leftScore, rightScore) > 0
@@ -11577,6 +12224,14 @@ class App {
         // Save set data (RPE will be added during rest timer)
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         delete slotData.adaptivePlan;
+        const existingSet = slotData.sets[setIndex] || {};
+        const previousCompletedSet = [...slotData.sets]
+            .slice(0, setIndex)
+            .reverse()
+            .find(set => set?.completed && Number(set.timestamp) > 0);
+        const restAfterSeconds = previousCompletedSet && Number(previousCompletedSet.timestamp) > 0
+            ? Math.max(0, Math.round((Date.now() - Number(previousCompletedSet.timestamp)) / 1000))
+            : null;
         const defaultTargets = this.genTargetReps(
             this.currentSlot.repsMin,
             this.currentSlot.repsMax,
@@ -11590,6 +12245,9 @@ class App {
             completed: true,
             exerciseName: this.currentSlot.activeExercise || this.currentSlot.name,
             timestamp: Date.now(),
+            ...(restAfterSeconds != null ? { restAfterSeconds } : {}),
+            qualityTags: this.getSetQualityTags(existingSet),
+            excludeFromProgression: this.isSetExcludedFromProgression(existingSet),
             rpe: null, // Will be set during rest timer if user provides it
             rpeSource: null
         };
@@ -11619,13 +12277,14 @@ class App {
         const isExerciseFinished = completedSets >= targetSets;
         let liveAnalysis = null;
         let nextRestSeconds = Number(this.currentSlot.rest) || 0;
+        let recommendedRestSeconds = null;
 
         if (!isExerciseFinished) {
             await this.refreshWorkoutCoachingState();
             this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
             liveAnalysis = this.getLivePerformanceAnalysis(this.currentSlot, slotData);
             if (liveAnalysis?.recommendedRestSeconds > nextRestSeconds) {
-                nextRestSeconds = liveAnalysis.recommendedRestSeconds;
+                recommendedRestSeconds = liveAnalysis.recommendedRestSeconds;
             }
         }
 
@@ -11640,8 +12299,9 @@ class App {
             // Start rest timer (with RPE capture + Hot/Cold feedback)
             this.resetRpeSlider();
             this.startRestTimer(nextRestSeconds, {
-                reason: liveAnalysis?.recommendedRestSeconds > (Number(this.currentSlot.rest) || 0)
-                    ? `Repos ajusté à ${nextRestSeconds}s selon la baisse de performance observée.`
+                recommendedRestSeconds,
+                recommendedRestReason: recommendedRestSeconds
+                    ? `La séquence suggère ${recommendedRestSeconds}s pour préserver les reps. C’est une option, pas une règle.`
                     : ''
             });
         }
@@ -12153,6 +12813,7 @@ class App {
             noteEl.hidden = !overlayData.note;
         }
         this.renderRestOverlayMetrics(overlayData.metrics);
+        this.renderRestTimerRecommendation();
     }
 
     dismissRestOverlay() {
@@ -12164,12 +12825,16 @@ class App {
         this.setRestOverlayReadyState(false);
         this.restTimeLeft = 0;
         this.restTimeTotal = 0;
+        this.restTimerStartedAt = null;
         this.restFeedbackCaptured = false;
         this.restTimerReason = '';
+        this.restTimerRecommendation = null;
         this.overlayTimerMode = null;
         this.cardioTimerState = null;
         this.lastVibrateAt = null;
         localStorage.removeItem('restTimerReason');
+        localStorage.removeItem('restTimerStartedAt');
+        localStorage.removeItem('restTimerRecommendation');
         this.clearRestTimerVariation();
         this.resetRpeSlider();
     }
@@ -12192,10 +12857,14 @@ class App {
         }
 
         this.restTimerEndTime = null;
+        this.restTimerStartedAt = null;
         this.lastVibrateAt = null;
         localStorage.removeItem('restTimerEndTime');
         localStorage.removeItem('restTimerTotalTime');
         localStorage.removeItem('restTimerReason');
+        localStorage.removeItem('restTimerStartedAt');
+        localStorage.removeItem('restTimerRecommendation');
+        this.restTimerRecommendation = null;
 
         const overlay = document.getElementById('timer-overlay');
         const countdown = document.getElementById('timer-countdown');
@@ -12232,14 +12901,29 @@ class App {
         this.overlayTimerMode = 'rest';
         this.cardioTimerState = null;
 
+        const recommendedRestSeconds = Math.max(0, Math.round(Number(metadata.recommendedRestSeconds) || 0));
+        this.restTimerRecommendation = recommendedRestSeconds > durationSeconds
+            ? {
+                seconds: recommendedRestSeconds,
+                reason: String(metadata.recommendedRestReason || 'La séquence précédente suggère un peu plus de marge.')
+            }
+            : null;
+
         // Store end timestamp instead of countdown
         this.restTimeTotal = durationSeconds;
         this.restTimeLeft = durationSeconds;
         this.restTimerReason = String(metadata.reason || '');
-        this.restTimerEndTime = Date.now() + (durationSeconds * 1000);
+        this.restTimerStartedAt = Date.now();
+        this.restTimerEndTime = this.restTimerStartedAt + (durationSeconds * 1000);
         localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
         localStorage.setItem('restTimerTotalTime', String(durationSeconds));
         localStorage.setItem('restTimerReason', this.restTimerReason);
+        localStorage.setItem('restTimerStartedAt', String(this.restTimerStartedAt));
+        if (this.restTimerRecommendation) {
+            localStorage.setItem('restTimerRecommendation', JSON.stringify(this.restTimerRecommendation));
+        } else {
+            localStorage.removeItem('restTimerRecommendation');
+        }
         
         const overlay = document.getElementById('timer-overlay');
         const countdown = document.getElementById('timer-countdown');
@@ -12264,6 +12948,43 @@ class App {
         this.updateRestTimer();
         this.restTimer = setInterval(() => this.updateRestTimer(), 100);
         this.scheduleRestTimerCompletion();
+    }
+
+    renderRestTimerRecommendation() {
+        const container = document.getElementById('timer-rest-suggestion');
+        const copy = document.getElementById('timer-rest-suggestion-copy');
+        const button = document.getElementById('btn-use-rest-suggestion');
+        if (!container || !copy || !button) return;
+
+        const seconds = Number(this.restTimerRecommendation?.seconds || 0);
+        const visible = this.overlayTimerMode === 'rest'
+            && !this.restOverlayReady
+            && seconds > this.restTimeTotal
+            && seconds > 0;
+        container.hidden = !visible;
+        if (!visible) return;
+
+        copy.textContent = this.restTimerRecommendation.reason || 'Un peu plus de repos pourrait aider à garder les reps.';
+        button.textContent = `Étendre à ${this.formatRestCountdownDisplay(seconds)} au total`;
+    }
+
+    applyRestTimerRecommendation() {
+        const seconds = Number(this.restTimerRecommendation?.seconds || 0);
+        if (this.overlayTimerMode !== 'rest' || !this.restTimerEndTime || seconds <= 0) return;
+
+        const startedAt = Number(this.restTimerStartedAt) > 0 ? this.restTimerStartedAt : Date.now();
+        this.restTimerStartedAt = startedAt;
+        this.restTimeTotal = seconds;
+        this.restTimerEndTime = startedAt + (seconds * 1000);
+        localStorage.setItem('restTimerEndTime', String(this.restTimerEndTime));
+        localStorage.setItem('restTimerTotalTime', String(seconds));
+        localStorage.setItem('restTimerStartedAt', String(startedAt));
+        this.restTimerRecommendation = null;
+        localStorage.removeItem('restTimerRecommendation');
+        this.updateRestTimer();
+        this.updateRestOverlayContext();
+        this.scheduleRestTimerCompletion();
+        this.showCoachToast(`Repos étendu à ${this.formatRestCountdownDisplay(seconds)} au total.`, 'hot', '⏱️');
     }
 
     clearRestTimerCompletionTimeout() {
@@ -12876,10 +13597,12 @@ class App {
             const countdown = document.getElementById('timer-countdown');
             this.restTimeTotal = seconds;
             this.restTimeLeft = seconds;
-            this.restTimerEndTime = Date.now() + (seconds * 1000);
+            this.restTimerStartedAt = Date.now();
+            this.restTimerEndTime = this.restTimerStartedAt + (seconds * 1000);
             if (this.overlayTimerMode === 'rest') {
                 localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
                 localStorage.setItem('restTimerTotalTime', String(this.restTimeTotal));
+                localStorage.setItem('restTimerStartedAt', String(this.restTimerStartedAt));
                 this.scheduleRestTimerCompletion();
             }
             this.setRestOverlayReadyState(false);
@@ -13094,7 +13817,8 @@ class App {
         const totalReps = safeSets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
         const maxWeight = safeSets.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
         const totalVolume = safeSets.reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0);
-        const bestSet = safeSets.reduce((best, set) => {
+        const progressionSets = this.getProgressionEligibleSets(safeSets);
+        const bestSet = progressionSets.reduce((best, set) => {
             if (isCardioExercise) return best;
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
             const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
@@ -13102,7 +13826,7 @@ class App {
         }, null);
         const bestE1RM = bestSet ? this.calculateE1RM(bestSet.weight || 0, bestSet.reps || 0, bestSet.rpe || 8) : 0;
         const previousWorkout = safeHistory[0] || null;
-        const previousBestSet = previousWorkout?.sets?.reduce((best, set) => {
+        const previousBestSet = this.getProgressionEligibleSets(previousWorkout?.sets || []).reduce((best, set) => {
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
             const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
             return currentScore > bestScore ? set : best;
@@ -13110,14 +13834,14 @@ class App {
         const previousBestE1RM = previousBestSet ? this.calculateE1RM(previousBestSet.weight || 0, previousBestSet.reps || 0, previousBestSet.rpe || 8) : 0;
         const historicalPeakE1RM = Math.max(
             0,
-            ...safeHistory.map(workout => Math.max(...(workout.sets || []).map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0))
+            ...safeHistory.map(workout => Math.max(...this.getProgressionEligibleSets(workout.sets || []).map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0))
         );
         const historicalPeakVolume = Math.max(0, ...safeHistory.map(workout => {
             return (workout.sets || []).reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0);
         }));
         const previousBestRepsByWeight = new Map();
         safeHistory.forEach(workout => {
-            (workout.sets || []).forEach(set => {
+            this.getProgressionEligibleSets(workout.sets || []).forEach(set => {
                 const weight = Number(set?.weight || 0);
                 const reps = Number(set?.reps || 0);
                 const key = String(weight);
@@ -13127,7 +13851,7 @@ class App {
         });
 
         let bestRepRecord = null;
-        safeSets.forEach(set => {
+        progressionSets.forEach(set => {
             const weight = Number(set?.weight || 0);
             const reps = Number(set?.reps || 0);
             const previousBest = previousBestRepsByWeight.get(String(weight)) || 0;
@@ -13136,6 +13860,14 @@ class App {
                 bestRepRecord = { weight, reps, previousBest, delta };
             }
         });
+
+        const sequenceAnalysis = this.analyzeSetSequence(safeSets, slot, {
+            referenceE1RM: previousBestE1RM
+        });
+        const qualityCounts = {};
+        safeSets.forEach(set => this.getSetQualityTags(set).forEach(tag => {
+            qualityCounts[tag] = (qualityCounts[tag] || 0) + 1;
+        }));
 
         return {
             slot,
@@ -13149,6 +13881,9 @@ class App {
             historicalPeakE1RM,
             historicalPeakVolume,
             bestRepRecord,
+            sequenceAnalysis,
+            qualityCounts,
+            progressionEligibleSetCount: progressionSets.length,
             isFirstExerciseEntry: safeHistory.length === 0,
             repsDiffVsLast: previousWorkout ? totalReps - Number(previousWorkout.totalReps || 0) : null,
             weightDiffVsLast: previousWorkout ? maxWeight - Number(previousWorkout.maxWeight || 0) : null,
@@ -13295,6 +14030,7 @@ class App {
         const historyWorkouts = await this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name);
         const snapshot = this.buildExerciseSummarySnapshot(this.currentSlot, completedSets, historyWorkouts);
         const achievements = this.buildExerciseAchievements(snapshot);
+        this.currentExerciseGhostData = this.buildExerciseGhostPayload(this.currentSlot, completedSets, snapshot);
         const totalReps = snapshot.totalReps;
         const maxWeight = snapshot.maxWeight;
         const isCardioExercise = this.isCardioSlot(this.currentSlot);
@@ -13395,6 +14131,25 @@ class App {
             `;
         }
 
+        const sequenceSignals = snapshot.sequenceAnalysis?.signals || [];
+        const qualityLabels = Object.entries(snapshot.qualityCounts || {})
+            .filter(([tag]) => SET_QUALITY_TAGS?.[tag])
+            .map(([tag, count]) => `${SET_QUALITY_TAGS[tag].shortLabel || SET_QUALITY_TAGS[tag].label} ×${count}`);
+        if (sequenceSignals.length || qualityLabels.length) {
+            const sequenceText = sequenceSignals.length
+                ? `Lecture de séance : ${snapshot.sequenceAnalysis.summary}.`
+                : '';
+            const qualityText = qualityLabels.length
+                ? `Annotations : ${qualityLabels.join(' · ')}.`
+                : '';
+            comparison.innerHTML += `
+                <div class="summary-analysis-note">
+                    <span class="summary-analysis-note-icon">🧠</span>
+                    <span>${this.escapeHtml([sequenceText, qualityText].filter(Boolean).join(' '))}</span>
+                </div>
+            `;
+        }
+
         this.renderExerciseSummaryAchievements(achievements);
 
         if (achievements.prs.length > 0) {
@@ -13402,6 +14157,8 @@ class App {
         }
 
         document.getElementById('exercise-summary').classList.add('active');
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) ghostButton.hidden = !this.currentExerciseGhostData;
 
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
@@ -13592,6 +14349,10 @@ class App {
                     const exerciseId = entry.variant
                         ? this.getUnilateralHistoryExerciseId(entry.exerciseName || baseExerciseId, entry.variant)
                         : this.getBaseExerciseHistoryName(entry.exerciseName || baseExerciseId);
+                    const exerciseStableId = entry.variant
+                        ? this.getUnilateralStableExerciseId(entry.exerciseName || baseExerciseId, entry.variant)
+                        : this.getStableExerciseId(entry.exerciseName || baseExerciseId);
+                    const exerciseFamilyId = this.getExerciseFamilyId(entry.exerciseName || baseExerciseId);
                     const entryRepsMin = entry.repsMin ?? slot.repsMin;
                     const entryRepsMax = entry.repsMax ?? slot.repsMax;
                     const entryTargetSetCount = entry.targetSetCount || targetSetCount;
@@ -13601,6 +14362,10 @@ class App {
                     await db.add('setHistory', {
                         slotId,
                         exerciseId,
+                        exerciseName: entry.exerciseName || baseExerciseId,
+                        exerciseStableId,
+                        exerciseFamilyId,
+                        ...(entry.variant ? { side: entry.variant } : {}),
                         workoutId,
                         setNumber: entry.setNumber,
                         weight: setData.weight,
@@ -13613,6 +14378,9 @@ class App {
                         targetRepsMin: entryRepsMin,
                         targetRepsMax: entryRepsMax,
                         targetRir: entry.rir ?? slot.rir,
+                        qualityTags: this.getSetQualityTags(setData),
+                        excludeFromProgression: this.isSetExcludedFromProgression(setData),
+                        restAfterSeconds: setData.restAfterSeconds ?? null,
                         volumeDecisionType: entry.volumeDecisionType || volumeDecisionType,
                         volumeProtected: entry.volumeProtected ?? volumeProtected,
                         isDeload: Boolean(this.currentWorkout.isDeload),
@@ -15601,6 +16369,12 @@ class App {
                     clearCurrentWorkout
                 });
 
+            // A program-only import can introduce slots from an older export
+            // after the local database already reached the identity version.
+            // Re-scan once after every import so those new slots get the same
+            // stable exercise metadata immediately, without waiting for a reload.
+            await this.migrateExerciseIdentityMetadata({ force: true });
+
             if (counts.currentWorkoutCleared) {
                 this.currentWorkout = null;
                 this.currentSession = null;
@@ -15819,6 +16593,7 @@ class App {
         // Exercise screen
         document.getElementById('btn-back-session').onclick = () => {
             this.stopRestTimer();
+            this.closeExerciseInsightsSheet();
             this.hideExerciseSummary();
             this.isReviewMode = false;
             this.renderSlots();
@@ -15846,6 +16621,18 @@ class App {
         }
 
         document.getElementById('series-list').onclick = (e) => {
+            const qualityBtn = e.target.closest('.set-quality-tag');
+            if (qualityBtn) {
+                e.preventDefault();
+                this.toggleSetQualityTag(
+                    parseInt(qualityBtn.dataset.setIndex, 10),
+                    qualityBtn.dataset.qualityTag,
+                    qualityBtn.dataset.side || null,
+                    qualityBtn.dataset.slotId || null
+                );
+                return;
+            }
+
             // Edit set button (standard, superset, unilateral)
             const editBtn = e.target.closest('.btn-edit-set');
             if (editBtn) {
@@ -15934,6 +16721,32 @@ class App {
                 if (e.target.closest('#btn-skip-exercise')) {
                     this.finishOrSkipCurrentExercise();
                 }
+            };
+        }
+
+        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
+        if (exerciseInsightsTrigger) {
+            exerciseInsightsTrigger.onclick = () => this.openExerciseInsightsSheet();
+        }
+
+        const exerciseInsightsSheet = document.getElementById('sheet-exercise-insights');
+        if (exerciseInsightsSheet) {
+            exerciseInsightsSheet.onclick = (e) => {
+                if (e.target.classList.contains('sheet-backdrop') || e.target.closest('#btn-close-exercise-insights')) {
+                    this.closeExerciseInsightsSheet();
+                    return;
+                }
+                if (e.target.closest('#btn-warmup-toggle')) {
+                    this.toggleWarmupPlan();
+                    return;
+                }
+                if (e.target.closest('#btn-recovery-map-toggle')) {
+                    this.toggleRecoveryMap();
+                }
+            };
+            exerciseInsightsSheet.onchange = (e) => {
+                const checkbox = e.target.closest('.warmup-step-check');
+                if (checkbox) this.toggleWarmupStep(checkbox.dataset.warmupId, checkbox.checked);
             };
         }
 
@@ -16078,6 +16891,10 @@ class App {
         if (timerNotificationBtn) {
             timerNotificationBtn.onclick = () => this.enableRestTimerNotifications();
         }
+        const restSuggestionBtn = document.getElementById('btn-use-rest-suggestion');
+        if (restSuggestionBtn) {
+            restSuggestionBtn.onclick = () => this.applyRestTimerRecommendation();
+        }
         this.updateRestNotificationButton();
         
         // RPE state
@@ -16112,6 +16929,11 @@ class App {
             this.renderSlots();
             this.showScreen('session');
         };
+
+        const ghostButton = document.getElementById('btn-share-exercise-ghost');
+        if (ghostButton) {
+            ghostButton.onclick = () => this.shareExerciseGhost();
+        }
 
         const coachCapBtn = document.getElementById('btn-coach-toggle-cap');
         if (coachCapBtn) {
@@ -16406,27 +17228,23 @@ class App {
             const samePrimaryMuscle = !activeMuscleId || !variantMuscleId || activeMuscleId === variantMuscleId;
             const sameTrackingMode = (descriptor.trackingMode || this.getTrackingMode(exercise)) === activeTrackingMode;
             const sameExerciseFormat = this.isUnilateralExercise(exercise) === activeIsUnilateral;
-            const isCompatible = samePrimaryMuscle && sameTrackingMode && sameExerciseFormat;
+            const equivalence = this.getExerciseSubstitutionEquivalence(slot, exercise, { fallbackSlot: slot });
+            const isCompatible = samePrimaryMuscle && sameTrackingMode && sameExerciseFormat && equivalence.sameStimulus;
             const compatibilityLabel = isCurrent
                 ? 'Exercice actuel'
-                : !samePrimaryMuscle
-                    ? 'Cible différente · vérifie tes réglages'
-                    : !sameTrackingMode
-                        ? 'Suivi différent · vérifie reps / durée'
-                        : !sameExerciseFormat
-                            ? 'Format différent · vérifie les côtés'
-                            : 'Même groupe principal';
+                : `${equivalence.percent}% · ${equivalence.label}`;
             const meta = [
                 variantMuscleName,
                 this.getExerciseTypeLabel(descriptor.type),
                 descriptor.equipment || '',
-                descriptor.trackingMode === 'cardio' ? 'durée' : 'charge + reps'
+                descriptor.trackingMode === 'cardio' ? 'durée' : 'charge + reps',
+                equivalence.details?.[0] || ''
             ].filter(Boolean);
             html += `
                 <div class="pool-item ${isCurrent ? 'current' : ''} ${isCompatible ? 'compatible' : 'different-focus'}">
                     <div class="pool-item-main">
                         <div class="pool-item-title-row">
-                            ${variantMuscleId ? renderAppIcon(getMuscleGroupMeta(variantMuscleId).iconKey, { size: 16, label: variantMuscleName }) : ''}
+                            ${variantMuscleId ? renderMuscleMarker() : ''}
                             <span class="pool-item-name">${safeExercise}</span>
                         </div>
                         <div class="pool-item-meta">
@@ -16435,6 +17253,7 @@ class App {
                         <div class="pool-item-compatibility ${isCompatible ? 'is-compatible' : 'is-different'}">
                             ${this.escapeHtml(compatibilityLabel)}
                         </div>
+                        ${!isCurrent && equivalence.warnings?.length ? `<div class="pool-item-warning">${this.escapeHtml(equivalence.warnings.slice(0, 2).join(' · '))}</div>` : ''}
                     </div>
                     ${isCurrent ? `
                         <span class="pool-item-badge">Actuel</span>
@@ -16476,11 +17295,20 @@ class App {
         modal.id = 'modal-exercise-change';
         const currentExerciseLabel = this.escapeHtml(slot.activeExercise || slot.name || 'Exercice actuel');
         const newExerciseLabel = this.escapeHtml(newExerciseName);
+        const equivalence = this.getExerciseSubstitutionEquivalence(slot, newExerciseName, { fallbackSlot: slot });
+        const equivalenceWarnings = equivalence.warnings?.length
+            ? `<small class="exercise-change-warning">${this.escapeHtml(equivalence.warnings.slice(0, 2).join(' · '))}</small>`
+            : '';
         modal.innerHTML = `
             <div class="modal-backdrop"></div>
             <div class="modal-content">
                 <h3>Changer d'exercice</h3>
                 <p>Tu passes de <strong>${currentExerciseLabel}</strong> à <strong>${newExerciseLabel}</strong>.</p>
+                <div class="exercise-change-equivalence">
+                    <strong>${equivalence.percent}% · ${this.escapeHtml(equivalence.label)}</strong>
+                    <span>${this.escapeHtml((equivalence.details || []).slice(0, 2).join(' · '))}</span>
+                    ${equivalenceWarnings}
+                </div>
                 <p>Veux-tu garder les mêmes paramètres ?</p>
                 <div class="modal-actions">
                     <button class="btn btn-secondary" id="btn-change-reset">Réinitialiser les paramètres</button>
@@ -16549,6 +17377,8 @@ class App {
         slot.trackingMode = nextTrackingMode;
         slot.type = nextType;
         slot.muscleGroup = nextMuscleGroup;
+        slot.exerciseStableId = this.getStableExerciseId(definition || newExerciseName);
+        slot.exerciseFamilyId = this.getExerciseFamilyId(definition || newExerciseName);
         if (definition?.instructions) {
             slot.instructions = definition.instructions;
         }
@@ -16641,6 +17471,10 @@ class App {
         const accumulationWeeks = (await db.getSetting('accumulationWeeks')) ?? 4;
         const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
         const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
+        const storedWakeLockPreference = await db.getSetting('wakeLockEnabled');
+        const wakeLockEnabled = storedWakeLockPreference == null
+            ? (typeof localStorage === 'undefined' || localStorage.getItem('wakeLockEnabled') !== 'disabled')
+            : storedWakeLockPreference !== false;
         
         // Set slider values
         document.getElementById('setting-weekly-goal').value = weeklyGoal;
@@ -16666,6 +17500,8 @@ class App {
         
         document.getElementById('setting-deload-volume').value = deloadVolumeReduction;
         document.getElementById('setting-deload-volume-value').textContent = deloadVolumeReduction;
+        const wakeLockInput = document.getElementById('setting-wake-lock');
+        if (wakeLockInput) wakeLockInput.checked = wakeLockEnabled;
 
         const cheatStreakInput = document.getElementById('setting-cheat-streak');
         cheatStreakInput.value = streakCount;
@@ -16815,6 +17651,7 @@ class App {
         const accumulationWeeks = parseInt(document.getElementById('setting-accumulation-weeks').value);
         const autoDeloadEnabled = document.getElementById('setting-auto-deload').checked;
         const deloadVolumeReduction = parseInt(document.getElementById('setting-deload-volume').value);
+        const wakeLockEnabled = document.getElementById('setting-wake-lock')?.checked !== false;
 
         cheatStreakInput.value = forcedStreakCount;
 
@@ -16843,6 +17680,12 @@ class App {
         await db.setSetting('autoDeloadEnabled', autoDeloadEnabled);
         await db.setSetting('deloadVolumeReduction', deloadVolumeReduction);
         await db.setSetting('streakCount', forcedStreakCount);
+        await db.setSetting('wakeLockEnabled', wakeLockEnabled);
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('wakeLockEnabled', wakeLockEnabled ? 'enabled' : 'disabled');
+        }
+        if (wakeLockEnabled) await this.syncScreenWakeLock();
+        else await this.releaseScreenWakeLock();
         
         // Initialize cycle start date if not set
         const cycleStartDate = await db.getSetting('cycleStartDate');
@@ -16941,16 +17784,20 @@ class App {
     }
     
     // === Calculate total Effective Sets from a workout ===
-    calculateEffectiveSets(sets, e1rmRef = null) {
+    calculateEffectiveSets(sets, e1rmRef = null, slotMeta = null) {
         if (!sets || sets.length === 0) return { effectiveSets: 0, details: [] };
         
         let totalEffective = 0;
         const details = [];
         
         for (const set of sets) {
+            const hasExplicitRpe = set?.rpe != null && Number.isFinite(Number(set.rpe));
+            const effectiveRpe = hasExplicitRpe
+                ? Number(set.rpe)
+                : this.estimateSetRpe(set, slotMeta);
             const score = this.calculateEffectiveVolumeScore(
                 set.reps, 
-                set.rpe, 
+                effectiveRpe, 
                 set.weight, 
                 e1rmRef
             );
@@ -16958,7 +17805,9 @@ class App {
             details.push({
                 reps: set.reps,
                 weight: set.weight,
-                rpe: set.rpe,
+                rpe: hasExplicitRpe ? Number(set.rpe) : null,
+                estimatedRpe: hasExplicitRpe ? null : effectiveRpe,
+                effortSource: hasExplicitRpe ? 'user' : 'estimated',
                 effectiveScore: score,
                 classification: score >= 0.8 ? 'effective' : score >= 0.5 ? 'partial' : 'junk'
             });
@@ -16979,17 +17828,18 @@ class App {
             suggestedAction: null
         };
         
-        if (!sets || sets.length < 2) return flags;
+        const progressionSets = this.getProgressionEligibleSets(sets);
+        if (progressionSets.length < 2) return flags;
         
         // Heuristic 1: Linearity Check
         // If all sets are identical (same reps, same weight, all RPE 10), it's suspicious
-        const allSetsIdentical = sets.every(s => 
-            s.reps === sets[0].reps && 
-            Math.abs(s.weight - sets[0].weight) < 1
+        const allSetsIdentical = progressionSets.every(s => 
+            s.reps === progressionSets[0].reps && 
+            Math.abs(s.weight - progressionSets[0].weight) < 1
         );
-        const allRpe10 = sets.every(s => s.rpe >= 9.5);
+        const allRpe10 = progressionSets.every(s => s.rpe >= 9.5);
         
-        if (allSetsIdentical && allRpe10 && sets.length >= 3) {
+        if (allSetsIdentical && allRpe10 && progressionSets.length >= 3) {
             // Physiologically impossible to do 3+ identical sets all at RPE 10
             flags.detected = true;
             flags.confidence += 0.4;
@@ -16998,11 +17848,11 @@ class App {
         
         // Heuristic 2: No rep drop-off despite "max effort"
         if (allRpe10) {
-            const firstReps = sets[0]?.reps || 0;
-            const lastReps = sets[sets.length - 1]?.reps || 0;
+            const firstReps = progressionSets[0]?.reps || 0;
+            const lastReps = progressionSets[progressionSets.length - 1]?.reps || 0;
             const expectedDrop = firstReps * 0.15; // Expect at least 15% drop at true failure
             
-            if (firstReps - lastReps < expectedDrop && sets.length >= 3) {
+            if (firstReps - lastReps < expectedDrop && progressionSets.length >= 3) {
                 flags.detected = true;
                 flags.confidence += 0.3;
                 flags.reasons.push(`Aucune baisse de reps malgré RPE 10 (attendu: -${Math.round(expectedDrop)} reps)`);
@@ -17011,10 +17861,10 @@ class App {
         
         // Heuristic 3: e1RM deviation from historical
         if (historicalE1RM && historicalE1RM > 0) {
-            const currentE1RM = this.calculateE1RM(sets[0].weight, sets[0].reps, sets[0].rpe);
+            const currentE1RM = this.calculateE1RM(progressionSets[0].weight, progressionSets[0].reps, progressionSets[0].rpe);
             const deviation = (historicalE1RM - currentE1RM) / historicalE1RM;
             
-            if (deviation > 0.15 && sets[0].rpe >= 9) {
+            if (deviation > 0.15 && progressionSets[0].rpe >= 9) {
                 // Current performance >15% below historical despite "max effort"
                 flags.confidence += 0.3;
                 flags.reasons.push(`e1RM actuel ${Math.round(deviation * 100)}% sous ton record malgré effort max`);
@@ -17086,8 +17936,8 @@ class App {
     }
     
     // === STIMULUS-TO-FATIGUE RATIO (SFR) CALCULATION ===
-    calculateSFR(exerciseName, sets, e1rmRef = null) {
-        const effectiveData = this.calculateEffectiveSets(sets, e1rmRef);
+    calculateSFR(exerciseName, sets, e1rmRef = null, slotMeta = null) {
+        const effectiveData = this.calculateEffectiveSets(sets, e1rmRef, slotMeta);
         const stimulus = effectiveData.effectiveSets;
         
         if (stimulus <= 0) return { sfr: 0, stimulus: 0, fatigue: 0 };
@@ -17175,7 +18025,7 @@ class App {
             
             // Find best e1RM in session
             let bestE1RM = 0;
-            for (const set of workout.sets) {
+            for (const set of this.getProgressionEligibleSets(workout.sets)) {
                 const e1rm = this.calculateE1RM(set.weight, set.reps, set.rpe || 8);
                 if (e1rm > bestE1RM) bestE1RM = e1rm;
             }
@@ -17254,12 +18104,8 @@ class App {
             const curr = workoutHistory[i];
             const prev = workoutHistory[i + 1];
             
-            const currBestE1RM = Math.max(...(curr.sets || []).map(s => 
-                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-            ), 0);
-            const prevBestE1RM = Math.max(...(prev.sets || []).map(s => 
-                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-            ), 0);
+            const currBestE1RM = this.getBestWorkoutE1RM(curr);
+            const prevBestE1RM = this.getBestWorkoutE1RM(prev);
             
             if (currBestE1RM <= prevBestE1RM) stalls++;
         }
@@ -17336,21 +18182,16 @@ class App {
         
         // Calculate comprehensive metrics
         const lastWorkout = workouts[0];
-        const bestE1RM = Math.max(...lastWorkout.sets.map(s => 
-            this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-        ), 0);
+        const bestE1RM = this.getBestWorkoutE1RM(lastWorkout);
         
         // Historical best e1RM
-        let historicalBestE1RM = 0;
-        for (const w of workouts) {
-            for (const s of w.sets) {
-                const e = this.calculateE1RM(s.weight, s.reps, s.rpe || 8);
-                if (e > historicalBestE1RM) historicalBestE1RM = e;
-            }
-        }
+        const historicalBestE1RM = Math.max(
+            ...workouts.map(workout => this.getBestWorkoutE1RM(workout)),
+            0
+        );
         
         // Effective sets calculation
-        const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM);
+        const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM, slot);
         
         // Sandbagging check
         const sandbaggingCheck = this.detectSandbagging(lastWorkout.sets, historicalBestE1RM);
@@ -17359,7 +18200,8 @@ class App {
         const sfrData = this.calculateSFR(
             slot.activeExercise || slot.name, 
             lastWorkout.sets, 
-            historicalBestE1RM
+            historicalBestE1RM,
+            slot
         );
         
         // Fatigue phenotype
@@ -17376,9 +18218,7 @@ class App {
         let performanceTrend = 'stalled';
         if (workouts.length >= 2) {
             const currE1RM = bestE1RM;
-            const prevE1RM = Math.max(...workouts[1].sets.map(s => 
-                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-            ), 0);
+            const prevE1RM = this.getBestWorkoutE1RM(workouts[1]);
             
             if (currE1RM > prevE1RM * 1.01) {
                 performanceTrend = 'improved';
@@ -17524,8 +18364,9 @@ class App {
     
     // Detect if workout uses ramping (ascending weights)
     isRampingWorkout(sets) {
-        if (sets.length < 2) return false;
-        const weights = sets.map(s => s.weight || 0).filter(w => w > 0);
+        const progressionSets = this.getProgressionEligibleSets(sets);
+        if (progressionSets.length < 2) return false;
+        const weights = progressionSets.map(s => s.weight || 0).filter(w => w > 0);
         if (weights.length < 2) return false;
         const maxW = Math.max(...weights);
         const minW = Math.min(...weights);
@@ -17537,7 +18378,8 @@ class App {
     analyzeWorkoutPattern(sets, slot) {
         if (!sets || sets.length === 0) return null;
         
-        const validSets = sets.filter(s => s.weight > 0 && s.reps > 0);
+        const validSets = this.getProgressionEligibleSets(sets)
+            .filter(s => s.weight > 0 && s.reps > 0);
         if (validSets.length === 0) return null;
         
         const weights = validSets.map(s => s.weight);
@@ -17647,7 +18489,8 @@ class App {
     
     // Get reference weight from workout using smart pattern analysis
     getReferenceWeight(workout, slot) {
-        const sets = workout.sets;
+        const sets = this.getProgressionEligibleSets(workout?.sets || []);
+        if (!sets.length) return 0;
         const analysis = this.analyzeWorkoutPattern(sets, slot);
         
         if (analysis) {
@@ -17655,7 +18498,7 @@ class App {
         }
         
         // Fallback to first set weight
-        return sets[0]?.weight || workout.maxWeight;
+        return sets[0]?.weight || 0;
     }
 
     buildSlotCoachMeta(slot) {
@@ -17669,6 +18512,9 @@ class App {
         return {
             slotId: normalizedSlot.id,
             exerciseName,
+            exerciseStableId: this.getStableExerciseId(normalizedSlot),
+            exerciseFamilyId: this.getExerciseFamilyId(normalizedSlot),
+            semanticProfile: this.getSemanticExerciseProfile(normalizedSlot),
             type: normalizedSlot.type || descriptor.type || 'compound',
             muscleGroup: normalizedSlot.muscleGroup || primaryMuscles[0] || '',
             primaryMuscles,
@@ -18357,13 +19203,13 @@ class App {
             const latest = workouts[0];
             const previous = workouts[1] || null;
             const trendSummary = this.buildExerciseTrendSummary(workouts, slot);
-            const currentTopE1RM = Math.max(...latest.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0);
+            const currentTopE1RM = this.getBestWorkoutE1RM(latest);
             const previousTopE1RM = previous
-                ? Math.max(...previous.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0)
+                ? this.getBestWorkoutE1RM(previous)
                 : 0;
             const previousPeakE1RM = Math.max(
                 0,
-                ...workouts.slice(1).map(workout => Math.max(...workout.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0))
+                ...workouts.slice(1).map(workout => this.getBestWorkoutE1RM(workout))
             );
             const targetSetCount = Math.max(latest.targetSetCount || latest.sets.length, 1);
             const targetArray = this.genTargetReps(slot.repsMin, slot.repsMax, targetSetCount);
@@ -18502,14 +19348,18 @@ class App {
         }
 
         const recent = workouts.slice(0, 5).map(workout => {
-            const targetSetCount = Math.max(workout.targetSetCount || workout.sets.length, 1);
+            const progressionSets = this.getProgressionEligibleSets(workout?.sets || []);
+            const targetSetCount = Math.max(
+                Number(workout.targetSetCount) || Number(workout.programmedSetCount) || Number(slot.sets) || progressionSets.length,
+                1
+            );
             const targetArray = this.genTargetReps(slot.repsMin, slot.repsMax, targetSetCount);
-            const targetHits = workout.sets.reduce((count, set, index) => {
+            const targetHits = progressionSets.reduce((count, set, index) => {
                 return count + ((set.reps || 0) >= (targetArray[index] || slot.repsMax) ? 1 : 0);
             }, 0);
 
             return {
-                topE1RM: Math.max(...workout.sets.map(set => this.calculateE1RM(set.weight, set.reps, set.rpe || 8)), 0),
+                topE1RM: this.getBestWorkoutE1RM(workout),
                 targetHitRate: targetSetCount ? targetHits / targetSetCount : 0,
                 avgRpe: workout.avgRpe,
                 hasRealRpe: workout.hasRealRpe,
@@ -19358,13 +20208,10 @@ class App {
         // ===================================================================
         
         // Calculate historical best e1RM for reference
-        let historicalBestE1RM = 0;
-        for (const w of workouts) {
-            for (const s of w.sets) {
-                const e = this.calculateE1RM(s.weight, s.reps, s.rpe || 8);
-                if (e > historicalBestE1RM) historicalBestE1RM = e;
-            }
-        }
+        const historicalBestE1RM = Math.max(
+            ...workouts.map(workout => this.getBestWorkoutE1RM(workout)),
+            0
+        );
         
         // Store for later use
         this.currentHistoricalBestE1RM = historicalBestE1RM;
@@ -19375,18 +20222,16 @@ class App {
             const lastWorkout = workouts[0];
             
             // Calculate current session e1RM
-            const currentE1RM = Math.max(...lastWorkout.sets.map(s => 
-                this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-            ), 0);
+            const currentE1RM = this.getBestWorkoutE1RM(lastWorkout);
             
             // Effective sets analysis
-            const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM);
+            const effectiveData = this.calculateEffectiveSets(lastWorkout.sets, historicalBestE1RM, slot);
             
             // Sandbagging detection
             const sandbaggingCheck = this.detectSandbagging(lastWorkout.sets, historicalBestE1RM);
             
             // SFR calculation
-            const sfrData = this.calculateSFR(exerciseId, lastWorkout.sets, historicalBestE1RM);
+            const sfrData = this.calculateSFR(exerciseId, lastWorkout.sets, historicalBestE1RM, slot);
             
             // Fatigue phenotype
             const phenotype = this.inferFatiguePhenotype(workouts);
@@ -19401,9 +20246,7 @@ class App {
             // Performance trend
             let performanceTrend = 'stalled';
             if (workouts.length >= 2) {
-                const prevE1RM = Math.max(...workouts[1].sets.map(s => 
-                    this.calculateE1RM(s.weight, s.reps, s.rpe || 8)
-                ), 0);
+                const prevE1RM = this.getBestWorkoutE1RM(workouts[1]);
                 
                 if (currentE1RM > prevE1RM * 1.01) {
                     performanceTrend = 'improved';
@@ -20451,7 +21294,7 @@ class App {
                 };
             }
             const e1rm = this.calculateE1RM(set.weight, set.reps, set.rpe || 8);
-            if (e1rm > workoutE1RMs[set.workoutId].bestE1RM) {
+            if (!this.isSetExcludedFromProgression(set) && e1rm > workoutE1RMs[set.workoutId].bestE1RM) {
                 workoutE1RMs[set.workoutId].bestE1RM = e1rm;
             }
             workoutE1RMs[set.workoutId].totalVolume += (set.weight || 0) * (set.reps || 0);
@@ -20667,6 +21510,809 @@ class App {
                         ? 'Fatigue métabolique élevée - bon pour la masse'
                         : 'Fatigue excessive - risque de junk volume'
         };
+    }
+
+    // ===== Advanced set-by-set reading =====
+    // This analysis intentionally observes the session without changing the
+    // programmed plan. It is the layer that turns a sequence such as
+    // 100x10 → 100x6 → 90x9 into useful, explainable signals.
+    analyzeSetSequence(sets = [], slot = this.currentSlot, options = {}) {
+        const source = (Array.isArray(sets) ? sets : [])
+            .map((set, index) => ({ set, index }))
+            .filter(({ set }) => set?.completed && Number(set?.reps || 0) > 0 && !this.isSetExcludedFromProgression(set));
+        if (!source.length) {
+            return {
+                signals: [],
+                classifications: [],
+                restIntervals: [],
+                suggestions: [],
+                summary: '',
+                validSets: 0
+            };
+        }
+
+        const rows = source.map(({ set, index }) => ({
+            set,
+            index,
+            weight: Math.max(0, Number(set.weight || 0)),
+            reps: Math.max(0, Number(set.reps || 0)),
+            e1rm: Number(set.weight || 0) > 0 ? this.calculateE1RM(Number(set.weight), Number(set.reps), 8) : 0
+        }));
+        const restTarget = Math.max(0, Number(slot?.rest || 0));
+        const restIntervals = [];
+        for (let i = 1; i < rows.length; i++) {
+            const previous = rows[i - 1].set;
+            const current = rows[i].set;
+            const explicit = Number(current.restAfterSeconds ?? current.restSeconds ?? 0);
+            const timestampDelta = Number(previous.timestamp) > 0 && Number(current.timestamp) > Number(previous.timestamp)
+                ? Math.round((Number(current.timestamp) - Number(previous.timestamp)) / 1000)
+                : 0;
+            const seconds = explicit > 0 ? explicit : timestampDelta;
+            if (seconds > 0) {
+                restIntervals.push({ fromSet: rows[i - 1].index + 1, toSet: rows[i].index + 1, seconds });
+            }
+        }
+
+        const signals = [];
+        const classifications = [];
+        const suggestions = [];
+        const addSignal = (key, label, detail, suggestion = null, confidence = 'medium') => {
+            signals.push({ key, label, detail, confidence });
+            classifications.push(key);
+            if (suggestion) suggestions.push({ key, ...suggestion });
+        };
+        const median = values => {
+            const ordered = [...values].sort((a, b) => a - b);
+            if (!ordered.length) return 0;
+            const middle = Math.floor(ordered.length / 2);
+            return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
+        };
+        const first = rows[0];
+        const later = rows.slice(1);
+        const laterMedianWeight = median(later.map(row => row.weight).filter(weight => weight > 0));
+        const laterMedianReps = median(later.map(row => row.reps));
+        const firstTooHeavy = rows.length >= 2
+            && first.weight > 0
+            && laterMedianWeight > 0
+            && first.weight >= laterMedianWeight * 1.05
+            && first.reps <= laterMedianReps + 1;
+        if (firstTooHeavy) {
+            addSignal(
+                'first_set_too_heavy',
+                'Première série trop ambitieuse',
+                `La première charge (${this.normalizeLoadPrecision(first.weight)} kg) est au-dessus de la référence des séries suivantes.`,
+                {
+                    message: 'La prochaine fois, une première série un peu plus progressive pourrait mieux préserver les reps.',
+                    action: 'ramp_first_set'
+                },
+                'high'
+            );
+        }
+
+        const sameLoadRows = rows.filter(row => row.weight > 0);
+        const sameLoadDrop = sameLoadRows.length >= 2
+            ? Math.max(...sameLoadRows.map(row => row.reps)) - Math.min(...sameLoadRows.map(row => row.reps))
+            : 0;
+        const firstToLastRepDrop = first.reps > 0 ? ((first.reps - rows[rows.length - 1].reps) / first.reps) * 100 : 0;
+        if (rows.length >= 2 && (firstToLastRepDrop >= 15 || sameLoadDrop >= Math.max(3, Math.ceil(first.reps * 0.2)))) {
+            addSignal(
+                'progressive_fatigue',
+                'Fatigue progressive',
+                `Les reps diminuent de ${Math.max(0, Math.round(firstToLastRepDrop))}% sur la séquence.`,
+                {
+                    message: 'Tu peux garder la séance telle quelle, ou prendre un peu plus de repos avant la prochaine série.',
+                    action: 'extend_rest'
+                },
+                'high'
+            );
+        }
+
+        const shortRest = restTarget > 0 && restIntervals.some(interval => interval.seconds < restTarget * 0.75);
+        const shortRestWithDrop = shortRest && restIntervals.some(interval => {
+            const next = rows.find(row => row.index + 1 === interval.toSet);
+            const previous = rows.find(row => row.index + 1 === interval.fromSet);
+            return next && previous && next.reps <= previous.reps - 2;
+        });
+        if (shortRestWithDrop) {
+            addSignal(
+                'short_rest',
+                'Repos court détecté',
+                'Une baisse de reps arrive après un repos nettement inférieur au repos prévu.',
+                {
+                    message: `Tu peux tester environ ${restTarget}s de repos si tu veux comparer la qualité des reps.`,
+                    action: 'use_programmed_rest'
+                },
+                'medium'
+            );
+        }
+
+        const loadDropRows = rows.slice(1).map((row, offset) => ({ row, previous: rows[offset] }))
+            .filter(({ row, previous }) => previous.weight > 0 && row.weight > 0 && row.weight <= previous.weight * 0.95);
+        const voluntaryLoadDrop = loadDropRows.some(({ row, previous }) => row.reps >= previous.reps - 1);
+        if (voluntaryLoadDrop) {
+            addSignal(
+                'voluntary_load_drop',
+                'Baisse de charge cohérente',
+                'Une charge plus basse a permis de conserver les reps.',
+                {
+                    message: 'Cette adaptation peut être gardée comme repère de travail, sans la convertir automatiquement en nouvelle règle.',
+                    action: 'keep_adaptation'
+                },
+                'high'
+            );
+        }
+
+        const ascendingLoads = rows.length >= 3 && rows.every((row, index) => index === 0 || row.weight >= rows[index - 1].weight);
+        if (ascendingLoads && first.weight > 0 && rows[rows.length - 1].weight >= first.weight * 1.05) {
+            addSignal(
+                'ramping',
+                'Montée en charge',
+                'Les charges montent progressivement sur la séquence.',
+                {
+                    message: 'La première série ressemble à une série de montée en charge : tu peux la garder hors de tes séries de travail si c’est volontaire.',
+                    action: 'mark_warmup_candidate'
+                },
+                'medium'
+            );
+        }
+
+        const cap = Number(slot?.maxSelectableLoadKg ?? slot?.maxLoadKg ?? options.maxSelectableLoadKg ?? 0);
+        const maxObserved = Math.max(...rows.map(row => row.weight), 0);
+        if (cap > 0 && maxObserved >= cap && rows.filter(row => row.weight >= cap).length >= 2) {
+            addSignal(
+                'machine_cap',
+                'Charge maximale atteinte',
+                `La charge observée atteint le plafond renseigné (${this.normalizeLoadPrecision(cap)} kg).`,
+                {
+                    message: 'La progression peut alors se faire avec les reps, le tempo ou une variante, au choix.',
+                    action: 'progress_with_reps'
+                },
+                'high'
+            );
+        }
+
+        const referenceE1RM = Number(options.referenceE1RM || this.lastExerciseHistory?.bestE1RM || 0);
+        const currentE1RM = Math.max(...rows.map(row => row.e1rm), 0);
+        if (referenceE1RM > 0 && currentE1RM > 0) {
+            const deviation = ((currentE1RM - referenceE1RM) / referenceE1RM) * 100;
+            if (Math.abs(deviation) >= 8) {
+                addSignal(
+                    'unusual_performance',
+                    deviation > 0 ? 'Performance inhabituelle à la hausse' : 'Performance inhabituelle à la baisse',
+                    `L’e1RM estimé est ${deviation > 0 ? '+' : ''}${Math.round(deviation)}% par rapport à la référence.`,
+                    {
+                        message: deviation > 0
+                            ? 'Garde ce signal comme une bonne journée potentielle, sans obligation de monter la charge.'
+                            : 'Une journée plus faible peut venir du contexte : note-le et compare les prochaines séances avant de conclure.',
+                        action: 'observe_next_session'
+                    },
+                    'medium'
+                );
+            }
+        }
+
+        const priorityLabels = {
+            first_set_too_heavy: 'première série ambitieuse',
+            progressive_fatigue: 'fatigue progressive',
+            short_rest: 'repos court',
+            voluntary_load_drop: 'baisse de charge cohérente',
+            ramping: 'montée en charge',
+            machine_cap: 'plafond machine',
+            unusual_performance: 'performance inhabituelle'
+        };
+        const summary = classifications.length
+            ? classifications.map(key => priorityLabels[key] || key).slice(0, 3).join(' · ')
+            : 'Séquence stable';
+        return {
+            signals,
+            classifications,
+            restIntervals,
+            suggestions,
+            summary,
+            validSets: rows.length,
+            currentE1RM,
+            firstToLastRepDrop: Math.round(firstToLastRepDrop),
+            averageRestSeconds: restIntervals.length
+                ? Math.round(restIntervals.reduce((sum, item) => sum + item.seconds, 0) / restIntervals.length)
+                : null
+        };
+    }
+
+    // ===== Optional set-quality annotations =====
+    getSetQualityTags(set = {}) {
+        const tags = Array.isArray(set?.qualityTags)
+            ? set.qualityTags
+            : set?.qualityTag ? [set.qualityTag] : [];
+        return Array.from(new Set(tags.filter(tag => SET_QUALITY_TAGS?.[tag])));
+    }
+
+    isSetExcludedFromProgression(set = {}) {
+        return Boolean(set?.excludeFromProgression || this.getSetQualityTags(set).includes('exclude_progression'));
+    }
+
+    getSetQualityFactor(set = {}) {
+        const tags = this.getSetQualityTags(set);
+        if (tags.includes('exclude_progression')) return 0;
+        if (tags.includes('pain')) return 0.35;
+        if (tags.includes('technical')) return 0.6;
+        if (tags.includes('cheat')) return 0.65;
+        if (tags.includes('reduced_rom')) return 0.7;
+        return 1;
+    }
+
+    getProgressionEligibleSets(sets = []) {
+        return (Array.isArray(sets) ? sets : []).filter(set =>
+            set
+            && set.completed !== false
+            && Number(set.reps || 0) > 0
+            && !this.isSetExcludedFromProgression(set)
+        );
+    }
+
+    renderSetQualityControls(set = {}, setIndex, side = null, slotId = null) {
+        if (!set?.completed || !Number(set?.reps || 0)) return '';
+        const selected = new Set(this.getSetQualityTags(set));
+        const sideLabel = side ? `-${side}` : '';
+        const compactLabel = side === 'left' ? 'G'
+            : side === 'right' ? 'D'
+                : side === 'superset-a' ? 'A'
+                    : side === 'superset-b' ? 'B' : '';
+        const buttons = Object.entries(SET_QUALITY_TAGS || {}).map(([key, meta]) => `
+            <button type="button" class="set-quality-tag ${selected.has(key) ? 'is-selected' : ''}" data-quality-tag="${key}" data-set-index="${setIndex}"${side ? ` data-side="${side}"` : ''}${slotId ? ` data-slot-id="${this.escapeHtml(slotId)}"` : ''} title="${this.escapeHtml(meta.description)}" aria-pressed="${selected.has(key)}">
+                <span>${this.escapeHtml(meta.icon || '•')}</span>${this.escapeHtml(meta.shortLabel || meta.label)}
+            </button>
+        `).join('');
+        return `
+            <details class="set-quality-details" data-quality-side="${side || ''}">
+                <summary>Annoter${sideLabel ? ` ${compactLabel}` : ''}</summary>
+                <div class="set-quality-menu">${buttons}</div>
+            </details>
+        `;
+    }
+
+    async toggleSetQualityTag(setIndex, tag, side = null, slotId = null) {
+        if (!SET_QUALITY_TAGS?.[tag] || !this.currentWorkout || !this.currentSlot?.id) return;
+        const targetSlotId = slotId || this.currentSlot.id;
+        const slotData = this.currentWorkout.slots?.[targetSlotId];
+        if (!slotData) return;
+        const collection = side === 'left' ? 'setsLeft' : side === 'right' ? 'setsRight' : 'sets';
+        if (!Array.isArray(slotData[collection])) slotData[collection] = [];
+        const set = slotData[collection][setIndex];
+        if (!set) return;
+        const tags = new Set(this.getSetQualityTags(set));
+        if (tag === 'clean') {
+            if (tags.has('clean') && tags.size === 1) tags.delete('clean');
+            else {
+                tags.clear();
+                tags.add('clean');
+            }
+        } else if (tags.has(tag)) {
+            tags.delete(tag);
+        } else {
+            tags.delete('clean');
+            tags.add(tag);
+        }
+        set.qualityTags = [...tags];
+        set.excludeFromProgression = tags.has('exclude_progression');
+        await db.saveCurrentWorkout(this.currentWorkout);
+        if (side === 'superset-a' || side === 'superset-b' || this.isSupersetMode) {
+            this.renderSupersetSeries();
+        } else if (side || this.isUnilateralMode || this.isUnilateralExercise(this.getSlotExerciseName(this.currentSlot))) {
+            this.renderUnilateralSeries();
+        } else {
+            this.renderSeries();
+        }
+    }
+
+    // ===== Optional intelligent warm-up =====
+    buildOptionalWarmupPlan(slot = this.currentSlot, targetWeight = null) {
+        if (!slot || this.isCardioSlot(slot)) return [];
+        const descriptor = this.getExerciseDescriptor(slot);
+        const reference = Number(targetWeight)
+            || Number(this.currentCoachingAdvice?.suggestedWeight || 0)
+            || Number(this.lastExerciseHistory?.sets?.[0]?.weight || 0);
+        if (!(reference > 0)) {
+            return [{ id: 'free', label: 'Préparation libre', reps: 'quelques reps faciles', weight: null, note: 'Choisis toi-même si tu en as besoin.' }];
+        }
+        const isCompound = descriptor.type !== 'isolation';
+        const percentages = isCompound ? [0.4, 0.6, 0.75] : [0.5, 0.75];
+        const reps = isCompound ? [8, 5, 3] : [10, 5];
+        return percentages.map((percentage, index) => ({
+            id: `warmup-${index + 1}`,
+            label: isCompound ? `Montée ${index + 1}` : `Activation ${index + 1}`,
+            reps: reps[index],
+            weight: this.normalizeLoadPrecision(reference * percentage),
+            note: index === percentages.length - 1 ? 'Doit rester facile, sans fatigue.' : 'Reste loin de l’échec.'
+        }));
+    }
+
+    updateExerciseInsightsTrigger(slot = this.currentSlot) {
+        const trigger = document.getElementById('btn-open-exercise-insights');
+        if (!trigger) return;
+
+        const warmupCard = document.getElementById('warmup-card');
+        const recoveryCard = document.getElementById('recovery-map-card');
+        const hasAvailableInsight = Boolean(
+            slot
+            && !this.isCardioSlot(slot)
+            && ((warmupCard && !warmupCard.hidden) || (recoveryCard && !recoveryCard.hidden))
+        );
+
+        trigger.hidden = !hasAvailableInsight;
+        if (!hasAvailableInsight) this.closeExerciseInsightsSheet();
+    }
+
+    openExerciseInsightsSheet() {
+        const trigger = document.getElementById('btn-open-exercise-insights');
+        const sheet = document.getElementById('sheet-exercise-insights');
+        if (!trigger || trigger.hidden || !sheet) return;
+        sheet.classList.add('active');
+    }
+
+    closeExerciseInsightsSheet() {
+        const sheet = document.getElementById('sheet-exercise-insights');
+        if (sheet) sheet.classList.remove('active');
+    }
+
+    renderWarmupCard(slot = this.currentSlot, slotData = null) {
+        const card = document.getElementById('warmup-card');
+        const body = document.getElementById('warmup-body');
+        const list = document.getElementById('warmup-list');
+        const toggle = document.getElementById('btn-warmup-toggle');
+        if (!card || !body || !list) return;
+        if (!slot || this.isCardioSlot(slot)) {
+            card.hidden = true;
+            this.updateExerciseInsightsTrigger(slot);
+            return;
+        }
+        const resolvedData = slotData || this.currentWorkout?.slots?.[slot.id] || {};
+        const completedSteps = Array.isArray(resolvedData.warmupCompleted) ? resolvedData.warmupCompleted : [];
+        const coachReferenceWeight = Number(this.currentCoachingAdvice?.suggestedWeight || 0);
+        const storedReferenceWeight = Number(resolvedData.warmupPlanReferenceWeight || 0);
+        const refreshForCoach = coachReferenceWeight > 0
+            && completedSteps.length === 0
+            && (!storedReferenceWeight || Math.abs(storedReferenceWeight - coachReferenceWeight) > 0.001);
+        const plan = !refreshForCoach && Array.isArray(resolvedData.warmupPlan) && resolvedData.warmupPlan.length
+            ? resolvedData.warmupPlan
+            : this.buildOptionalWarmupPlan(slot, coachReferenceWeight || null);
+        if (refreshForCoach || !Array.isArray(resolvedData.warmupPlan) || !resolvedData.warmupPlan.length) {
+            resolvedData.warmupPlan = plan;
+            const lastWarmupWeight = plan.length ? Number(plan[plan.length - 1]?.weight || 0) : 0;
+            resolvedData.warmupPlanReferenceWeight = coachReferenceWeight || lastWarmupWeight || null;
+        }
+        const visible = resolvedData.warmupVisible === true;
+        card.hidden = false;
+        body.hidden = !visible;
+        if (toggle) {
+            toggle.textContent = visible ? 'Masquer' : 'Afficher';
+            toggle.setAttribute('aria-expanded', String(visible));
+        }
+        list.innerHTML = plan.map(step => {
+            const completed = Array.isArray(resolvedData.warmupCompleted) && resolvedData.warmupCompleted.includes(step.id);
+            const weight = step.weight == null ? 'à ton choix' : `${this.normalizeLoadPrecision(step.weight)} kg`;
+            return `<label class="warmup-step ${completed ? 'is-completed' : ''}">
+                <input type="checkbox" class="warmup-step-check" data-warmup-id="${this.escapeHtml(step.id)}" ${completed ? 'checked' : ''}>
+                <span class="warmup-step-copy"><strong>${this.escapeHtml(step.label)}</strong><span>${weight} · ${this.escapeHtml(String(step.reps))} reps</span><small>${this.escapeHtml(step.note || '')}</small></span>
+            </label>`;
+        }).join('');
+        this.updateExerciseInsightsTrigger(slot);
+    }
+
+    async toggleWarmupPlan() {
+        if (!this.currentWorkout || !this.currentSlot?.id) return;
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
+        if (!slotData) return;
+        slotData.warmupVisible = slotData.warmupVisible !== true;
+        if (!Array.isArray(slotData.warmupPlan) || !slotData.warmupPlan.length) {
+            slotData.warmupPlan = this.buildOptionalWarmupPlan(this.currentSlot);
+        }
+        await db.saveCurrentWorkout(this.currentWorkout);
+        this.renderWarmupCard(this.currentSlot, slotData);
+    }
+
+    async toggleWarmupStep(stepId, checked) {
+        if (!this.currentWorkout || !this.currentSlot?.id) return;
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
+        if (!slotData) return;
+        const completed = new Set(Array.isArray(slotData.warmupCompleted) ? slotData.warmupCompleted : []);
+        if (checked) completed.add(stepId);
+        else completed.delete(stepId);
+        slotData.warmupCompleted = [...completed];
+        await db.saveCurrentWorkout(this.currentWorkout);
+        this.renderWarmupCard(this.currentSlot, slotData);
+    }
+
+    // ===== Optional muscle recovery map =====
+    getRecoveryEstimateHours(muscleId, effectiveSets = 1) {
+        const landmark = VOLUME_LANDMARKS?.[muscleId] || VOLUME_LANDMARKS?.default || { recoveryDays: 2 };
+        const base = Math.max(24, Number(landmark.recoveryDays || 2) * 24);
+        return Math.round(base + (Number(effectiveSets || 0) >= 6 ? 24 : 0) + (Number(effectiveSets || 0) >= 10 ? 24 : 0));
+    }
+
+    async buildMuscleRecoverySnapshot(options = {}) {
+        const allSets = await db.getAll('setHistory');
+        const lookbackDays = Math.min(
+            30,
+            Math.max(3, Number(options.lookbackDays) || 14)
+        );
+        const now = Date.now();
+        const lookbackStart = now - (lookbackDays * 24 * 60 * 60 * 1000);
+        const byName = new Map();
+        const muscles = new Map();
+        const addExposure = (set, name, slotMeta = null, source = 'history') => {
+            if (!set || Number(set.reps || 0) <= 0) return;
+            const cacheKey = `${name}|${slotMeta?.muscleGroup || ''}|${slotMeta?.type || ''}`;
+            let contributions = byName.get(cacheKey);
+            if (!contributions) {
+                contributions = this.getExerciseMuscleContributions(name, slotMeta);
+                byName.set(cacheKey, contributions);
+            }
+            const factor = this.getSetQualityFactor(set);
+            const date = new Date(set.date || set.timestamp || Date.now()).getTime();
+            if (!Number.isFinite(date) || date < lookbackStart) return;
+            contributions.forEach(contribution => {
+                const muscleId = contribution.muscleId;
+                if (!muscleId) return;
+                const row = muscles.get(muscleId) || {
+                    muscleId,
+                    rawSets: 0,
+                    effectiveSets: 0,
+                    fatigue: 0,
+                    lastExposureAt: 0,
+                    lastRole: 'secondary',
+                    sources: new Set()
+                };
+                const roleWeight = Number(contribution.weight || (contribution.role === 'primary' ? 1 : 0.5));
+                row.rawSets += roleWeight;
+                row.effectiveSets += roleWeight * factor;
+                row.fatigue += roleWeight * factor * (contribution.role === 'primary' ? 1 : 0.45);
+                if (date >= row.lastExposureAt) {
+                    row.lastExposureAt = date;
+                    row.lastRole = contribution.role || 'secondary';
+                }
+                row.sources.add(source);
+                muscles.set(muscleId, row);
+            });
+        };
+        allSets.forEach(set => addExposure(set, set.exerciseName || this.getBaseExerciseHistoryName(set.exerciseId), null, 'historique'));
+
+        if (this.currentWorkout?.slots) {
+            for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
+                const slot = slotId === this.currentSlot?.id ? this.currentSlot : null;
+                const meta = slot || slotData?.meta || null;
+                const name = meta?.activeExercise || meta?.exerciseName || meta?.name || '';
+                if (!name) continue;
+                [...(slotData?.sets || []), ...(slotData?.setsLeft || []), ...(slotData?.setsRight || [])]
+                    .filter(set => set?.completed)
+                    .forEach(set => addExposure(set, set.exerciseName || name, meta, 'séance en cours'));
+            }
+        }
+
+        const currentMuscles = new Set();
+        if (this.currentSlot) {
+            this.getExerciseMuscleContributions(this.getSlotExerciseName(this.currentSlot), this.currentSlot)
+                .forEach(item => currentMuscles.add(item.muscleId));
+        }
+        const rows = [...muscles.values()].map(row => {
+            const estimateHours = this.getRecoveryEstimateHours(row.muscleId, row.effectiveSets);
+            const ageHours = row.lastExposureAt > 0 ? Math.max(0, (now - row.lastExposureAt) / 3600000) : null;
+            const recoveryPercent = ageHours == null ? null : Math.min(100, Math.round((ageHours / estimateHours) * 100));
+            const status = ageHours == null ? 'unknown' : recoveryPercent < 70 ? 'loaded' : recoveryPercent < 100 ? 'recovering' : 'ready';
+            const statusLabel = status === 'loaded' ? 'Encore chargé' : status === 'recovering' ? 'Récupération probable' : status === 'ready' ? 'Probablement prêt' : 'Pas encore observé';
+            return {
+                ...row,
+                rawSets: Math.round(row.rawSets * 10) / 10,
+                effectiveSets: Math.round(row.effectiveSets * 10) / 10,
+                fatigue: Math.round(row.fatigue * 10) / 10,
+                ageHours: ageHours == null ? null : Math.round(ageHours),
+                estimateHours,
+                recoveryPercent,
+                status,
+                statusLabel,
+                isCurrent: currentMuscles.has(row.muscleId),
+                secondaryOverlap: row.lastRole === 'secondary'
+            };
+        }).sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || (b.lastExposureAt || 0) - (a.lastExposureAt || 0));
+
+        return {
+            rows,
+            currentMuscles: [...currentMuscles],
+            generatedAt: now,
+            lookbackDays,
+            disclaimer: `Estimation basée sur les ${lookbackDays} derniers jours, les séries enregistrées et les recouvrements musculaires, pas un diagnostic.`
+        };
+    }
+
+    async renderRecoveryMap(options = {}) {
+        const card = document.getElementById('recovery-map-card');
+        const body = document.getElementById('recovery-map-body');
+        const list = document.getElementById('recovery-map-list');
+        if (!card || !body || !list) return;
+        if (!this.currentSlot || this.isCardioSlot(this.currentSlot)) {
+            card.hidden = true;
+            this.updateExerciseInsightsTrigger(this.currentSlot);
+            return;
+        }
+        const snapshot = await this.buildMuscleRecoverySnapshot(options);
+        if (this.currentScreen !== 'exercise') return;
+        const visible = this.currentWorkout?.slots?.[this.currentSlot.id]?.recoveryMapVisible === true;
+        card.hidden = false;
+        body.hidden = !visible;
+        const toggle = document.getElementById('btn-recovery-map-toggle');
+        if (toggle) {
+            toggle.textContent = visible ? 'Masquer' : 'Voir la carte';
+            toggle.setAttribute('aria-expanded', String(visible));
+        }
+        const rows = snapshot.rows.filter(row => row.isCurrent || row.lastExposureAt).slice(0, 8);
+        list.innerHTML = rows.length ? rows.map(row => {
+            const muscleName = this.getMuscleGroupLabel(row.muscleId);
+            const age = row.ageHours == null ? 'aucune trace' : `${row.ageHours}h depuis la dernière exposition`;
+            const overlap = row.secondaryOverlap ? ' · recouvrement secondaire' : '';
+            return `<div class="recovery-map-row ${row.status} ${row.isCurrent ? 'is-current' : ''}">
+                <div class="recovery-map-main"><strong>${this.escapeHtml(muscleName)}</strong><span>${this.escapeHtml(row.statusLabel)}${this.escapeHtml(overlap)}</span></div>
+                <div class="recovery-map-meter"><span style="width:${row.recoveryPercent == null ? 0 : row.recoveryPercent}%"></span></div>
+                <small>${this.escapeHtml(age)} · ${row.effectiveSets} séries effectives estimées</small>
+            </div>`;
+        }).join('') : '<div class="recovery-map-empty">Pas encore assez de données pour estimer les expositions.</div>';
+        const note = document.getElementById('recovery-map-note');
+        if (note) note.textContent = snapshot.disclaimer;
+        this.updateExerciseInsightsTrigger(this.currentSlot);
+    }
+
+    async toggleRecoveryMap() {
+        if (!this.currentWorkout || !this.currentSlot?.id) return;
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
+        if (!slotData) return;
+        slotData.recoveryMapVisible = slotData.recoveryMapVisible !== true;
+        await db.saveCurrentWorkout(this.currentWorkout);
+        await this.renderRecoveryMap();
+    }
+
+    async renderOptionalExerciseInsights(slot = this.currentSlot, slotData = null) {
+        if (!slot || typeof document === 'undefined' || !document.getElementById) return;
+        const token = ++this.exerciseInsightRenderToken;
+        const resolvedData = slotData || this.currentWorkout?.slots?.[slot.id] || {};
+        this.renderWarmupCard(slot, resolvedData);
+        await this.renderRecoveryMap();
+        if (token !== this.exerciseInsightRenderToken) return;
+    }
+
+    // ===== PWA workout continuity =====
+    async requestScreenWakeLock() {
+        if (this.wakeLockRequestInFlight || this.wakeLock || typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+        const wakeLockPreference = typeof localStorage !== 'undefined'
+            ? localStorage.getItem('wakeLockEnabled')
+            : null;
+        if ((typeof document !== 'undefined' && document.hidden) || wakeLockPreference === 'disabled') return;
+        this.wakeLockRequestInFlight = true;
+        try {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            this.wakeLock.addEventListener?.('release', () => {
+                this.wakeLock = null;
+            });
+        } catch (error) {
+            // Wake Lock is best-effort and is commonly unavailable on iOS/PWA.
+            console.info('Wake Lock indisponible:', error?.message || error);
+            this.wakeLock = null;
+        } finally {
+            this.wakeLockRequestInFlight = false;
+        }
+    }
+
+    async releaseScreenWakeLock() {
+        if (!this.wakeLock) return;
+        try {
+            await this.wakeLock.release();
+        } catch (error) {
+            console.info('Libération du Wake Lock impossible:', error?.message || error);
+        } finally {
+            this.wakeLock = null;
+        }
+    }
+
+    async syncScreenWakeLock() {
+        if (typeof document !== 'undefined' && this.currentScreen === 'exercise' && !document.hidden) {
+            await this.requestScreenWakeLock();
+        } else {
+            await this.releaseScreenWakeLock();
+        }
+    }
+
+    // ===== Optional local ghost sharing =====
+    // The link contains only the selected exercise result. There is no account,
+    // server or automatic publication involved; sharing happens only after the
+    // user explicitly taps the button.
+    encodeGhostPayload(payload) {
+        try {
+            const json = JSON.stringify(payload);
+            return btoa(unescape(encodeURIComponent(json)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/g, '');
+        } catch (error) {
+            return '';
+        }
+    }
+
+    decodeGhostPayload(encoded) {
+        try {
+            const base64 = String(encoded || '')
+                .replace(/-/g, '+')
+                .replace(/_/g, '/')
+                .padEnd(Math.ceil(String(encoded || '').length / 4) * 4, '=');
+            return JSON.parse(decodeURIComponent(escape(atob(base64))));
+        } catch (error) {
+            return null;
+        }
+    }
+
+    buildExerciseGhostPayload(slot = this.currentSlot, sets = [], snapshot = null) {
+        if (!slot || this.isCardioSlot(slot)) return null;
+        const completedSets = (Array.isArray(sets) ? sets : [])
+            .filter(set => Number(set?.reps || 0) > 0);
+        if (!completedSets.length) return null;
+        return {
+            version: 1,
+            kind: 'exercise-ghost',
+            exerciseName: slot.activeExercise || slot.name || 'Exercice',
+            exerciseStableId: this.getStableExerciseId(slot),
+            exerciseFamilyId: this.getExerciseFamilyId(slot),
+            date: new Date().toISOString(),
+            sets: completedSets
+                .map((set, index) => ({
+                    setNumber: index + 1,
+                    weight: Number(set.weight || 0),
+                    reps: Number(set.reps || 0),
+                    side: set.variant || set.side || null,
+                    qualityTags: this.getSetQualityTags(set)
+                })),
+            summary: snapshot ? {
+                totalReps: snapshot.totalReps,
+                maxWeight: snapshot.maxWeight,
+                totalVolume: snapshot.totalVolume,
+                bestE1RM: snapshot.bestE1RM
+            } : null
+        };
+    }
+
+    async shareExerciseGhost() {
+        const payload = this.currentExerciseGhostData;
+        if (!payload) return;
+        const encoded = this.encodeGhostPayload(payload);
+        if (!encoded) return;
+        const url = `${window.location.origin}${window.location.pathname}#ghost=${encodeURIComponent(encoded)}`;
+        const shareData = {
+            title: `Ghost · ${payload.exerciseName}`,
+            text: `Mon résultat sur ${payload.exerciseName}`,
+            url
+        };
+        try {
+            if (typeof navigator.share === 'function') {
+                await navigator.share(shareData);
+                return;
+            }
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url);
+                this.showCoachToast('Lien ghost copié. À envoyer uniquement aux amis de ton choix.', 'hot', '↗️');
+                return;
+            }
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            textArea.setAttribute('readonly', '');
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            textArea.remove();
+            this.showCoachToast('Lien ghost copié.', 'hot', '↗️');
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                this.showCoachToast('Le partage n’a pas abouti. Le résultat reste enregistré ici.', 'cold', '↩️');
+            }
+        }
+    }
+
+    renderGhostPreview(payload) {
+        if (!payload || payload.kind !== 'exercise-ghost') return;
+        document.getElementById('modal-ghost-preview')?.remove();
+        const modal = document.createElement('div');
+        modal.className = 'modal active ghost-preview-modal';
+        modal.id = 'modal-ghost-preview';
+        const totalReps = Number(payload.summary?.totalReps || (payload.sets || []).reduce((sum, set) => sum + Number(set.reps || 0), 0));
+        const maxWeight = Number(payload.summary?.maxWeight || Math.max(...(payload.sets || []).map(set => Number(set.weight || 0)), 0));
+        modal.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-content ghost-preview-content">
+                <div class="ghost-preview-kicker">Ghost privé · aperçu</div>
+                <h3>${this.escapeHtml(payload.exerciseName || 'Exercice')}</h3>
+                <p>Résultat partagé volontairement. Tu peux le consulter sans importer ni modifier tes propres données.</p>
+                <div class="ghost-preview-stats"><span><strong>${totalReps}</strong><small>reps</small></span><span><strong>${this.escapeHtml(this.formatOneDecimal(maxWeight))}</strong><small>kg max</small></span><span><strong>${(payload.sets || []).length}</strong><small>séries</small></span></div>
+                <div class="ghost-preview-sets">${(payload.sets || []).map(set => `<span>S${set.setNumber} · ${this.escapeHtml(this.formatOneDecimal(set.weight))} kg × ${this.escapeHtml(String(set.reps))}${set.side ? ` · ${this.escapeHtml(set.side)}` : ''}</span>`).join('')}</div>
+                <div class="ghost-preview-comparison" aria-live="polite">
+                    <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
+                    <small>Lecture de ton historique en cours…</small>
+                </div>
+                <div class="modal-actions"><button type="button" class="btn btn-primary" id="btn-close-ghost-preview">Fermer</button></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        modal.querySelector('.modal-backdrop').onclick = () => modal.remove();
+        modal.querySelector('#btn-close-ghost-preview').onclick = () => modal.remove();
+        void this.renderGhostLocalComparison(payload, modal);
+    }
+
+    async renderGhostLocalComparison(payload, modal) {
+        if (!payload || !modal?.isConnected) return;
+
+        let history = [];
+        try {
+            history = await this.getSetHistoryForExercise(payload.exerciseName || '');
+        } catch (error) {
+            console.info('Comparaison ghost indisponible:', error?.message || error);
+            return;
+        }
+
+        if (!modal.isConnected) return;
+        const groups = new Map();
+        history
+            .filter(set => set && Number(set.reps || 0) > 0)
+            .forEach(set => {
+                const key = String(set.workoutId ?? set.date ?? 'unknown');
+                const group = groups.get(key) || { date: set.date, sets: [] };
+                group.sets.push(set);
+                if (!group.date || new Date(set.date || 0) > new Date(group.date || 0)) group.date = set.date;
+                groups.set(key, group);
+            });
+
+        const latest = [...groups.values()]
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
+        const comparison = modal.querySelector('.ghost-preview-comparison');
+        if (!comparison) return;
+
+        if (!latest?.sets?.length) {
+            comparison.innerHTML = `
+                <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
+                <strong>Pas encore de passage comparable ici</strong>
+                <small>Le lien reste consultable sans modifier tes données.</small>
+            `;
+            return;
+        }
+
+        const localEligible = this.getProgressionEligibleSets(latest.sets);
+        const localBestE1RM = Math.max(
+            ...localEligible.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
+            0
+        );
+        const localTotalReps = latest.sets.reduce((sum, set) => sum + Number(set.reps || 0), 0);
+        const ghostEligible = this.getProgressionEligibleSets(payload.sets || []);
+        const ghostBestE1RM = Number(payload.summary?.bestE1RM)
+            || Math.max(...ghostEligible.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8)), 0);
+        const metricLabel = ghostBestE1RM > 0 && localBestE1RM > 0 ? 'e1RM estimé' : 'reps totales';
+        const ghostMetric = ghostBestE1RM > 0 && localBestE1RM > 0 ? ghostBestE1RM : Number(payload.summary?.totalReps || 0);
+        const localMetric = ghostBestE1RM > 0 && localBestE1RM > 0 ? localBestE1RM : localTotalReps;
+        const deltaPercent = localMetric > 0 ? Math.round(((ghostMetric - localMetric) / localMetric) * 100) : 0;
+        const deltaLabel = deltaPercent === 0 ? 'au même niveau' : `${deltaPercent > 0 ? '+' : ''}${deltaPercent}% vs ton dernier passage`;
+
+        comparison.innerHTML = `
+            <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
+            <strong>${this.escapeHtml(deltaLabel)}</strong>
+            <small>${this.escapeHtml(metricLabel)} · ghost ${this.escapeHtml(this.formatOneDecimal(ghostMetric))} · toi ${this.escapeHtml(this.formatOneDecimal(localMetric))}</small>
+        `;
+    }
+
+    checkGhostHash() {
+        if (typeof window === 'undefined' || !window.location.hash.startsWith('#ghost=')) return;
+        const encoded = window.location.hash.slice('#ghost='.length);
+        let decoded = encoded;
+        try {
+            decoded = decodeURIComponent(encoded);
+        } catch (error) {
+            console.info('Lien ghost ignoré : encodage invalide.');
+            return;
+        }
+        const payload = this.decodeGhostPayload(decoded);
+        if (payload) this.renderGhostPreview(payload);
     }
 }
 

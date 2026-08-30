@@ -99,6 +99,18 @@ async function run() {
         `all imported strength slots need a muscle mapping: ${unmappedStrengthSlots.map(slot => slot.name).join(', ')}`
     );
 
+    const importedExerciseNames = [...new Set(
+        stores.setHistory.map(set => app.getBaseExerciseHistoryName(set.exerciseName || set.exerciseId)).filter(Boolean)
+    )];
+    const unresolvedHistoryNames = importedExerciseNames.filter(name =>
+        !app.findExerciseLibraryEntry(name) && !app.findSemanticLibraryEntry(name)
+    );
+    assert.equal(
+        unresolvedHistoryNames.length,
+        0,
+        `historical exercise aliases should resolve to a known movement: ${unresolvedHistoryNames.join(', ')}`
+    );
+
     const curlSets = await app.getSetHistoryForExercise(curlName);
     assert.ok(curlSets.some(set => set.id === 2637), 'the real F6 curl session must remain');
     assert.ok(curlSets.some(set => set.id === 2521), 'curl sets from the former G7 position must remain');

@@ -2,100 +2,23 @@
 
 // Liste des groupes musculaires disponibles
 const MUSCLE_GROUPS = [
-    { id: 'pectoraux', name: 'Pectoraux', iconKey: 'muscle-pectoraux' },
-    { id: 'dos', name: 'Dos', iconKey: 'muscle-dos' },
-    { id: 'epaules', name: 'Épaules', iconKey: 'muscle-epaules' },
-    { id: 'biceps', name: 'Biceps', iconKey: 'muscle-biceps' },
-    { id: 'triceps', name: 'Triceps', iconKey: 'muscle-triceps' },
-    { id: 'avant-bras', name: 'Avant-bras', iconKey: 'muscle-avant-bras' },
-    { id: 'quadriceps', name: 'Quadriceps', iconKey: 'muscle-quadriceps' },
-    { id: 'ischio-jambiers', name: 'Ischio-jambiers', iconKey: 'muscle-ischio' },
-    { id: 'mollets', name: 'Mollets', iconKey: 'muscle-mollets' },
-    { id: 'fessiers', name: 'Fessiers', iconKey: 'muscle-fessiers' },
-    { id: 'abdominaux', name: 'Abdominaux', iconKey: 'muscle-abdominaux' },
-    { id: 'lombaires', name: 'Lombaires', iconKey: 'muscle-lombaires' },
-    { id: 'trapèzes', name: 'Trapèzes', iconKey: 'muscle-trapezes' },
-    { id: 'coiffe', name: 'Coiffe des rotateurs', iconKey: 'muscle-coiffe' }
+    { id: 'pectoraux', name: 'Pectoraux' },
+    { id: 'dos', name: 'Dos' },
+    { id: 'epaules', name: 'Épaules' },
+    { id: 'biceps', name: 'Biceps' },
+    { id: 'triceps', name: 'Triceps' },
+    { id: 'avant-bras', name: 'Avant-bras' },
+    { id: 'quadriceps', name: 'Quadriceps' },
+    { id: 'ischio-jambiers', name: 'Ischio-jambiers' },
+    { id: 'mollets', name: 'Mollets' },
+    { id: 'fessiers', name: 'Fessiers' },
+    { id: 'abdominaux', name: 'Abdominaux' },
+    { id: 'lombaires', name: 'Lombaires' },
+    { id: 'trapèzes', name: 'Trapèzes' },
+    { id: 'coiffe', name: 'Coiffe des rotateurs' }
 ];
 
 const APP_ICON_SVGS = {
-    'muscle-default': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 5.5C9 4.12 10.12 3 11.5 3h1C13.88 3 15 4.12 15 5.5V8l2 2v7.5A2.5 2.5 0 0 1 14.5 20h-5A2.5 2.5 0 0 1 7 17.5V10l2-2V5.5Z"/>
-        <path d="M9.5 11.5h5M9.5 15.5h5"/>
-    </svg>`,
-    'muscle-pectoraux': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 4.5c0-1.1.9-2 2-2s2 .9 2 2V7l3 2.5v7.5A2 2 0 0 1 15 19H9a2 2 0 0 1-2-2V9.5L10 7V4.5Z"/>
-        <path d="M8.5 10.5 12 13l3.5-2.5"/>
-        <path d="M8.8 10.8 10 15.5M15.2 10.8 14 15.5"/>
-    </svg>`,
-    'muscle-dos': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2v3l2.5 2.5V17a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7L9 7.5v-3Z"/>
-        <path d="M12 7v10"/>
-        <path d="M8.8 10.5 12 12l3.2-1.5"/>
-        <path d="M9.3 15 12 16.5 14.7 15"/>
-    </svg>`,
-    'muscle-epaules': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8 9a4 4 0 0 1 8 0"/>
-        <path d="M6 12c0-1.66 1.34-3 3-3h1.5L12 11l1.5-2H15a3 3 0 0 1 3 3v4H6v-4Z"/>
-        <path d="M8 8.5 6 10.5M16 8.5l2 2"/>
-    </svg>`,
-    'muscle-biceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8 15c.4-2.7 2.1-4 4.2-4H14l1.2 1.4c1.6 0 2.8 1.2 2.8 2.8 0 2.1-1.7 3.8-3.8 3.8H9.8A2.8 2.8 0 0 1 7 16.2V12"/>
-        <path d="M10.5 11V8.5c0-1.1.9-2 2-2h1"/>
-        <path d="M7 12h2.2"/>
-    </svg>`,
-    'muscle-triceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 7.5V6a2 2 0 0 1 2-2h1"/>
-        <path d="M9 7.5 7.5 12v4.2A2.8 2.8 0 0 0 10.3 19H15a3 3 0 0 0 3-3c0-1.6-1.3-2.9-2.9-2.9h-2.3L11 10.5"/>
-        <path d="M11 10.5 9 7.5"/>
-    </svg>`,
-    'muscle-avant-bras': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 6.5 7.5 11v5.5A2.5 2.5 0 0 0 10 19h5"/>
-        <path d="M9 6.5h4l2 2.5V14a2 2 0 0 1-2 2h-2.5"/>
-        <path d="M15 19v-3.5"/>
-        <path d="M17 19v-4"/>
-    </svg>`,
-    'muscle-quadriceps': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 4h4v4l1.5 4.5-1.7 6.5H10l-1.7-6.5L10 8V4Z"/>
-        <path d="M10.5 9.5h3"/>
-        <path d="M10 13h4"/>
-    </svg>`,
-    'muscle-ischio': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 4h4v4l1.5 4.5-1.7 6.5H10l-1.7-6.5L10 8V4Z"/>
-        <path d="M9.5 9.5 12 11l2.5-1.5"/>
-        <path d="M10 14.5 12 16l2-1.5"/>
-    </svg>`,
-    'muscle-mollets': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 4h4v4.2l-.8 2.8 1.8 2.2-1.6 5.8H10.6L9 13.2l1.8-2.2L10 8.2V4Z"/>
-        <path d="M10.2 14h3.6"/>
-        <path d="M10.7 16.8h2.6"/>
-    </svg>`,
-    'muscle-fessiers': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 5h6v4.5l1.5 2V16a3 3 0 0 1-3 3H10.5a3 3 0 0 1-3-3v-4.5L9 9.5V5Z"/>
-        <path d="M12 10v8"/>
-        <path d="M8.7 12c1 .6 2.1.9 3.3.9 1.2 0 2.3-.3 3.3-.9"/>
-    </svg>`,
-    'muscle-abdominaux': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2V8l2 2.5V17a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.5L9 8V4.5Z"/>
-        <path d="M10.2 9.8h3.6M10.2 13h3.6M10.2 16.2h3.6"/>
-        <path d="M12 9.8v6.4"/>
-    </svg>`,
-    'muscle-lombaires': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 4.5c0-1.1.9-2 2-2h2c1.1 0 2 .9 2 2V8l2 2.5V17a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.5L9 8V4.5Z"/>
-        <path d="M9.5 15h5"/>
-        <path d="M10.5 12.5h3"/>
-        <path d="M8.5 16.8 12 18l3.5-1.2"/>
-    </svg>`,
-    'muscle-trapezes': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8 6.5c0-2.2 1.8-4 4-4s4 1.8 4 4"/>
-        <path d="M7 10.5 9.5 8H14.5L17 10.5V16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-5.5Z"/>
-        <path d="M9.5 8 12 11l2.5-3"/>
-    </svg>`,
-    'muscle-coiffe': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8.5 12a3.5 3.5 0 1 1 3.5 3.5"/>
-        <path d="M12 8.5h3.5A3.5 3.5 0 1 1 12 12"/>
-        <path d="M6 15.5 8.5 13M18 8.5 15.5 11"/>
-    </svg>`,
     'recovery-checkin': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>
         <circle cx="12" cy="12" r="3.5"/>
@@ -150,7 +73,9 @@ function renderAppIcon(iconKey, options = {}) {
         size = 20,
         label = ''
     } = options;
-    const svg = APP_ICON_SVGS[iconKey] || APP_ICON_SVGS['muscle-default'];
+    // A missing icon must never silently turn into an anatomical-looking icon.
+    // Muscle labels use renderMuscleMarker() instead of an SVG altogether.
+    const svg = APP_ICON_SVGS[iconKey] || APP_ICON_SVGS['recovery-info'];
     const classes = ['app-icon', className].filter(Boolean).join(' ');
     const aria = label
         ? `role="img" aria-label="${escapeIconLabel(label)}"`
@@ -158,13 +83,132 @@ function renderAppIcon(iconKey, options = {}) {
     return `<span class="${classes}" style="--icon-size:${size}px" ${aria}>${svg}</span>`;
 }
 
+// Muscle badges are intentionally text-first. At the compact sizes used in
+// exercise cards, a body-part illustration is too ambiguous to be honest.
+// This marker adds hierarchy without pretending to show an anatomical location.
+function renderMuscleMarker(options = {}) {
+    const { className = '' } = options;
+    const classes = ['muscle-marker', className].filter(Boolean).join(' ');
+    return `<span class="${classes}" aria-hidden="true"></span>`;
+}
+
 function getMuscleGroupMeta(muscleId) {
     return MUSCLE_GROUPS.find(group => group.id === muscleId) || {
         id: muscleId,
-        name: muscleId,
-        iconKey: 'muscle-default'
+        name: muscleId
     };
 }
+
+function slugifyExerciseIdentity(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 96) || 'custom-exercise';
+}
+
+// These tags are deliberately descriptive rather than prescriptive. A lifter
+// can finish a set normally and add one (or none) of them afterwards. They are
+// used to make the historical analysis more honest without deleting raw data.
+const SET_QUALITY_TAGS = {
+    clean: {
+        label: 'Propre',
+        shortLabel: 'Propre',
+        icon: '✓',
+        description: 'Amplitude et technique habituelles.'
+    },
+    reduced_rom: {
+        label: 'ROM réduite',
+        shortLabel: 'ROM réduite',
+        icon: '↕',
+        description: 'Amplitude plus courte que d’habitude.'
+    },
+    cheat: {
+        label: 'Élan',
+        shortLabel: 'Élan',
+        icon: '≈',
+        description: 'Un peu d’élan ou de compensation.'
+    },
+    pain: {
+        label: 'Douleur inhabituelle',
+        shortLabel: 'Douleur',
+        icon: '!',
+        description: 'Signal inhabituel à surveiller, sans diagnostic.'
+    },
+    technical: {
+        label: 'Technique difficile',
+        shortLabel: 'Technique',
+        icon: '⚙',
+        description: 'La technique a demandé plus d’attention.'
+    },
+    exclude_progression: {
+        label: 'Hors progression',
+        shortLabel: 'Hors progression',
+        icon: '⊘',
+        description: 'Garde la série dans le volume, mais exclue-la des records et conseils.'
+    }
+};
+
+// Names found in older personal exports. They are identity aliases, not new
+// exercises: resolving them to a library entry keeps history attached when a
+// program evolves from English/custom labels to the current canonical names.
+const EXERCISE_IDENTITY_ALIASES = Object.freeze({
+    'abdominal crunch machine': 'Crunch machine',
+    'back extension': 'Back extension 45°',
+    'behind-the-back cable wrist curl': 'Wrist curl barre',
+    'cable face pull': 'Face pull',
+    'cable straight bar curl': 'Curl poulie basse',
+    'cable woodchopper high-to-low': 'Woodchopper poulie',
+    'woodchopper high-to-low': 'Woodchopper poulie',
+    'captain chair knee raise': 'Relevé de genoux suspendu',
+    'chest press machine convergente': 'Développé machine convergente',
+    'chest-supported row machine': 'Rowing poitrine appuyée',
+    'curl incline aux halteres': 'Curl incliné haltères',
+    'curl marteau a la corde': 'Curl corde marteau',
+    'curl unilateral a la poulie bayesian curl': 'Bayesian curl',
+    'dips triceps focus': 'Dips poids du corps',
+    'developpe barre plat': 'Développé couché barre',
+    'developpe halteres plat': 'Développé couché haltères',
+    'developpe incline smith machine 15-30': 'Développé incliné smith',
+    'developpe incline barre leger': 'Développé incliné barre',
+    'developpe incline halteres leger': 'Développé incliné haltères',
+    'hack squat machine': 'Hack squat',
+    'high row convergente': 'Rowing machine convergente',
+    'high-to-low cable fly': 'Crossover haut vers bas',
+    'hip abduction': 'Abduction machine',
+    'hip abduction ecarte': 'Abduction machine',
+    'hip adduction': 'Adduction machine',
+    'lat pulldown prise large pronation': 'Tirage vertical prise large',
+    'lat pulldown prise neutre': 'Tirage vertical prise neutre',
+    'leg curl machine': 'Leg curl allongé',
+    'low-to-high cable fly': 'Écarté poulie basse',
+    'machine preacher curl': 'Curl pupitre machine',
+    'machine preacher curl 12rep': 'Curl pupitre machine',
+    'one-arm overhead cable triceps extension': 'Extension corde au-dessus de la tête',
+    'one-arm overhead triceps extension': 'Extension nuque haltère',
+    'overhead cable triceps extension': 'Extension corde au-dessus de la tête',
+    'overhead cable triceps extension barre en v': 'Extension barre V',
+    'rear delt cable fly': 'Oiseau poulie',
+    'reverse curl barre droite poulie': 'Curl inversé',
+    'rotation externe poulie coude au corps': 'Rotation externe poulie',
+    'rowing assis haut coudes ouverts': 'Rowing arrière d’épaule',
+    'rowing assis prise neutre coude ferme': 'Rowing poulie assise',
+    'rowing horizontal assis prise neutre': 'Rowing poulie assise',
+    'seated row machine fenetre g': 'Rowing poulie assise',
+    'seated row machine prise neutre': 'Rowing poulie assise',
+    'single-arm cable curl': 'Curl poulie basse',
+    'single-arm cable triceps pushdown': 'Extension poulie unilat',
+    'shrug halteres debout': 'Shrugs haltères',
+    'shrug halteres sur banc incline': 'Shrugs haltères',
+    'straight-arm pulldown': 'Tirage bras tendus poulie',
+    'triceps rope pushdown': 'Pushdown corde',
+    'v-bar triceps pushdown': 'Extension barre V',
+    'wrist extension halteres unilateral': 'Reverse wrist curl',
+    'wrist extension halteres': 'Reverse wrist curl',
+    'elevations laterales halteres strict': 'Élévation latérale'
+});
 
 function createExerciseLibraryEntry(config) {
     const variants = Array.isArray(config.variants) ? config.variants.filter(Boolean) : [];
@@ -172,9 +216,16 @@ function createExerciseLibraryEntry(config) {
     const pool = Array.isArray(config.pool)
         ? config.pool.filter(Boolean)
         : [config.name, ...variants];
+    const identityKey = config.identityKey || config.exerciseKey || config.name;
+    const stableId = config.stableId || config.exerciseId || `exercise:${slugifyExerciseIdentity(identityKey)}`;
+    const familyId = config.familyId || config.movementFamilyId || `family:${slugifyExerciseIdentity(identityKey)}`;
 
     return {
         name: config.name,
+        stableId,
+        exerciseId: stableId,
+        familyId,
+        identityKey,
         category: config.category || 'fullbody',
         muscleGroup: config.muscleGroup || '',
         type: config.type || 'compound',

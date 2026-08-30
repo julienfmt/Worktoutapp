@@ -1,17 +1,17 @@
 // Service Worker for offline support
-const SW_VERSION = '4.9.4';
+const SW_VERSION = '4.10.6';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=4.9.4',
-    './streak-score.css?v=4.9.4',
+    './styles.css?v=4.10.6',
+    './streak-score.css?v=4.10.6',
     './db.js',
-    './data.js?v=4.9.4',
+    './data.js?v=4.10.6',
     './app.js',
-    './app.js?v=4.9.4',
+    './app.js?v=4.10.6',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'

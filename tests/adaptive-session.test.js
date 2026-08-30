@@ -224,6 +224,121 @@ async function run() {
     assert.equal(historyEntries.length, 1);
     assert.equal(historyEntries[0].exerciseName, 'Développé archivé');
 
+    const cableIdentity = app.getStableExerciseId('Cable lateral raise unilatéral');
+    const cableCanonical = app.getStableExerciseId('Élévation latérale poulie');
+    assert.equal(cableIdentity, cableCanonical, 'translated/variant names should share an immutable exercise identity');
+    assert.match(app.getExerciseFamilyId('Cable lateral raise unilatéral'), /^family:/);
+
+    const closeSubstitution = app.getExerciseSubstitutionEquivalence(
+        'Élévation latérale poulie',
+        'Cable lateral raise unilatéral'
+    );
+    assert.ok(closeSubstitution.score >= 70, `close substitution score was ${closeSubstitution.score}`);
+    const differentSubstitution = app.getExerciseSubstitutionEquivalence(
+        'Élévation latérale poulie',
+        'Presse à cuisses'
+    );
+    assert.ok(differentSubstitution.score < 70, `different movement score was ${differentSubstitution.score}`);
+
+    const sequence = app.analyzeSetSequence([
+        { weight: 100, reps: 10, completed: true, timestamp: 100000 },
+        { weight: 100, reps: 6, completed: true, timestamp: 101000 },
+        { weight: 90, reps: 9, completed: true, timestamp: 103000 }
+    ], { rest: 90, type: 'compound', activeExercise: 'Développé couché barre' });
+    assert.equal(sequence.signals.some(signal => signal.key === 'progressive_fatigue'), true);
+    assert.equal(sequence.signals.some(signal => signal.key === 'short_rest'), true);
+    assert.equal(sequence.signals.some(signal => signal.key === 'voluntary_load_drop'), true);
+
+    const taggedSet = { completed: true, reps: 10, qualityTags: ['cheat', 'exclude_progression'] };
+    assert.equal(app.isSetExcludedFromProgression(taggedSet), true);
+    assert.equal(app.getSetQualityFactor(taggedSet), 0);
+    assert.deepEqual(app.getProgressionEligibleSets([taggedSet, { completed: true, reps: 10 }]).length, 1);
+    assert.equal(
+        app.getProgressionEligibleSets([{ completed: false, reps: 12 }, { reps: 12 }]).length,
+        1,
+        'draft sets must not influence progression while legacy sets without completed remain usable'
+    );
+
+    const inferredEffectiveSets = app.calculateEffectiveSets([
+        { weight: 80, reps: 10, completed: true },
+        { weight: 80, reps: 8, completed: true }
+    ], 100, slot);
+    assert.ok(inferredEffectiveSets.effectiveSets > 0, 'missing RPE should not erase effective-set analysis');
+    assert.equal(inferredEffectiveSets.details.every(detail => detail.effortSource === 'estimated'), true);
+    assert.equal(inferredEffectiveSets.details.every(detail => detail.rpe === null), true);
+
+    const excludedOnlyWorkout = {
+        sets: [{ weight: 120, reps: 8, completed: true, qualityTags: ['exclude_progression'] }]
+    };
+    assert.equal(app.getBestWorkoutE1RM(excludedOnlyWorkout), 0);
+    assert.equal(app.detectSandbagging([
+        { weight: 120, reps: 8, completed: true, qualityTags: ['exclude_progression'], rpe: 10 },
+        { weight: 120, reps: 8, completed: true, qualityTags: ['exclude_progression'], rpe: 10 }
+    ], 120).detected, false);
+
+    const taggedProgressionWorkout = {
+        programmedSetCount: 2,
+        sets: [
+            { setNumber: 1, weight: 140, reps: 2, completed: true, qualityTags: ['exclude_progression'] },
+            { setNumber: 2, weight: 100, reps: 12, completed: true }
+        ]
+    };
+    assert.equal(app.getReferenceWeight(taggedProgressionWorkout, slot), 100);
+    const targetCheck = app.evaluateWorkoutAgainstTargets(taggedProgressionWorkout, {
+        ...slot,
+        sets: 1,
+        repsMin: 8,
+        repsMax: 12
+    });
+    assert.equal(targetCheck.completedRequiredSets, true);
+    assert.equal(targetCheck.allSetsHitTargets, true);
+
+    let skipCalled = false;
+    app.currentSlot = slot;
+    app.currentWorkout = { slots: { [slot.id]: { sets: [] } } };
+    app.isUnilateralMode = false;
+    app.skipExerciseForToday = async () => {
+        skipCalled = true;
+        return 'skipped';
+    };
+    assert.equal(await app.finishOrSkipCurrentExercise(), 'skipped');
+    assert.equal(skipCalled, true, 'the free control must skip cleanly when no set was validated');
+
+    app.currentSlot = slot;
+    const enrichedHistory = app.buildExerciseHistorySession({
+        date: '2026-08-30T10:00:00.000Z',
+        sets: [
+            { setNumber: 1, weight: 100, reps: 10, completed: true, restAfterSeconds: 120, qualityTags: ['clean'] },
+            { setNumber: 2, weight: 95, reps: 6, completed: true, restAfterSeconds: 60, qualityTags: ['exclude_progression'] }
+        ]
+    }, slot);
+    assert.equal(enrichedHistory.totalVolume, 1570);
+    assert.equal(enrichedHistory.progressionEligibleSetCount, 1);
+    assert.ok(enrichedHistory.bestE1RM > 0);
+    assert.deepEqual(enrichedHistory.qualityLabels, ['Propre 1', 'Hors progression 1']);
+    assert.equal(enrichedHistory.averageRestSeconds, 90);
+
+    stores.setHistory = [
+        {
+            id: 'recent-exposure',
+            exerciseName: 'Développé couché barre',
+            weight: 80,
+            reps: 10,
+            date: new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString()
+        },
+        {
+            id: 'old-exposure',
+            exerciseName: 'Développé couché barre',
+            weight: 80,
+            reps: 10,
+            date: new Date(Date.now() - (45 * 24 * 60 * 60 * 1000)).toISOString()
+        }
+    ];
+    const recoverySnapshot = await app.buildMuscleRecoverySnapshot({ lookbackDays: 14 });
+    const chestRecovery = recoverySnapshot.rows.find(row => row.muscleId === 'pectoraux');
+    assert.equal(recoverySnapshot.lookbackDays, 14);
+    assert.equal(chestRecovery.rawSets, 1, 'recovery fatigue must use recent exposure, not lifetime history');
+
     console.log('adaptive-session tests: OK');
 }
 
