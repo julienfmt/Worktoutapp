@@ -545,7 +545,9 @@ class App {
         this.wakeLock = null;
         this.wakeLockRequestInFlight = false;
         this.exerciseInsightRenderToken = 0;
-        this.currentExerciseGhostData = null;
+        this.qualityMenuToggleBound = false;
+        this.restTimerNotificationScheduleVersion = 0;
+        this.restTimerNotificationShown = false;
     }
 
     async init() {
@@ -581,7 +583,6 @@ class App {
         if (!onboardingShown) {
             await this.checkPendingSession();
         }
-        this.checkGhostHash();
     }
 
     createEmptyHomeDataSnapshot() {
@@ -1952,6 +1953,14 @@ class App {
     }
     
     setupVisibilityHandler() {
+        if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data?.type === 'REST_TIMER_NOTIFICATION_SHOWN') {
+                    this.restTimerNotificationShown = true;
+                }
+            });
+        }
+
         // Handle app returning from background on iOS
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
@@ -5970,7 +5979,7 @@ class App {
             .filter(Boolean);
         const tags = [];
         if (primaryMuscle) {
-            tags.push(`<span class="exercise-header-tag exercise-header-tag-muscle">${renderMuscleMarker()}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`);
+            tags.push(`<span class="exercise-header-tag exercise-header-tag-muscle">${this.escapeHtml(primaryMuscle.name)}</span>`);
         }
         if (secondaryNames.length > 0) {
             tags.push(`<span class="exercise-header-tag">avec ${this.escapeHtml(secondaryNames.join(' · '))}</span>`);
@@ -7390,7 +7399,7 @@ class App {
         const safeSlotId = this.escapeHtml(slot.slotId || '');
         const safeExerciseName = this.escapeHtml(exerciseName);
         const muscleBadge = primaryMuscle
-            ? `<span class="slot-muscle-tag">${renderMuscleMarker()}<span>${this.escapeHtml(primaryMuscle.name)}</span></span>`
+            ? `<span class="slot-muscle-tag">${this.escapeHtml(primaryMuscle.name)}</span>`
             : '';
         const formatBadge = this.isUnilateralExercise(exerciseName)
             ? '<span class="slot-format-tag">Unilatéral</span>'
@@ -7595,9 +7604,6 @@ class App {
         this.isReviewMode = this.areSlotsCompleted([slotId]);
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.nextUnilateralSuggestedWeights = null;
-        this.currentExerciseGhostData = null;
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) ghostButton.hidden = true;
         this.userOverrideSets = false; // Reset deload override when changing exercise
         this.editingSetIndex = null; // Reset edit mode
         this.liveAdaptationAnalysis = null;
@@ -7988,9 +7994,6 @@ class App {
         
         this.isSupersetMode = true;
         this.isReviewMode = this.areSlotsCompleted([slotId, this.currentSlot.supersetWith]);
-        this.currentExerciseGhostData = null;
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) ghostButton.hidden = true;
         document.getElementById('exercise-control-card')?.setAttribute('hidden', '');
         document.getElementById('live-adaptation-card')?.setAttribute('hidden', '');
         this.supersetCoachingAdviceA = null;
@@ -9936,9 +9939,6 @@ class App {
     async showSupersetSummary() {
         const slotAData = this.currentWorkout.slots[this.currentSlot.id];
         const slotBData = this.currentWorkout.slots[this.supersetSlot.id];
-        this.currentExerciseGhostData = null;
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) ghostButton.hidden = true;
         this.editingSetIndex = null;
         
         const completedSetsA = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotAData);
@@ -12124,9 +12124,6 @@ class App {
         const completedSets = this.getCompletedStrengthSetsForSummary(this.currentSlot, slotData);
         const historyWorkouts = await this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name);
         const snapshot = this.buildExerciseSummarySnapshot(this.currentSlot, completedSets, historyWorkouts);
-        this.currentExerciseGhostData = this.buildExerciseGhostPayload(this.currentSlot, completedSets, snapshot);
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) ghostButton.hidden = !this.currentExerciseGhostData;
         const setsLeft = completedSets.filter(set => set.variant === 'left');
         const setsRight = completedSets.filter(set => set.variant === 'right');
         this.editingSetIndex = null;
@@ -12850,6 +12847,7 @@ class App {
             this.restTimer = null;
         }
         this.clearRestTimerCompletionTimeout();
+        this.cancelRestTimerNotificationSchedule();
 
         if (!this.restFeedbackCaptured) {
             this.restFeedbackCaptured = true;
@@ -12897,6 +12895,7 @@ class App {
             this.restTimer = null;
         }
         this.clearRestTimerCompletionTimeout();
+        this.restTimerNotificationShown = false;
 
         this.overlayTimerMode = 'rest';
         this.cardioTimerState = null;
@@ -12948,6 +12947,7 @@ class App {
         this.updateRestTimer();
         this.restTimer = setInterval(() => this.updateRestTimer(), 100);
         this.scheduleRestTimerCompletion();
+        this.scheduleRestTimerNotification();
     }
 
     renderRestTimerRecommendation() {
@@ -12984,6 +12984,7 @@ class App {
         this.updateRestTimer();
         this.updateRestOverlayContext();
         this.scheduleRestTimerCompletion();
+        this.scheduleRestTimerNotification();
         this.showCoachToast(`Repos étendu à ${this.formatRestCountdownDisplay(seconds)} au total.`, 'hot', '⏱️');
     }
 
@@ -13013,6 +13014,90 @@ class App {
         // effort: browsers may suspend all page JavaScript while fully frozen.
         const delay = Math.max(250, Math.min(60000, this.restTimerEndTime - Date.now() + 100));
         this.restTimerCompletionTimeout = setTimeout(checkAt, delay);
+    }
+
+    getRestTimerNotificationContent() {
+        const overlayData = this.getRestOverlayData();
+        return {
+            title: 'Repos terminé',
+            body: overlayData?.title
+                ? `${overlayData.title} · prochaine série ${overlayData.progress || ''}`.trim()
+                : 'Tu peux lancer la prochaine série.'
+        };
+    }
+
+    cancelRestTimerNotificationSchedule() {
+        this.restTimerNotificationScheduleVersion += 1;
+
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+        const cancel = (worker) => {
+            if (!worker) return;
+            try {
+                worker.postMessage({ type: 'CANCEL_REST_TIMER_NOTIFICATION' });
+            } catch (error) {
+                console.info('Annulation de la notification du timer impossible:', error?.message || error);
+            }
+        };
+
+        if (navigator.serviceWorker.controller) {
+            cancel(navigator.serviceWorker.controller);
+            return;
+        }
+
+        void navigator.serviceWorker.ready
+            .then(registration => cancel(registration.active))
+            .catch(() => {});
+    }
+
+    scheduleRestTimerNotification() {
+        this.cancelRestTimerNotificationSchedule();
+        const endTime = Number(this.restTimerEndTime);
+        if (
+            this.overlayTimerMode !== 'rest'
+            || !Number.isFinite(endTime)
+            || endTime <= Date.now()
+            || typeof navigator === 'undefined'
+            || !navigator.serviceWorker
+            || typeof window === 'undefined'
+            || !('Notification' in window)
+            || window.Notification.permission !== 'granted'
+        ) {
+            return;
+        }
+
+        const scheduleVersion = ++this.restTimerNotificationScheduleVersion;
+        const { title, body } = this.getRestTimerNotificationContent();
+        const message = {
+            type: 'SCHEDULE_REST_TIMER_NOTIFICATION',
+            endTime,
+            title,
+            body,
+            tag: 'muscu-rest-timer'
+        };
+        const send = (worker) => {
+            if (
+                !worker
+                || scheduleVersion !== this.restTimerNotificationScheduleVersion
+                || this.overlayTimerMode !== 'rest'
+                || Number(this.restTimerEndTime) !== endTime
+            ) {
+                return;
+            }
+            try {
+                worker.postMessage(message);
+            } catch (error) {
+                console.info('Planification de la notification du timer impossible:', error?.message || error);
+            }
+        };
+
+        if (navigator.serviceWorker.controller) {
+            send(navigator.serviceWorker.controller);
+            return;
+        }
+
+        void navigator.serviceWorker.ready
+            .then(registration => send(registration.active))
+            .catch(() => {});
     }
     
     updateRestTimer() {
@@ -13062,8 +13147,11 @@ class App {
             return;
         }
 
+        this.cancelRestTimerNotificationSchedule();
+        if (!this.restTimerNotificationShown) {
+            void this.notifyRestTimerComplete();
+        }
         this.finishRestTimer({ showReadyState: true });
-        void this.notifyRestTimerComplete();
         
         // Vibrate pattern on complete
         if (navigator.vibrate) {
@@ -13102,6 +13190,7 @@ class App {
             this.updateRestNotificationButton();
             if (permission === 'granted') {
                 localStorage.setItem('restTimerNotifications', 'enabled');
+                this.scheduleRestTimerNotification();
                 this.showCoachToast('Tu seras prévenu quand le repos sera terminé.', 'hot', '🔔');
             } else if (permission === 'denied') {
                 this.showCoachToast('Les notifications sont bloquées dans les réglages du navigateur.', 'cold', '🔕');
@@ -13112,33 +13201,37 @@ class App {
     }
 
     async notifyRestTimerComplete() {
-        if (typeof window === 'undefined' || !('Notification' in window) || window.Notification.permission !== 'granted') {
+        if (
+            this.restTimerNotificationShown
+            || typeof window === 'undefined'
+            || !('Notification' in window)
+            || window.Notification.permission !== 'granted'
+        ) {
             return;
         }
 
-        const overlayData = this.getRestOverlayData();
-        const title = 'Repos terminé';
-        const body = overlayData?.title
-            ? `${overlayData.title} · prochaine série ${overlayData.progress || ''}`.trim()
-            : 'Tu peux lancer la prochaine série.';
+        const { title, body } = this.getRestTimerNotificationContent();
         const options = {
             body,
             tag: 'muscu-rest-timer',
-            renotify: true,
+            renotify: false,
             icon: './icons/icon-192.png',
             badge: './icons/icon-192.png'
         };
 
         try {
             const registration = await navigator.serviceWorker?.ready;
+            if (this.restTimerNotificationShown) return;
             if (registration?.showNotification) {
                 await registration.showNotification(title, options);
             } else {
                 new window.Notification(title, options);
             }
+            this.restTimerNotificationShown = true;
         } catch (error) {
             try {
                 new window.Notification(title, options);
+                this.restTimerNotificationShown = true;
             } catch (fallbackError) {
                 console.warn('Notification de repos indisponible:', fallbackError);
             }
@@ -13595,6 +13688,7 @@ class App {
     adjustRestTimer(seconds) {
         if (this.restOverlayReady && seconds > 0) {
             const countdown = document.getElementById('timer-countdown');
+            this.restTimerNotificationShown = false;
             this.restTimeTotal = seconds;
             this.restTimeLeft = seconds;
             this.restTimerStartedAt = Date.now();
@@ -13604,6 +13698,7 @@ class App {
                 localStorage.setItem('restTimerTotalTime', String(this.restTimeTotal));
                 localStorage.setItem('restTimerStartedAt', String(this.restTimerStartedAt));
                 this.scheduleRestTimerCompletion();
+                this.scheduleRestTimerNotification();
             }
             this.setRestOverlayReadyState(false);
             this.updateRestOverlayContext();
@@ -13627,6 +13722,7 @@ class App {
         if (this.overlayTimerMode === 'rest') {
             localStorage.setItem('restTimerTotalTime', String(this.restTimeTotal));
             this.scheduleRestTimerCompletion();
+            this.scheduleRestTimerNotification();
         }
         this.updateRestTimer();
     }
@@ -14030,7 +14126,6 @@ class App {
         const historyWorkouts = await this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name);
         const snapshot = this.buildExerciseSummarySnapshot(this.currentSlot, completedSets, historyWorkouts);
         const achievements = this.buildExerciseAchievements(snapshot);
-        this.currentExerciseGhostData = this.buildExerciseGhostPayload(this.currentSlot, completedSets, snapshot);
         const totalReps = snapshot.totalReps;
         const maxWeight = snapshot.maxWeight;
         const isCardioExercise = this.isCardioSlot(this.currentSlot);
@@ -14157,8 +14252,6 @@ class App {
         }
 
         document.getElementById('exercise-summary').classList.add('active');
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) ghostButton.hidden = !this.currentExerciseGhostData;
 
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
@@ -16620,6 +16713,16 @@ class App {
             coachFatigueBackdrop.onclick = () => this.closeCoachFatigueSheet();
         }
 
+        if (!this.qualityMenuToggleBound) {
+            document.addEventListener('toggle', (event) => {
+                const details = event.target;
+                if (!details || typeof details.matches !== 'function' || !details.matches('.set-quality-details')) return;
+                const card = details.closest('.series-card, .superset-series-card-new, .unilateral-series-card');
+                card?.classList.toggle('quality-menu-open', details.open);
+            }, true);
+            this.qualityMenuToggleBound = true;
+        }
+
         document.getElementById('series-list').onclick = (e) => {
             const qualityBtn = e.target.closest('.set-quality-tag');
             if (qualityBtn) {
@@ -16735,13 +16838,6 @@ class App {
                 if (e.target.classList.contains('sheet-backdrop') || e.target.closest('#btn-close-exercise-insights')) {
                     this.closeExerciseInsightsSheet();
                     return;
-                }
-                if (e.target.closest('#btn-warmup-toggle')) {
-                    this.toggleWarmupPlan();
-                    return;
-                }
-                if (e.target.closest('#btn-recovery-map-toggle')) {
-                    this.toggleRecoveryMap();
                 }
             };
             exerciseInsightsSheet.onchange = (e) => {
@@ -16929,11 +17025,6 @@ class App {
             this.renderSlots();
             this.showScreen('session');
         };
-
-        const ghostButton = document.getElementById('btn-share-exercise-ghost');
-        if (ghostButton) {
-            ghostButton.onclick = () => this.shareExerciseGhost();
-        }
 
         const coachCapBtn = document.getElementById('btn-coach-toggle-cap');
         if (coachCapBtn) {
@@ -17244,7 +17335,6 @@ class App {
                 <div class="pool-item ${isCurrent ? 'current' : ''} ${isCompatible ? 'compatible' : 'different-focus'}">
                     <div class="pool-item-main">
                         <div class="pool-item-title-row">
-                            ${variantMuscleId ? renderMuscleMarker() : ''}
                             <span class="pool-item-name">${safeExercise}</span>
                         </div>
                         <div class="pool-item-meta">
@@ -21858,7 +21948,6 @@ class App {
         const card = document.getElementById('warmup-card');
         const body = document.getElementById('warmup-body');
         const list = document.getElementById('warmup-list');
-        const toggle = document.getElementById('btn-warmup-toggle');
         if (!card || !body || !list) return;
         if (!slot || this.isCardioSlot(slot)) {
             card.hidden = true;
@@ -21880,13 +21969,8 @@ class App {
             const lastWarmupWeight = plan.length ? Number(plan[plan.length - 1]?.weight || 0) : 0;
             resolvedData.warmupPlanReferenceWeight = coachReferenceWeight || lastWarmupWeight || null;
         }
-        const visible = resolvedData.warmupVisible === true;
         card.hidden = false;
-        body.hidden = !visible;
-        if (toggle) {
-            toggle.textContent = visible ? 'Masquer' : 'Afficher';
-            toggle.setAttribute('aria-expanded', String(visible));
-        }
+        body.hidden = false;
         list.innerHTML = plan.map(step => {
             const completed = Array.isArray(resolvedData.warmupCompleted) && resolvedData.warmupCompleted.includes(step.id);
             const weight = step.weight == null ? 'à ton choix' : `${this.normalizeLoadPrecision(step.weight)} kg`;
@@ -21896,18 +21980,6 @@ class App {
             </label>`;
         }).join('');
         this.updateExerciseInsightsTrigger(slot);
-    }
-
-    async toggleWarmupPlan() {
-        if (!this.currentWorkout || !this.currentSlot?.id) return;
-        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
-        if (!slotData) return;
-        slotData.warmupVisible = slotData.warmupVisible !== true;
-        if (!Array.isArray(slotData.warmupPlan) || !slotData.warmupPlan.length) {
-            slotData.warmupPlan = this.buildOptionalWarmupPlan(this.currentSlot);
-        }
-        await db.saveCurrentWorkout(this.currentWorkout);
-        this.renderWarmupCard(this.currentSlot, slotData);
     }
 
     async toggleWarmupStep(stepId, checked) {
@@ -22035,14 +22107,8 @@ class App {
         }
         const snapshot = await this.buildMuscleRecoverySnapshot(options);
         if (this.currentScreen !== 'exercise') return;
-        const visible = this.currentWorkout?.slots?.[this.currentSlot.id]?.recoveryMapVisible === true;
         card.hidden = false;
-        body.hidden = !visible;
-        const toggle = document.getElementById('btn-recovery-map-toggle');
-        if (toggle) {
-            toggle.textContent = visible ? 'Masquer' : 'Voir la carte';
-            toggle.setAttribute('aria-expanded', String(visible));
-        }
+        body.hidden = false;
         const rows = snapshot.rows.filter(row => row.isCurrent || row.lastExposureAt).slice(0, 8);
         list.innerHTML = rows.length ? rows.map(row => {
             const muscleName = this.getMuscleGroupLabel(row.muscleId);
@@ -22057,15 +22123,6 @@ class App {
         const note = document.getElementById('recovery-map-note');
         if (note) note.textContent = snapshot.disclaimer;
         this.updateExerciseInsightsTrigger(this.currentSlot);
-    }
-
-    async toggleRecoveryMap() {
-        if (!this.currentWorkout || !this.currentSlot?.id) return;
-        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
-        if (!slotData) return;
-        slotData.recoveryMapVisible = slotData.recoveryMapVisible !== true;
-        await db.saveCurrentWorkout(this.currentWorkout);
-        await this.renderRecoveryMap();
     }
 
     async renderOptionalExerciseInsights(slot = this.currentSlot, slotData = null) {
@@ -22118,202 +22175,6 @@ class App {
         }
     }
 
-    // ===== Optional local ghost sharing =====
-    // The link contains only the selected exercise result. There is no account,
-    // server or automatic publication involved; sharing happens only after the
-    // user explicitly taps the button.
-    encodeGhostPayload(payload) {
-        try {
-            const json = JSON.stringify(payload);
-            return btoa(unescape(encodeURIComponent(json)))
-                .replace(/\+/g, '-')
-                .replace(/\//g, '_')
-                .replace(/=+$/g, '');
-        } catch (error) {
-            return '';
-        }
-    }
-
-    decodeGhostPayload(encoded) {
-        try {
-            const base64 = String(encoded || '')
-                .replace(/-/g, '+')
-                .replace(/_/g, '/')
-                .padEnd(Math.ceil(String(encoded || '').length / 4) * 4, '=');
-            return JSON.parse(decodeURIComponent(escape(atob(base64))));
-        } catch (error) {
-            return null;
-        }
-    }
-
-    buildExerciseGhostPayload(slot = this.currentSlot, sets = [], snapshot = null) {
-        if (!slot || this.isCardioSlot(slot)) return null;
-        const completedSets = (Array.isArray(sets) ? sets : [])
-            .filter(set => Number(set?.reps || 0) > 0);
-        if (!completedSets.length) return null;
-        return {
-            version: 1,
-            kind: 'exercise-ghost',
-            exerciseName: slot.activeExercise || slot.name || 'Exercice',
-            exerciseStableId: this.getStableExerciseId(slot),
-            exerciseFamilyId: this.getExerciseFamilyId(slot),
-            date: new Date().toISOString(),
-            sets: completedSets
-                .map((set, index) => ({
-                    setNumber: index + 1,
-                    weight: Number(set.weight || 0),
-                    reps: Number(set.reps || 0),
-                    side: set.variant || set.side || null,
-                    qualityTags: this.getSetQualityTags(set)
-                })),
-            summary: snapshot ? {
-                totalReps: snapshot.totalReps,
-                maxWeight: snapshot.maxWeight,
-                totalVolume: snapshot.totalVolume,
-                bestE1RM: snapshot.bestE1RM
-            } : null
-        };
-    }
-
-    async shareExerciseGhost() {
-        const payload = this.currentExerciseGhostData;
-        if (!payload) return;
-        const encoded = this.encodeGhostPayload(payload);
-        if (!encoded) return;
-        const url = `${window.location.origin}${window.location.pathname}#ghost=${encodeURIComponent(encoded)}`;
-        const shareData = {
-            title: `Ghost · ${payload.exerciseName}`,
-            text: `Mon résultat sur ${payload.exerciseName}`,
-            url
-        };
-        try {
-            if (typeof navigator.share === 'function') {
-                await navigator.share(shareData);
-                return;
-            }
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(url);
-                this.showCoachToast('Lien ghost copié. À envoyer uniquement aux amis de ton choix.', 'hot', '↗️');
-                return;
-            }
-            const textArea = document.createElement('textarea');
-            textArea.value = url;
-            textArea.setAttribute('readonly', '');
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            textArea.remove();
-            this.showCoachToast('Lien ghost copié.', 'hot', '↗️');
-        } catch (error) {
-            if (error?.name !== 'AbortError') {
-                this.showCoachToast('Le partage n’a pas abouti. Le résultat reste enregistré ici.', 'cold', '↩️');
-            }
-        }
-    }
-
-    renderGhostPreview(payload) {
-        if (!payload || payload.kind !== 'exercise-ghost') return;
-        document.getElementById('modal-ghost-preview')?.remove();
-        const modal = document.createElement('div');
-        modal.className = 'modal active ghost-preview-modal';
-        modal.id = 'modal-ghost-preview';
-        const totalReps = Number(payload.summary?.totalReps || (payload.sets || []).reduce((sum, set) => sum + Number(set.reps || 0), 0));
-        const maxWeight = Number(payload.summary?.maxWeight || Math.max(...(payload.sets || []).map(set => Number(set.weight || 0)), 0));
-        modal.innerHTML = `
-            <div class="modal-backdrop"></div>
-            <div class="modal-content ghost-preview-content">
-                <div class="ghost-preview-kicker">Ghost privé · aperçu</div>
-                <h3>${this.escapeHtml(payload.exerciseName || 'Exercice')}</h3>
-                <p>Résultat partagé volontairement. Tu peux le consulter sans importer ni modifier tes propres données.</p>
-                <div class="ghost-preview-stats"><span><strong>${totalReps}</strong><small>reps</small></span><span><strong>${this.escapeHtml(this.formatOneDecimal(maxWeight))}</strong><small>kg max</small></span><span><strong>${(payload.sets || []).length}</strong><small>séries</small></span></div>
-                <div class="ghost-preview-sets">${(payload.sets || []).map(set => `<span>S${set.setNumber} · ${this.escapeHtml(this.formatOneDecimal(set.weight))} kg × ${this.escapeHtml(String(set.reps))}${set.side ? ` · ${this.escapeHtml(set.side)}` : ''}</span>`).join('')}</div>
-                <div class="ghost-preview-comparison" aria-live="polite">
-                    <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
-                    <small>Lecture de ton historique en cours…</small>
-                </div>
-                <div class="modal-actions"><button type="button" class="btn btn-primary" id="btn-close-ghost-preview">Fermer</button></div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        modal.querySelector('.modal-backdrop').onclick = () => modal.remove();
-        modal.querySelector('#btn-close-ghost-preview').onclick = () => modal.remove();
-        void this.renderGhostLocalComparison(payload, modal);
-    }
-
-    async renderGhostLocalComparison(payload, modal) {
-        if (!payload || !modal?.isConnected) return;
-
-        let history = [];
-        try {
-            history = await this.getSetHistoryForExercise(payload.exerciseName || '');
-        } catch (error) {
-            console.info('Comparaison ghost indisponible:', error?.message || error);
-            return;
-        }
-
-        if (!modal.isConnected) return;
-        const groups = new Map();
-        history
-            .filter(set => set && Number(set.reps || 0) > 0)
-            .forEach(set => {
-                const key = String(set.workoutId ?? set.date ?? 'unknown');
-                const group = groups.get(key) || { date: set.date, sets: [] };
-                group.sets.push(set);
-                if (!group.date || new Date(set.date || 0) > new Date(group.date || 0)) group.date = set.date;
-                groups.set(key, group);
-            });
-
-        const latest = [...groups.values()]
-            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
-        const comparison = modal.querySelector('.ghost-preview-comparison');
-        if (!comparison) return;
-
-        if (!latest?.sets?.length) {
-            comparison.innerHTML = `
-                <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
-                <strong>Pas encore de passage comparable ici</strong>
-                <small>Le lien reste consultable sans modifier tes données.</small>
-            `;
-            return;
-        }
-
-        const localEligible = this.getProgressionEligibleSets(latest.sets);
-        const localBestE1RM = Math.max(
-            ...localEligible.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
-            0
-        );
-        const localTotalReps = latest.sets.reduce((sum, set) => sum + Number(set.reps || 0), 0);
-        const ghostEligible = this.getProgressionEligibleSets(payload.sets || []);
-        const ghostBestE1RM = Number(payload.summary?.bestE1RM)
-            || Math.max(...ghostEligible.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 8)), 0);
-        const metricLabel = ghostBestE1RM > 0 && localBestE1RM > 0 ? 'e1RM estimé' : 'reps totales';
-        const ghostMetric = ghostBestE1RM > 0 && localBestE1RM > 0 ? ghostBestE1RM : Number(payload.summary?.totalReps || 0);
-        const localMetric = ghostBestE1RM > 0 && localBestE1RM > 0 ? localBestE1RM : localTotalReps;
-        const deltaPercent = localMetric > 0 ? Math.round(((ghostMetric - localMetric) / localMetric) * 100) : 0;
-        const deltaLabel = deltaPercent === 0 ? 'au même niveau' : `${deltaPercent > 0 ? '+' : ''}${deltaPercent}% vs ton dernier passage`;
-
-        comparison.innerHTML = `
-            <span class="ghost-preview-comparison-kicker">Comparaison locale · optionnelle</span>
-            <strong>${this.escapeHtml(deltaLabel)}</strong>
-            <small>${this.escapeHtml(metricLabel)} · ghost ${this.escapeHtml(this.formatOneDecimal(ghostMetric))} · toi ${this.escapeHtml(this.formatOneDecimal(localMetric))}</small>
-        `;
-    }
-
-    checkGhostHash() {
-        if (typeof window === 'undefined' || !window.location.hash.startsWith('#ghost=')) return;
-        const encoded = window.location.hash.slice('#ghost='.length);
-        let decoded = encoded;
-        try {
-            decoded = decodeURIComponent(encoded);
-        } catch (error) {
-            console.info('Lien ghost ignoré : encodage invalide.');
-            return;
-        }
-        const payload = this.decodeGhostPayload(decoded);
-        if (payload) this.renderGhostPreview(payload);
-    }
 }
 
 // Initialize app

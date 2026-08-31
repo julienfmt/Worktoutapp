@@ -19,7 +19,6 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - ↔️ Exercices unilatéraux suivis côté gauche/droit, avec suggestions indépendantes, équilibre estimé et validation d’un seul côté à la fois.
 - 🔁 Pools de substitutions enrichies : groupe musculaire, format, équipement et compatibilité visibles avant tout changement.
 - 🗂️ Une substitution en cours de séance archive les séries déjà réalisées avec le bon exercice pour préserver l’historique et les statistiques.
-- ↗️ Partage « ghost » local et volontaire d’un résultat d’exercice via un lien, avec comparaison locale facultative, sans compte ni publication automatique.
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 

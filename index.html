@@ -14,8 +14,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=4.10.6">
-    <link rel="stylesheet" href="streak-score.css?v=4.10.6">
+    <link rel="stylesheet" href="styles.css?v=4.10.7">
+    <link rel="stylesheet" href="streak-score.css?v=4.10.7">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -219,7 +219,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.10.6</span>
+                    <span class="app-version">v4.10.7</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -924,9 +924,6 @@
                     </div>
                     <div class="summary-pr-list" id="summary-pr-list"></div>
                     <div class="summary-badges" id="summary-badges"></div>
-                    <button class="btn btn-secondary btn-large summary-ghost-button" id="btn-share-exercise-ghost" type="button">
-                        ↗ Partager ce résultat (optionnel)
-                    </button>
                     <button class="btn btn-primary btn-large" id="btn-back-to-session">
                         Retour à la séance
                     </button>
@@ -1201,7 +1198,7 @@
                         </svg>
                     </button>
                 </div>
-                <p class="exercise-insights-subtitle">Des aides facultatives pour cette séance. Rien ne modifie ton plan sans ton accord.</p>
+                <p class="exercise-insights-subtitle">Des aides facultatives pour cette séance, visibles directement. Rien ne modifie ton plan sans ton accord.</p>
 
                 <section class="optional-insight-card warmup-card" id="warmup-card" aria-label="Échauffement optionnel" hidden>
                     <div class="optional-insight-header">
@@ -1210,9 +1207,8 @@
                             <strong>Échauffement intelligent</strong>
                             <small>Quelques rampes proposées selon ta charge. Tu peux les ignorer ou cocher uniquement les étapes utiles.</small>
                         </div>
-                        <button type="button" class="btn btn-ghost optional-insight-toggle" id="btn-warmup-toggle" aria-expanded="false">Afficher</button>
                     </div>
-                    <div class="optional-insight-body" id="warmup-body" hidden>
+                    <div class="optional-insight-body" id="warmup-body">
                         <div class="warmup-list" id="warmup-list"></div>
                         <small class="optional-insight-footnote">Ces étapes ne comptent jamais comme séries de travail.</small>
                     </div>
@@ -1225,9 +1221,8 @@
                             <strong>Carte de récupération</strong>
                             <small>Expositions récentes, séries effectives estimées et recouvrements secondaires.</small>
                         </div>
-                        <button type="button" class="btn btn-ghost optional-insight-toggle" id="btn-recovery-map-toggle" aria-expanded="false">Voir la carte</button>
                     </div>
-                    <div class="optional-insight-body" id="recovery-map-body" hidden>
+                    <div class="optional-insight-body" id="recovery-map-body">
                         <div class="recovery-map-list" id="recovery-map-list"></div>
                         <small class="optional-insight-footnote" id="recovery-map-note">Estimation indicative.</small>
                     </div>
@@ -1666,13 +1661,13 @@
     </div>
 
     <script src="db.js"></script>
-    <script src="data.js?v=4.10.6"></script>
-    <script src="app.js?v=4.10.6"></script>
+    <script src="data.js?v=4.10.7"></script>
+    <script src="app.js?v=4.10.7"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
         if ('serviceWorker' in navigator) {
-            const APP_VERSION = '4.10.6';
+            const APP_VERSION = '4.10.7';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

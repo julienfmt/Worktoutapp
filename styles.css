@@ -1320,10 +1320,18 @@ body {
 }
 
 .series-card {
+    position: relative;
     background: var(--card-bg);
     border-radius: var(--radius-lg);
     padding: 16px;
     box-shadow: var(--card-shadow);
+    overflow: visible;
+}
+
+.series-card.quality-menu-open,
+.superset-series-card-new.quality-menu-open,
+.unilateral-series-card.quality-menu-open {
+    z-index: 50;
 }
 
 .series-card.next-up {
@@ -1335,7 +1343,6 @@ body {
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.06));
     border: 1px solid rgba(34, 197, 94, 0.28);
     position: relative;
-    overflow: hidden;
     transform: scale(1);
     box-shadow:
         0 12px 28px rgba(34, 197, 94, 0.18),
@@ -1428,7 +1435,7 @@ body {
     }
 }
 
-/* ===== Optional ghost sharing and neutral insights ===== */
+/* ===== Neutral insights ===== */
 .live-adaptation-card.is-insight {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.09), rgba(255, 255, 255, 0.97));
     border-color: rgba(99, 102, 241, 0.2);
@@ -1437,133 +1444,6 @@ body {
 .is-insight .live-adaptation-badge {
     background: rgba(99, 102, 241, 0.12);
     color: var(--primary-dark);
-}
-
-.summary-ghost-button {
-    margin-top: 12px;
-    border-color: rgba(99, 102, 241, 0.18);
-    color: var(--primary-dark);
-}
-
-.summary-ghost-button[hidden] {
-    display: none !important;
-}
-
-.ghost-preview-modal {
-    z-index: 1200;
-}
-
-.ghost-preview-content {
-    max-width: 390px;
-    text-align: left;
-}
-
-.ghost-preview-kicker {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    background: rgba(99, 102, 241, 0.1);
-    color: var(--primary-dark);
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-.ghost-preview-content h3 {
-    margin: 12px 0 7px;
-    color: var(--text-primary);
-    font-size: 22px;
-    line-height: 1.15;
-}
-
-.ghost-preview-content p {
-    margin: 0 0 14px;
-    color: var(--text-secondary);
-    font-size: 13px;
-    line-height: 1.45;
-}
-
-.ghost-preview-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
-    margin-bottom: 12px;
-}
-
-.ghost-preview-stats span {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 9px 8px;
-    border-radius: 10px;
-    background: rgba(99, 102, 241, 0.07);
-    text-align: center;
-}
-
-.ghost-preview-stats strong {
-    color: var(--text-primary);
-    font-size: 16px;
-}
-
-.ghost-preview-stats small {
-    color: var(--text-muted);
-    font-size: 10px;
-}
-
-.ghost-preview-sets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 16px;
-}
-
-.ghost-preview-sets span {
-    padding: 5px 8px;
-    border: 1px solid rgba(148, 163, 184, 0.17);
-    border-radius: 999px;
-    background: rgba(248, 250, 252, 0.92);
-    color: var(--text-secondary);
-    font-size: 11px;
-    font-weight: 750;
-}
-
-.ghost-preview-comparison {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin: 0 0 16px;
-    padding: 11px 12px;
-    border-radius: 12px;
-    background: rgba(34, 197, 94, 0.08);
-    border: 1px solid rgba(34, 197, 94, 0.16);
-}
-
-.ghost-preview-comparison-kicker {
-    color: #15803d;
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-
-.ghost-preview-comparison strong {
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
-.ghost-preview-comparison small {
-    color: var(--text-secondary);
-    font-size: 11px;
-    line-height: 1.35;
-}
-
-@media (max-width: 380px) {
-    .ghost-preview-stats strong {
-        font-size: 14px;
-    }
 }
 
 .series-header {
@@ -7760,17 +7640,6 @@ body {
     display: block;
 }
 
-/* Deliberately non-anatomical marker for compact muscle labels. */
-.muscle-marker {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    flex: 0 0 6px;
-    border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
-}
-
 .type-label {
     font-size: 13px;
     font-weight: 600;
@@ -9660,12 +9529,14 @@ body {
 
 /* NEW Superset Series Card */
 .superset-series-card-new {
+    position: relative;
     background: var(--card-bg);
     border-radius: var(--radius-lg);
     padding: 16px;
     box-shadow: var(--card-shadow);
     margin-bottom: 16px;
     border: 2px solid transparent;
+    overflow: visible;
 }
 
 .superset-series-card-new.completed {
@@ -10051,12 +9922,14 @@ body {
 
 /* Unilateral Series Card */
 .unilateral-series-card {
+    position: relative;
     background: var(--card-bg);
     border-radius: var(--radius-lg);
     padding: 16px;
     box-shadow: var(--card-shadow);
     margin-bottom: 16px;
     border: 2px solid transparent;
+    overflow: visible;
 }
 
 .unilateral-series-card.completed {
@@ -11340,15 +11213,6 @@ body {
     line-height: 1.4;
 }
 
-.optional-insight-toggle {
-    flex-shrink: 0;
-    min-height: 34px;
-    padding: 7px 11px;
-    color: var(--primary-dark);
-    font-size: 11px;
-    font-weight: 800;
-}
-
 .optional-insight-body {
     margin-top: 13px;
 }
@@ -11476,6 +11340,7 @@ body {
 .set-quality-details {
     position: relative;
     margin-left: 4px;
+    z-index: 60;
 }
 
 .set-quality-details summary {
@@ -11493,7 +11358,7 @@ body {
 
 .set-quality-menu {
     position: absolute;
-    z-index: 3;
+    z-index: 1000;
     top: calc(100% + 6px);
     right: 0;
     display: grid;
@@ -11583,10 +11448,6 @@ body {
 @media (max-width: 520px) {
     .optional-insight-header {
         gap: 9px;
-    }
-
-    .optional-insight-toggle {
-        padding-inline: 9px;
     }
 
     .recovery-map-main {

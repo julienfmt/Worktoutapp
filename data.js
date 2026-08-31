@@ -74,22 +74,12 @@ function renderAppIcon(iconKey, options = {}) {
         label = ''
     } = options;
     // A missing icon must never silently turn into an anatomical-looking icon.
-    // Muscle labels use renderMuscleMarker() instead of an SVG altogether.
     const svg = APP_ICON_SVGS[iconKey] || APP_ICON_SVGS['recovery-info'];
     const classes = ['app-icon', className].filter(Boolean).join(' ');
     const aria = label
         ? `role="img" aria-label="${escapeIconLabel(label)}"`
         : 'aria-hidden="true"';
     return `<span class="${classes}" style="--icon-size:${size}px" ${aria}>${svg}</span>`;
-}
-
-// Muscle badges are intentionally text-first. At the compact sizes used in
-// exercise cards, a body-part illustration is too ambiguous to be honest.
-// This marker adds hierarchy without pretending to show an anatomical location.
-function renderMuscleMarker(options = {}) {
-    const { className = '' } = options;
-    const classes = ['muscle-marker', className].filter(Boolean).join(' ');
-    return `<span class="${classes}" aria-hidden="true"></span>`;
 }
 
 function getMuscleGroupMeta(muscleId) {

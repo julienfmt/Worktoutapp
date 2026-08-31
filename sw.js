@@ -1,17 +1,17 @@
 // Service Worker for offline support
-const SW_VERSION = '4.10.6';
+const SW_VERSION = '4.10.7';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=4.10.6',
-    './streak-score.css?v=4.10.6',
+    './styles.css?v=4.10.7',
+    './streak-score.css?v=4.10.7',
     './db.js',
-    './data.js?v=4.10.6',
+    './data.js?v=4.10.7',
     './app.js',
-    './app.js?v=4.10.6',
+    './app.js?v=4.10.7',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'
@@ -126,6 +126,78 @@ self.addEventListener('fetch', (event) => {
     }
 
     event.respondWith(handleAsset(event.request));
+});
+
+let scheduledRestNotification = null;
+let restNotificationSequence = 0;
+
+function cancelScheduledRestNotification() {
+    restNotificationSequence += 1;
+    if (!scheduledRestNotification) return;
+
+    clearTimeout(scheduledRestNotification.timeoutId);
+    scheduledRestNotification.resolve();
+    scheduledRestNotification = null;
+}
+
+function scheduleRestNotification(data = {}) {
+    cancelScheduledRestNotification();
+
+    const endTime = Number(data.endTime);
+    if (!Number.isFinite(endTime)) return Promise.resolve();
+
+    const sequence = ++restNotificationSequence;
+    let resolveSchedule;
+    const scheduledPromise = new Promise(resolve => {
+        resolveSchedule = resolve;
+        const timeoutId = setTimeout(async () => {
+            if (sequence !== restNotificationSequence) {
+                resolve();
+                return;
+            }
+
+            scheduledRestNotification = null;
+            try {
+                await self.registration.showNotification(String(data.title || 'Repos terminé'), {
+                    body: String(data.body || 'Tu peux lancer la prochaine série.'),
+                    tag: String(data.tag || 'muscu-rest-timer'),
+                    renotify: false,
+                    icon: './icons/icon-192.png',
+                    badge: './icons/icon-192.png',
+                    data: { type: 'rest-timer' }
+                });
+
+                const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+                windowClients.forEach(client => client.postMessage({ type: 'REST_TIMER_NOTIFICATION_SHOWN' }));
+            } catch (error) {
+                console.warn('[SW] Notification de repos indisponible:', error);
+            } finally {
+                resolve();
+            }
+        }, Math.max(0, Math.min(2147483647, endTime - Date.now())));
+
+        scheduledRestNotification = {
+            timeoutId,
+            resolve: resolveSchedule
+        };
+    });
+
+    return scheduledPromise;
+}
+
+self.addEventListener('message', (event) => {
+    const type = event.data?.type;
+    if (type === 'CANCEL_REST_TIMER_NOTIFICATION') {
+        cancelScheduledRestNotification();
+        return;
+    }
+
+    if (type === 'SCHEDULE_REST_TIMER_NOTIFICATION') {
+        const task = scheduleRestNotification(event.data);
+        if (typeof event.waitUntil === 'function') {
+            event.waitUntil(task);
+        }
+    }
 });
 
 self.addEventListener('notificationclick', (event) => {
