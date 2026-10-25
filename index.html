@@ -13,10 +13,12 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=5.3.0">
-    <link rel="stylesheet" href="streak-score.css?v=5.3.0">
-    <link rel="stylesheet" href="theme.css?v=5.3.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
+    <link rel="preload" href="app.js?v=5.4.0" as="script">
+    <link rel="stylesheet" href="styles.css?v=5.4.0">
+    <link rel="stylesheet" href="streak-score.css?v=5.4.0">
+    <link rel="stylesheet" href="theme.css?v=5.4.0">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -201,7 +203,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v5.3.0</span>
+                    <span class="app-version">v5.4.0</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -1670,10 +1672,10 @@
         </div>
     </div>
 
-    <script src="db.js"></script>
-    <script src="data.js?v=5.3.0"></script>
-    <script src="exercise-db.js?v=5.3.0"></script>
-    <script src="app.js?v=5.3.0"></script>
+    <script defer src="db.js?v=5.4.0"></script>
+    <script defer src="data.js?v=5.4.0"></script>
+    <script defer src="exercise-db.js?v=5.4.0"></script>
+    <script defer src="app.js?v=5.4.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
@@ -1683,7 +1685,7 @@
             navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
         }
         if ('serviceWorker' in navigator && !isLocalDevHost) {
-            const APP_VERSION = '5.2.0';
+            const APP_VERSION = '5.4.0';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

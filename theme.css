@@ -5493,3 +5493,6 @@
     object-fit: cover;
     background: var(--bg-secondary);
 }
+
+/* perf: no 300ms tap delay, skip layout of offscreen sections */
+button, a, input, select, label, [role="button"] { touch-action: manipulation; }

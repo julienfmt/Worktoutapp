@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '5.3.0';
+const SW_VERSION = '5.4.0';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 // Exercise thumbnails/GIFs are fetched on demand from the dataset repo and
@@ -11,14 +11,14 @@ const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=5.3.0',
-    './streak-score.css?v=5.3.0',
-    './theme.css?v=5.3.0',
-    './db.js',
-    './data.js?v=5.3.0',
-    './exercise-db.js?v=5.3.0',
-    './app.js',
-    './app.js?v=5.3.0',
+    './styles.css?v=5.4.0',
+    './streak-score.css?v=5.4.0',
+    './theme.css?v=5.4.0',
+    './db.js?v=5.4.0',
+    './exercises-db.json?v=1',
+    './data.js?v=5.4.0',
+    './exercise-db.js?v=5.4.0',
+    './app.js?v=5.4.0',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'
@@ -56,21 +56,32 @@ async function putInRuntimeCache(request, response) {
 }
 
 async function handleNavigation(event) {
-    const preloadResponse = await event.preloadResponse;
-    if (preloadResponse) {
-        return putInRuntimeCache(event.request, preloadResponse);
+    // Cache-first for instant launch; refresh in the background for next time.
+    const cached = (await caches.match(event.request)) || (await caches.match(OFFLINE_DOCUMENT));
+    const refresh = (async () => {
+        const preloadResponse = await event.preloadResponse;
+        const response = preloadResponse || await fetch(event.request);
+        return putInRuntimeCache(event.request, response);
+    })();
+    if (cached) {
+        event.waitUntil(refresh.catch(() => {}));
+        return cached;
     }
-
     try {
-        const networkResponse = await fetch(event.request);
-        return await putInRuntimeCache(event.request, networkResponse);
+        return await refresh;
     } catch (error) {
-        return (await caches.match(event.request)) || (await caches.match(OFFLINE_DOCUMENT));
+        return new Response('', { status: 503, statusText: 'Offline' });
     }
+}
+
+function isVersionedAsset(request) {
+    return new URL(request.url).searchParams.has('v');
 }
 
 async function handleAsset(request) {
     const cachedResponse = await caches.match(request);
+    // Versioned files never change: serve from cache with zero network work.
+    if (cachedResponse && isVersionedAsset(request)) return cachedResponse;
     if (cachedResponse) {
         fetch(request, { cache: 'no-cache' })
             .then((response) => putInRuntimeCache(request, response))
@@ -102,7 +113,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const cacheKeys = await caches.keys();
-        const validKeys = new Set([STATIC_CACHE_NAME, RUNTIME_CACHE_NAME, MEDIA_CACHE_NAME]);
+        const validKeys = new Set([STATIC_CACHE_NAME, RUNTIME_CACHE_NAME, MEDIA_CACHE_NAME, 'muscu-fonts']);
 
         await Promise.all(
             cacheKeys
@@ -144,7 +155,29 @@ async function handleExerciseMedia(request) {
     return response;
 }
 
+const FONT_CACHE_NAME = 'muscu-fonts';
+function isFontRequest(request) {
+    if (request.method !== 'GET') return false;
+    const host = new URL(request.url).hostname;
+    return host === 'fonts.googleapis.com' || host === 'fonts.gstatic.com';
+}
+
+async function handleFont(request) {
+    const cache = await caches.open(FONT_CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response && (response.ok || response.type === 'opaque')) {
+        await cache.put(request, response.clone());
+    }
+    return response;
+}
+
 self.addEventListener('fetch', (event) => {
+    if (isFontRequest(event.request)) {
+        event.respondWith(handleFont(event.request).catch(() => new Response('', { status: 503 })));
+        return;
+    }
     if (isExerciseMediaRequest(event.request)) {
         event.respondWith(handleExerciseMedia(event.request).catch(() => new Response('', { status: 503 })));
         return;

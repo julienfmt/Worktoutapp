@@ -553,35 +553,50 @@ class App {
     async init() {
         await db.init();
         await initializeData();
-        
-        // Automatic storage cleanup on startup
-        try {
-            const shouldCleanup = await db.shouldRunCleanupOnInit();
-            if (shouldCleanup) {
-                console.log('🧹 Nettoyage automatique du stockage...');
-                await db.cleanupOldData();
-            }
-        } catch (error) {
-            console.error('Erreur lors du nettoyage automatique:', error);
-        }
-        
-        await this.loadCurrentWorkout();
-        await this.loadCustomExerciseLibrary();
+
+        await Promise.all([
+            this.loadCurrentWorkout(),
+            this.loadCustomExerciseLibrary()
+        ]);
         await this.migrateExerciseIdentityMetadata();
-        const storedWakeLockPreference = await db.getSetting('wakeLockEnabled');
-        if (storedWakeLockPreference != null && typeof localStorage !== 'undefined') {
-            localStorage.setItem('wakeLockEnabled', storedWakeLockPreference === false ? 'disabled' : 'enabled');
-        }
-        this.renderExerciseLibraryDatalist();
         this.bindEvents();
         this.setupVisibilityHandler();
-        await this.refreshStorageIndicators();
-        this.startStorageInfoRefreshLoop();
         await this.renderHome();
 
         const onboardingShown = await this.maybeStartOnboarding();
         if (!onboardingShown) {
             await this.checkPendingSession();
+        }
+
+        // Non-critical work runs after the first paint so launch stays instant.
+        this.runWhenIdle(async () => {
+            try {
+                if (await db.shouldRunCleanupOnInit()) {
+                    await db.cleanupOldData();
+                }
+            } catch (error) {
+                console.error('Erreur lors du nettoyage automatique:', error);
+            }
+            try {
+                const storedWakeLockPreference = await db.getSetting('wakeLockEnabled');
+                if (storedWakeLockPreference != null && typeof localStorage !== 'undefined') {
+                    localStorage.setItem('wakeLockEnabled', storedWakeLockPreference === false ? 'disabled' : 'enabled');
+                }
+            } catch (error) {}
+            this.renderExerciseLibraryDatalist();
+            await this.refreshStorageIndicators().catch(() => {});
+            this.startStorageInfoRefreshLoop();
+            // Warm the exercise database so the first picker/search opens instantly.
+            this.runWhenIdle(() => exerciseDb.load().catch(() => {}));
+        });
+    }
+
+    runWhenIdle(callback) {
+        const run = () => { Promise.resolve().then(callback).catch(() => {}); };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(run, { timeout: 1500 });
+        } else {
+            setTimeout(run, 200);
         }
     }
 
