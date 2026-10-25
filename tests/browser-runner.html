@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests navigateur</title>
+<style>
+    :root { --ok: #16a34a; --ko: #dc2626; --bg: #f8fafc; --text: #0f172a; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; }
+    pre { white-space: pre-wrap; background: #fff; border-radius: 12px; padding: 12px; border: 1px solid #e2e8f0; }
+    .ok { color: var(--ok); } .ko { color: var(--ko); }
+</style>
+</head>
+<body>
+<h1>Tests (sans Node)</h1>
+<p>Lance un serveur statique à la racine du projet puis ouvre <code>/tests/browser-runner.html?test=adaptive-session</code>.</p>
+<pre id="out">…</pre>
+<script>
+(() => {
+    const out = document.getElementById('out');
+    const log = (...args) => { out.textContent += args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ') + '\n'; };
+    out.textContent = '';
+
+    const readSync = (file) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', file.replace(/^.*?\/(tests|[^/]+\.js$)/, (m) => m), false);
+        xhr.send();
+        if (xhr.status !== 200) throw new Error(`Lecture impossible: ${file}`);
+        return xhr.responseText;
+    };
+
+    class AssertionError extends Error {}
+    const fmt = (v) => { try { return JSON.stringify(v); } catch { return String(v); } };
+    const assert = {
+        equal(a, b, msg) { if (a !== b) throw new AssertionError(msg || `${fmt(a)} !== ${fmt(b)}`); },
+        ok(v, msg) { if (!v) throw new AssertionError(msg || `attendu truthy, reçu ${fmt(v)}`); },
+        deepEqual(a, b, msg) { if (fmt(a) !== fmt(b)) throw new AssertionError(msg || `${fmt(a)} ≠ ${fmt(b)}`); },
+        notEqual(a, b, msg) { if (a === b) throw new AssertionError(msg || `${fmt(a)} === ${fmt(b)}`); },
+        match(s, re, msg) { if (!re.test(s)) throw new AssertionError(msg || `${fmt(s)} !~ ${re}`); }
+    };
+    assert.strictEqual = assert.equal;
+    assert.deepStrictEqual = assert.deepEqual;
+
+    let pending = '';
+    const vm = {
+        createContext(ctx) { return ctx; },
+        runInContext(code, ctx, opts = {}) {
+            if (opts.filename === 'data.js') { pending += code + '\n'; return; }
+            window.__db = ctx.__db;
+            // data.js top-level consts must be visible to app.js: run them together.
+            new Function(pending + code)();
+            ctx.__App = window.__App;
+        }
+    };
+    const path = { resolve: () => '..', join: (...parts) => parts.join('/') };
+    const fs = { readFileSync: (file) => readSync(file), existsSync: () => false };
+    window.require = (name) => ({ 'node:assert/strict': assert, 'node:assert': assert, 'node:fs': fs, 'node:path': path, 'node:vm': vm }[name]);
+    window.process = { exitCode: 0 };
+    const origError = console.error;
+    console.error = (...args) => { log('✗', ...args.map(a => a?.stack || a?.message || a)); out.className = 'ko'; origError(...args); };
+    const origLog = console.log;
+    console.log = (...args) => { log(...args); if (!out.className) out.className = 'ok'; origLog(...args); };
+
+    const test = new URLSearchParams(location.search).get('test') || 'adaptive-session';
+    const src = readSync(`${test}.test.js`);
+    window.__dirname = '.';
+    try {
+        new Function('require', '__dirname', 'process', src)(window.require, '.', window.process);
+    } catch (error) {
+        console.error(error);
+    }
+})();
+</script>
+</body>
+</html>

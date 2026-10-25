@@ -1,17 +1,18 @@
 // Service Worker for offline support
-const SW_VERSION = '4.10.7';
+const SW_VERSION = '5.2.0';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=4.10.7',
-    './streak-score.css?v=4.10.7',
+    './styles.css?v=5.2.0',
+    './streak-score.css?v=5.2.0',
+    './theme.css?v=5.2.0',
     './db.js',
-    './data.js?v=4.10.7',
+    './data.js?v=5.2.0',
     './app.js',
-    './app.js?v=4.10.7',
+    './app.js?v=5.2.0',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'
@@ -31,7 +32,7 @@ async function addAppShellToCache() {
 
     await Promise.all(APP_SHELL_ASSETS.map(async (asset) => {
         try {
-            await cache.add(asset);
+            await cache.add(new Request(asset, { cache: 'reload' }));
         } catch (error) {
             console.warn('[SW] Impossible de mettre en cache:', asset, error);
         }
@@ -65,7 +66,7 @@ async function handleNavigation(event) {
 async function handleAsset(request) {
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
-        fetch(request)
+        fetch(request, { cache: 'no-cache' })
             .then((response) => putInRuntimeCache(request, response))
             .catch(() => {});
         return cachedResponse;
@@ -128,6 +129,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(handleAsset(event.request));
 });
 
+const REST_NOTIFICATION_STALE_MS = 20000;
 let scheduledRestNotification = null;
 let restNotificationSequence = 0;
 
@@ -158,16 +160,26 @@ function scheduleRestNotification(data = {}) {
 
             scheduledRestNotification = null;
             try {
+                // iOS (and Android in deep sleep) freezes the worker while the
+                // app is in the background, so this timeout may only run when
+                // the user reopens the app. A late "rest is over" alert is noise:
+                // the app already shows GO on screen.
+                if (Date.now() - endTime > REST_NOTIFICATION_STALE_MS) return;
+
+                const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+                if (windowClients.some(client => client.visibilityState === 'visible')) return;
+
                 await self.registration.showNotification(String(data.title || 'Repos terminé'), {
                     body: String(data.body || 'Tu peux lancer la prochaine série.'),
                     tag: String(data.tag || 'muscu-rest-timer'),
                     renotify: false,
                     icon: './icons/icon-192.png',
                     badge: './icons/icon-192.png',
-                    data: { type: 'rest-timer' }
+                    vibrate: [200, 100, 200],
+                    requireInteraction: false,
+                    data: { type: 'rest-timer', endTime }
                 });
 
-                const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
                 windowClients.forEach(client => client.postMessage({ type: 'REST_TIMER_NOTIFICATION_SHOWN' }));
             } catch (error) {
                 console.warn('[SW] Notification de repos indisponible:', error);

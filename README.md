@@ -22,6 +22,25 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
+### Nouveautés v5
+- 🎨 DA unifiée mauve/violet + vert de validation (`theme.css`) : boutons 3D gamifiés, cartes de série identiques en bilatéral / unilatéral / superset, animations (entrée de cartes, validation, « +XP » flottant, badge record).
+- ↔️ Unilatéral repensé : une ligne compacte par côté (G indigo, D violet), le côté le plus faible passe en premier, RPE enregistré sur la paire, réglage « Auto / G-D / Bilatéral » par exercice.
+- 🧠 Coach : charges toujours sur la grille réelle de l'équipement, cibles de reps calculées à partir du RIR, double palier si la séance était nettement trop facile, montée anticipée si le haut de fourchette est proche avec beaucoup de marge, RIR du programme enfin utilisé, historiques gauche/droite strictement séparés, séance interrompue ignorée comme référence.
+- 🏆 Détection de record en direct (e1RM) avec bonus XP et vibration.
+- 🧪 Tests exécutables sans Node : servir le dossier puis ouvrir `tests/browser-runner.html?test=coach-engine` (ou `adaptive-session`).
+
+### Nouveautés v5.1
+- 🔥 Accueil refondu : carte « hero » sombre mauve avec streak géant + flamme qui grandit selon le niveau, paliers segmentés, semaine jour par jour (L→D), boucliers et statut de la semaine intégrés.
+- 🔔 Notifications de fin de repos : plus de notification en retard à la réouverture de l'app (ni quand l'app est à l'écran) ; les notifications restées dans le centre sont nettoyées au retour.
+
+### Nouveautés v5.2
+- 🎯 Coach « Mission du jour » : carte sombre mauve (même DA que l'accueil) avec charge cible et écart vs dernière séance (« +2.5 kg », « Idem »), reps en jetons par série, règle du jour en quête, raisons en pastilles, jauge d'énergie segmentée. La teinte suit le conseil (boost vert, deload indigo, prudence magenta). Superset et unilatéral reprennent la même coque.
+- 📈 Stats de l'exo : tuiles Record e1RM / séances en hausse / volume, courbe e1RM lissée avec point record doré et dates, objectif record (« 80 kg × 9 à RIR 2 ») avec jauge, masqué en deload.
+- 📒 Historique : dernière séance en cartes de série avec écart vs la séance précédente, anciennes séances en lignes compactes.
+- 🧠 « Pourquoi ce conseil » : jauge de confiance circulaire et lignes à icônes.
+- 🗂️ Cartes de séance : infos en 4 mini-tuiles (séries / reps / repos / RIR), défi en bandeau de quête avec bonus XP. Défi actif avec jauge de progression (ex. 12/42 reps). Contrôle libre avec stepper de séries.
+- 🐛 Un exercice « Développé … » n'est plus pris pour du cardio (« velo » était trouvé dans « dé-velo-ppé »).
+
 ## Stack technique
 - Frontend pur : HTML, CSS, JavaScript vanilla.
 - Stockage : IndexedDB (abstraction dans `db.js`).
@@ -32,6 +51,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 ## Structure des fichiers
 - `index.html` : structure des écrans (accueil, séance, exercice, paramètres, bottom sheets, modals).
 - `styles.css` : design mobile-first et composants (cards, boutons, charts, overlays, etc.).
+- `theme.css` : couche de DA chargée en dernier (tokens, boutons gamifiés, animations).
 - `app.js` : logique principale (navigation, timers, logbook, coaching adaptatif, analyse série par série, qualité des séries, récupération, analyse gauche/droite, substitutions, charts, import/export, superset, progression, etc.).
 - `data.js` : données de départ (séances Bras/Pecs A/B et slots associés).
 - `db.js` : couche IndexedDB (stores `sessions`, `slots`, `workoutHistory`, `setHistory`, `settings`, `currentWorkout`).
@@ -62,7 +82,7 @@ Appli 100% statique : dépose le contenu du dossier sur n’importe quel héberg
 ## Notes d’usage
 - Les timers de repos se restaurent après un retour depuis l’arrière-plan.
 - Le maintien d’écran actif est demandé automatiquement pendant un exercice quand le navigateur le permet ; il reste désactivable et sans impact sur les données.
-- Une notification de fin de repos peut être activée volontairement. Sa disponibilité dépend du navigateur et du mode PWA, en particulier sur iOS. Si une série suggère plus de repos, le timer conserve le repos programmé et affiche un bouton pour l’étendre au choix.
+- Une notification de fin de repos peut être activée volontairement. Sa disponibilité dépend du navigateur et du mode PWA : sur iOS, la PWA est gelée en arrière-plan, donc sans serveur de push la notification ne peut pas partir à l'heure (elle est alors ignorée plutôt qu'affichée en retard). Si une série suggère plus de repos, le timer conserve le repos programmé et affiche un bouton pour l’étendre au choix.
 - Les supersets affichent un bouton dédié « Lancer SuperSet » et le logbook comporte deux cartes.
 - La progression/coaching se base sur l’historique des séries par exercice et tient compte des annotations « hors progression ».
 - Une série « hors progression » reste conservée dans le volume réel, mais n’influence pas les charges, reps de référence, e1RM, plateaux ou suggestions du coach.

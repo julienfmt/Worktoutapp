@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Muscu">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#f8fafc">
     <title>Muscu - Training App</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png">
@@ -14,8 +14,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=4.10.7">
-    <link rel="stylesheet" href="streak-score.css?v=4.10.7">
+    <link rel="stylesheet" href="styles.css?v=5.2.0">
+    <link rel="stylesheet" href="streak-score.css?v=5.2.0">
+    <link rel="stylesheet" href="theme.css?v=5.2.0">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -34,13 +35,14 @@
         <div id="screen-home" class="screen active">
             <header class="header-home">
                 <div class="header-top">
-                    <h1>Prêt pour ta séance ?</h1>
+                    <span class="home-date-kicker" id="home-date-kicker"></span>
+                    <h1 id="home-title">Prêt pour ta séance ?</h1>
                 </div>
             </header>
 
             <main class="home-content">
                 <!-- Streak Card - Consolidated -->
-                <div class="streak-card" id="streak-card">
+                <div class="home-hero" id="streak-card">
                     <!-- Content generated dynamically -->
                 </div>
                 
@@ -219,7 +221,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v4.10.7</span>
+                    <span class="app-version">v5.2.0</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -305,7 +307,7 @@
 
                     <div class="modal-actions finish-modal-actions">
                         <button class="btn btn-secondary" id="btn-cancel-finish">Continuer</button>
-                        <button class="btn btn-primary" id="btn-confirm-finish">Valider</button>
+                        <button class="btn btn-primary" id="btn-confirm-finish">Terminer la séance</button>
                     </div>
                 </div>
             </div>
@@ -372,14 +374,26 @@
                             </svg>
                         </div>
                         <div class="exercise-challenge-copy">
-                            <div class="exercise-challenge-kicker">Défi actif</div>
+                            <div class="exercise-challenge-kicker-row">
+                                <span class="exercise-challenge-kicker">Défi actif</span>
+                                <span class="exercise-challenge-xp" id="exercise-challenge-xp" hidden></span>
+                            </div>
                             <div class="exercise-challenge-title" id="exercise-challenge-title">Objectif du jour</div>
                             <div class="exercise-challenge-target" id="exercise-challenge-target">--</div>
+                            <div class="exercise-challenge-meter" id="exercise-challenge-meter" hidden>
+                                <div class="exercise-challenge-bar"><span id="exercise-challenge-bar-fill"></span></div>
+                                <strong id="exercise-challenge-count">0/0</strong>
+                            </div>
                             <div class="exercise-challenge-progress" id="exercise-challenge-progress">Garde-le en tête sur chaque série.</div>
                         </div>
                     </div>
-                    <!-- Coaching Advice Card -->
+                    <!-- Coaching Advice Card: "mission du jour" -->
                     <div class="coaching-advice" id="coaching-advice" style="display: none;">
+                        <div class="coach-card-bg" aria-hidden="true">
+                            <span class="coach-card-blob blob-a"></span>
+                            <span class="coach-card-blob blob-b"></span>
+                            <span class="coach-card-grid"></span>
+                        </div>
                         <div class="coaching-advice-header">
                             <div class="coaching-advice-heading">
                                 <span class="coaching-advice-icon" id="coaching-advice-icon">
@@ -389,22 +403,11 @@
                                     </svg>
                                 </span>
                                 <div class="coaching-advice-heading-copy">
-                                    <span class="coaching-advice-eyebrow">Coach</span>
+                                    <span class="coaching-advice-eyebrow">Mission du jour</span>
                                     <span class="coaching-advice-title" id="coaching-advice-title">Conseil du coach</span>
                                 </div>
                             </div>
                             <span class="coaching-advice-chip" id="coaching-advice-chip">Plan du jour</span>
-                        </div>
-                        <div class="coaching-advice-summary" id="coaching-advice-message"></div>
-                        <div class="coaching-status-row" id="coaching-status-row" style="display: none;">
-                            <span class="coaching-status-pill" id="coaching-fatigue-pill">Récupération correcte</span>
-                            <button type="button" class="coaching-info-btn" id="btn-coach-fatigue-info" aria-label="Comprendre le niveau de fatigue">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="9"></circle>
-                                    <path d="M12 10v5"></path>
-                                    <path d="M12 7h.01"></path>
-                                </svg>
-                            </button>
                         </div>
                         <div class="coaching-suggestion-row coaching-suggestion-grid" id="coaching-suggestion-grid">
                             <div class="coaching-suggestion coaching-suggestion-weight">
@@ -427,6 +430,21 @@
                                 <span class="coaching-suggestion-label">Back-off</span>
                                 <span class="coaching-suggestion-value" id="coaching-backoff-weight">--</span>
                             </div>
+                        </div>
+                        <div class="coaching-advice-summary" id="coaching-advice-message"></div>
+                        <div class="coaching-status-row" id="coaching-status-row" style="display: none;">
+                            <span class="coaching-status-pill" id="coaching-fatigue-pill">Récupération correcte</span>
+                            <div class="coach-energy" id="coach-energy" aria-label="Énergie du jour">
+                                <div class="coach-energy-segs" id="coach-energy-segs"></div>
+                                <strong class="coach-energy-value" id="coach-energy-value">--</strong>
+                            </div>
+                            <button type="button" class="coaching-info-btn" id="btn-coach-fatigue-info" aria-label="Comprendre le niveau de fatigue">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M12 10v5"></path>
+                                    <path d="M12 7h.01"></path>
+                                </svg>
+                            </button>
                         </div>
                         <div class="coaching-advice-drawer" id="coaching-advice-drawer">
                             <button type="button" class="coaching-drawer-toggle" id="btn-coach-toggle-drawer" aria-expanded="false">
@@ -530,52 +548,8 @@
                         </div>
                         <span class="coaching-advice-chip">Optionnel</span>
                     </div>
-                    <div class="coaching-advice-summary coaching-summary-primary">
-                        Les deux côtés sont suivis séparément. Tu peux suivre, modifier ou ignorer chaque conseil.
-                    </div>
-                    
-                    <!-- Left Side Advice -->
-                    <div class="coaching-dual-exercise">
-                        <div class="coaching-exercise-label">
-                            <span class="coaching-exercise-badge badge-left">G</span>
-                            <span class="coaching-exercise-name" id="unilateral-advice-name-left">Côté Gauche</span>
-                        </div>
-                        <div class="coaching-advice-message" id="unilateral-advice-message-left">--</div>
-                        <div class="coaching-suggestion-row">
-                            <div class="coaching-suggestion">
-                                <span class="coaching-suggestion-label">Poids</span>
-                                <span class="coaching-suggestion-value" id="unilateral-advice-weight-left">-- kg</span>
-                            </div>
-                            <div class="coaching-suggestion">
-                                <span class="coaching-suggestion-label">Reps</span>
-                                <span class="coaching-suggestion-value" id="unilateral-advice-reps-left">--</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="coaching-divider"></div>
-                    
-                    <!-- Right Side Advice -->
-                    <div class="coaching-dual-exercise">
-                        <div class="coaching-exercise-label">
-                            <span class="coaching-exercise-badge badge-right">D</span>
-                            <span class="coaching-exercise-name" id="unilateral-advice-name-right">Côté Droit</span>
-                        </div>
-                        <div class="coaching-advice-message" id="unilateral-advice-message-right">--</div>
-                        <div class="coaching-suggestion-row">
-                            <div class="coaching-suggestion">
-                                <span class="coaching-suggestion-label">Poids</span>
-                                <span class="coaching-suggestion-value" id="unilateral-advice-weight-right">-- kg</span>
-                            </div>
-                            <div class="coaching-suggestion">
-                                <span class="coaching-suggestion-label">Reps</span>
-                                <span class="coaching-suggestion-value" id="unilateral-advice-reps-right">--</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="unilateral-advice-content-left" style="display: none;"></div>
-                    <div id="unilateral-advice-content-right" style="display: none;"></div>
+                    <div class="coaching-advice-summary" id="unilateral-coach-summary">Chaque côté est suivi séparément.</div>
+                    <div class="uni-coach-grid" id="unilateral-coach-grid" aria-live="polite"></div>
                 </div>
 
                 <div class="series-list" id="series-list">
@@ -589,8 +563,11 @@
                         <small id="exercise-volume-note">Le plan est une suggestion : tu gardes toujours la main.</small>
                     </div>
                     <div class="exercise-control-actions">
-                        <button type="button" class="btn btn-control-step" id="btn-volume-minus" aria-label="Retirer une série">−</button>
-                        <button type="button" class="btn btn-control-step" id="btn-volume-plus" aria-label="Ajouter une série">+</button>
+                        <div class="exercise-control-stepper" role="group" aria-label="Nombre de séries">
+                            <button type="button" class="btn btn-control-step" id="btn-volume-minus" aria-label="Retirer une série">−</button>
+                            <span class="exercise-control-count" id="exercise-volume-count" aria-live="polite">3</span>
+                            <button type="button" class="btn btn-control-step" id="btn-volume-plus" aria-label="Ajouter une série">+</button>
+                        </div>
                         <button type="button" class="btn btn-secondary btn-skip-exercise" id="btn-skip-exercise">Passer l’exercice</button>
                     </div>
                 </section>
@@ -615,18 +592,25 @@
                 </section>
 
                 <!-- Logbook - Dernière séance -->
-                <div class="exercise-progress-card" id="exercise-progress-card" style="display: none;">
+                <div class="exercise-progress-card exercise-stats-card" id="exercise-progress-card" style="display: none;">
                     <div class="exercise-progress-header">
                         <div>
-                            <div class="exercise-progress-kicker">Progression</div>
-                            <div class="exercise-progress-title">Tendance récente</div>
+                            <div class="exercise-progress-kicker">Stats de l’exo</div>
+                            <div class="exercise-progress-title">Ta progression</div>
                         </div>
                         <div class="exercise-progress-badge" id="exercise-progress-badge">Stable</div>
                     </div>
+                    <div class="xstats-tiles" data-xstats="tiles"></div>
                     <div class="exercise-progress-body">
-                        <canvas id="exercise-progress-sparkline" height="56"></canvas>
+                        <div class="xstats-chart-head">
+                            <span>e1RM estimé</span>
+                            <strong data-xstats="delta"></strong>
+                        </div>
+                        <canvas id="exercise-progress-sparkline" height="104"></canvas>
+                        <div class="xstats-axis" data-xstats="axis"></div>
                         <div class="exercise-progress-meta" id="exercise-progress-meta">Pas assez d’historique</div>
                     </div>
+                    <div class="xstats-quest" data-xstats="quest" hidden></div>
                 </div>
 
                 <div class="logbook-card" id="logbook-card">
@@ -712,7 +696,10 @@
 
                 <div class="coach-decision-card coach-decision-card-superset" id="superset-decision-card" style="display: none;">
                     <div class="coach-decision-header">
-                        <h4>Pourquoi ces conseils</h4>
+                        <div>
+                            <span class="coach-decision-kicker">Coulisses du coach</span>
+                            <h4>Pourquoi ces conseils</h4>
+                        </div>
                         <span class="coach-decision-confidence" id="superset-decision-confidence">2 lectures coach</span>
                     </div>
                     <div class="superset-decision-grid" id="superset-decision-grid"></div>
@@ -781,7 +768,10 @@
 
                 <div class="coach-decision-card" id="coach-decision-card" style="display: none;">
                     <div class="coach-decision-header">
-                        <h4>Pourquoi ce conseil</h4>
+                        <div>
+                            <span class="coach-decision-kicker">Coulisses du coach</span>
+                            <h4>Pourquoi ce conseil</h4>
+                        </div>
                         <span class="coach-decision-confidence" id="coach-decision-confidence">Confiance --</span>
                     </div>
                     <div class="coach-decision-grid" id="coach-decision-grid"></div>
@@ -1574,15 +1564,15 @@
                     <div class="cycle-checkin-progress" id="cycle-checkin-progress"></div>
                     <div class="cycle-checkin-deload" id="cycle-checkin-deload">
                         <div class="cycle-checkin-deload-copy">
-                            <strong id="cycle-deload-title">Passer cette seance en deload ?</strong>
-                            <p id="cycle-deload-copy">Tu peux l'activer manuellement pour alleger la seance du jour.</p>
+                            <strong id="cycle-deload-title">Passer cette séance en deload ?</strong>
+                            <p id="cycle-deload-copy">Active-le si tu veux une séance plus légère aujourd’hui.</p>
                         </div>
                         <div class="cycle-deload-selector" id="cycle-deload-selector">
                             <button type="button" class="cycle-deload-option is-active" data-deload-choice="off">Normale</button>
                             <button type="button" class="cycle-deload-option" data-deload-choice="on">Deload</button>
                         </div>
                     </div>
-                    <p class="cycle-checkin-note" id="cycle-checkin-note">Le deload reste optionnel. Tu peux le cocher quand tu veux pour alleger proprement la seance.</p>
+                    <p class="cycle-checkin-note" id="cycle-checkin-note">Optionnel : pratique pour gérer la fatigue ou reprendre proprement.</p>
                 </div>
                 
                 <div class="lms-muscle-list" id="lms-muscle-list">
@@ -1661,13 +1651,18 @@
     </div>
 
     <script src="db.js"></script>
-    <script src="data.js?v=4.10.7"></script>
-    <script src="app.js?v=4.10.7"></script>
+    <script src="data.js?v=5.2.0"></script>
+    <script src="app.js?v=5.2.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
-        if ('serviceWorker' in navigator) {
-            const APP_VERSION = '4.10.7';
+        const isLocalDevHost = ['localhost', '127.0.0.1'].includes(location.hostname) && !location.search.includes('sw=1');
+        if (isLocalDevHost && 'serviceWorker' in navigator) {
+            // Local dev: never serve stale cached code.
+            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
+        }
+        if ('serviceWorker' in navigator && !isLocalDevHost) {
+            const APP_VERSION = '5.2.0';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {
