@@ -52,6 +52,20 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🐛 L'XP de fin de séance annoncé est enfin crédité (et le passage de niveau est fêté) ; chrono de séance au-delà d'1 h affiché en « 1h05:12 ».
 - 🧪 `tests/demo-seed.js` : génère 8 semaines de données factices (à utiliser sur une origine jetable, ex. `127.0.0.1`).
 
+### Nouveautés v5.4
+- 🗂️ **Mes séances** repensé pour les débutants : liste en cartes (ordre du cycle, durée estimée, muscles travaillés), création guidée avec **7 modèles prêts à l'emploi** (Full body, Haut/Bas du corps, Push, Pull, Legs, Bras) ou séance vide.
+- ✏️ Édition de séance : nom modifiable directement (sauvegarde auto), stats (exercices / séries / durée estimée), bouton ⚡ entre deux exercices pour faire un superset, réordonnancement par la poignée uniquement (le scroll ne déplace plus les cartes).
+- 🎛️ Réglages d'exercice : objectifs en un tap (Force / Muscle / Endurance), boutons +/− pour séries, reps et repos, intensité expliquée en mots (Échec → Facile), « Changer d'exercice » via la bibliothèque. Tout le reste est rangé dans « Réglages avancés ».
+- 🧹 Confirmations dans la DA de l'app (plus de `confirm()` natif), l'accueil se met à jour après une modification.
+
+### Coach IA
+- ✨ Bouton **Coach IA** (accueil + carte dans Parcours) : on choisit une demande (analyser, optimiser, nouveau programme, question libre) et une IA (ChatGPT, Claude, Gemini, Le Chat ou autre).
+- 📦 L'app envoie un **résumé fait pour l'IA**, pas l'export brut : profil, assiduité 8 semaines, programme actuel au format `worktout-program-v1`, tendance e1RM par exercice (stagnation, baisse, signaux douleur / amplitude), volume par muscle vs MEV/MAV/MRV, déséquilibres G/D, exercices sautés, notes.
+- 🚀 Envoi en un tap : message copié + IA ouverte (pré-rempli quand il tient dans l'URL), ou partage du fichier `.md` via la feuille de partage du téléphone.
+- 📋 Retour : « Coller la réponse de l'IA » retrouve le programme dans le message, affiche les changements (ajouts / retraits / modifs / supersets) puis l'applique en gardant l'historique. Sauvegarde automatique et bouton « Revenir au programme d'avant l'IA ».
+- 📱 Prêt pour une app native : `ai-coach.js` passe par un adaptateur (`AiBridge`) qui utilise les plugins Capacitor (Clipboard, Share, Filesystem, AppLauncher / Browser) quand ils sont présents, sinon les API web.
+- Fichiers : `ai-coach.js` (données, prompts, lecture de la réponse — sans DOM, testé), `ai-coach-ui.js` (interface), `ai-coach.css`. Tests : `tests/browser-runner.html?test=ai-coach`.
+
 ## Stack technique
 - Frontend pur : HTML, CSS, JavaScript vanilla.
 - Stockage : IndexedDB (abstraction dans `db.js`).

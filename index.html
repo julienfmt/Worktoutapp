@@ -15,10 +15,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=5.5.16" as="script">
-    <link rel="stylesheet" href="styles.css?v=5.5.16">
-    <link rel="stylesheet" href="streak-score.css?v=5.5.16">
-    <link rel="stylesheet" href="theme.css?v=5.5.16">
+    <link rel="preload" href="app.js?v=5.5.17" as="script">
+    <link rel="stylesheet" href="styles.css?v=5.5.17">
+    <link rel="stylesheet" href="streak-score.css?v=5.5.17">
+    <link rel="stylesheet" href="theme.css?v=5.5.17">
+    <link rel="stylesheet" href="ai-coach.css?v=5.5.17">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -141,6 +142,10 @@
                         <!-- Niveau, XP et totaux générés dynamiquement -->
                     </div>
 
+                    <div class="ai-coach-card" id="ai-coach-card">
+                        <!-- Coach IA (ai-coach-ui.js) -->
+                    </div>
+
                     <div class="pz-card quest-board" id="quest-board">
                         <!-- Quêtes de la semaine générées dynamiquement -->
                     </div>
@@ -168,7 +173,14 @@
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                         </svg>
-                        Éditer les séances
+                        Mes séances
+                    </button>
+                    <button class="btn btn-outline btn-ai-coach" type="button" data-ai-open>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M10 2.5l1.7 5.1 5.1 1.7-5.1 1.7L10 16.1l-1.7-5.1-5.1-1.7 5.1-1.7z"/>
+                            <path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" opacity=".75"/>
+                        </svg>
+                        Coach IA
                     </button>
                     <button class="btn btn-outline" id="btn-settings" title="Paramètres">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1084,7 +1096,6 @@
             <div class="sheet-backdrop"></div>
             <div class="sheet-content sheet-content-large">
                 <div class="sheet-handle"></div>
-                <h3>Éditer les séances</h3>
                 <div class="edit-session-list" id="edit-session-list">
                     <!-- Séances à éditer -->
                 </div>
@@ -1102,7 +1113,7 @@
                             <path d="M15 18l-6-6 6-6"/>
                         </svg>
                     </button>
-                    <h3>Éditer l'exercice</h3>
+                    <h3>Réglages de l'exercice</h3>
                     <div class="sheet-titlebar-spacer"></div>
                 </div>
                 <div class="edit-slot-form" id="edit-slot-form">
@@ -1133,12 +1144,12 @@
                             <path d="M15 18l-6-6 6-6"/>
                         </svg>
                     </button>
-                    <h3>Ajouter un exercice</h3>
+                    <h3 id="exercise-library-title">Ajouter un exercice</h3>
                     <div class="sheet-titlebar-spacer"></div>
                 </div>
                 <div class="exercise-library-toolbar">
-                    <input type="text" id="exercise-library-search" class="form-input" placeholder="Rechercher un exercice, une machine, un appareil...">
-                    <p class="exercise-library-helper">Choisis dans la base ou tape un nom libre pour créer un exercice custom.</p>
+                    <input type="text" id="exercise-library-search" class="form-input" placeholder="Rechercher : curl, presse, poulie…">
+                    <p class="exercise-library-helper">Choisis dans la liste, ou tape le nom de ton exercice s’il n’y est pas.</p>
                 </div>
                 <div class="exercise-library-filters" id="exercise-library-filters">
                     <!-- Catégories générées dynamiquement -->
@@ -1679,10 +1690,12 @@
         </div>
     </div>
 
-    <script defer src="db.js?v=5.5.16"></script>
-    <script defer src="data.js?v=5.5.16"></script>
-    <script defer src="exercise-db.js?v=5.5.16"></script>
-    <script defer src="app.js?v=5.5.16"></script>
+    <script defer src="db.js?v=5.5.17"></script>
+    <script defer src="data.js?v=5.5.17"></script>
+    <script defer src="exercise-db.js?v=5.5.17"></script>
+    <script defer src="app.js?v=5.5.17"></script>
+    <script defer src="ai-coach.js?v=5.5.17"></script>
+    <script defer src="ai-coach-ui.js?v=5.5.17"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection

@@ -1207,11 +1207,8 @@ class App {
         if (!saved) return;
 
         await this.completeOnboarding({ refreshHome: true });
-        await this.createSession({
-            name: 'Séance 1',
-            openEditor: true,
-            refreshHome: true
-        });
+        await this.showEditSessionsSheet();
+        this.showNewSessionView();
     }
 
     async copyOnboardingPrompt() {
@@ -1482,6 +1479,7 @@ class App {
             }
 
             const rawSlots = Array.isArray(session?.slots) ? session.slots : [];
+            const supersetGroups = new Map();
             rawSlots.forEach((rawSlot, slotIndex) => {
                 const importedExerciseName = String(
                     rawSlot?.name ||
@@ -1534,8 +1532,24 @@ class App {
                 slot.repsMax = definition.repsMax;
                 slot.rest = definition.rest;
                 slot.rir = definition.rir;
+                if (rawSlot?.unilateralMode === 'on' || rawSlot?.unilateralMode === 'off') {
+                    slot.unilateralMode = rawSlot.unilateralMode;
+                }
                 this.normalizeSlotProgressionConfig(slot);
                 normalizedSlots.push(slot);
+
+                const supersetKey = rawSlot?.superset != null ? String(rawSlot.superset).trim().toUpperCase() : '';
+                if (supersetKey) {
+                    if (!supersetGroups.has(supersetKey)) supersetGroups.set(supersetKey, []);
+                    supersetGroups.get(supersetKey).push(slot);
+                }
+            });
+
+            // "superset": same label on two slots → first one points to its partner.
+            supersetGroups.forEach((groupSlots) => {
+                if (groupSlots.length >= 2) {
+                    groupSlots[0].supersetWith = groupSlots[1].id;
+                }
             });
         });
 
@@ -2906,6 +2920,7 @@ class App {
         this.progressContext = { snapshot, weekly, muscles, player, bestStreak, streakData };
 
         this.renderPlayerCard();
+        this.renderAiCoachCard();
         await this.renderQuestBoard();
         await this.renderTrophyCase();
         this.renderLiftsCard();
@@ -3056,7 +3071,9 @@ class App {
         return `
             <span class="muscle-badge muscle-badge-${size} ${className}" style="--muscle: ${theme.color}">
                 <span class="muscle-badge-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${theme.icon}"/></svg>
+                    ${theme.img
+                        ? `<img src="${theme.img}" alt="" draggable="false" loading="lazy" decoding="async">`
+                        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${theme.icon}"/></svg>`}
                 </span>
                 ${name ? `<span class="muscle-badge-label">${this.escapeHtml(name)}</span>` : ''}
             </span>
@@ -16691,64 +16708,135 @@ class App {
     }
 
     // ===== Edit Sessions Sheet =====
+    // Ready-made starting points so a beginner never faces an empty session.
+    // Every name resolves through the curated library (settings, cues, variants).
+    getSessionTemplates() {
+        return [
+            { id: 'fullbody', emoji: '🔥', name: 'Full body', hint: 'Tout le corps, idéal pour débuter', exercises: ['Presse à cuisses', 'Développé couché haltères', 'Tirage vertical prise large', 'Rowing poulie assise', 'Développé haltères épaules', 'Crunch machine'] },
+            { id: 'upper', emoji: '💪', name: 'Haut du corps', hint: 'Pecs, dos, épaules, bras', exercises: ['Développé couché haltères', 'Rowing poulie assise', 'Développé haltères épaules', 'Tirage vertical prise large', 'Curl haltères', 'Pushdown corde'] },
+            { id: 'lower', emoji: '🦵', name: 'Bas du corps', hint: 'Cuisses, fessiers, mollets', exercises: ['Presse à cuisses', 'Soulevé de terre roumain', 'Leg extension', 'Leg curl assis', 'Hip thrust', 'Mollets debout machine'] },
+            { id: 'push', emoji: '🫸', name: 'Push', hint: 'Pecs, épaules, triceps', exercises: ['Développé couché barre', 'Développé incliné haltères', 'Développé militaire', 'Élévation latérale', 'Pushdown corde', 'Extension corde au-dessus de la tête'] },
+            { id: 'pull', emoji: '🧲', name: 'Pull', hint: 'Dos, arrière d’épaule, biceps', exercises: ['Tractions assistées', 'Rowing barre', 'Tirage vertical prise neutre', 'Face pull', 'Curl barre EZ', 'Curl marteau'] },
+            { id: 'legs', emoji: '🏋️', name: 'Legs', hint: 'Jambes complètes', exercises: ['Squat', 'Presse à cuisses', 'Soulevé de terre roumain', 'Leg curl allongé', 'Leg extension', 'Mollets debout machine'] },
+            { id: 'arms', emoji: '💥', name: 'Bras', hint: 'Biceps et triceps', exercises: ['Curl barre EZ', 'Barre au front', 'Curl incliné haltères', 'Pushdown corde', 'Curl marteau', 'Extension nuque haltère'] }
+        ];
+    }
+
+    resolveTemplateDefinition(exerciseName) {
+        return this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
+            allowCardioInference: true
+        });
+    }
+
+    // Rough but honest: work time + rest per set, a minute of setup per
+    // exercise; the first half of a superset skips its rest.
+    estimateSessionDuration(slots = []) {
+        if (!slots.length) return 0;
+        const seconds = slots.reduce((total, slot) => {
+            const sets = Math.max(1, Number(slot.sets) || 3);
+            const rest = Number.isFinite(Number(slot.rest)) ? Number(slot.rest) : 90;
+            const work = this.isCardioSlot(slot)
+                ? (Number(slot.repsMax) || Number(slot.repsMin) || 10) * 60
+                : 40;
+            const restBetween = slot.supersetWith ? 15 : rest;
+            return total + sets * (work + restBetween) + 60;
+        }, 0);
+        return Math.max(5, Math.round(seconds / 60 / 5) * 5);
+    }
+
+    getSessionTopMuscles(slots = [], limit = 3) {
+        const counts = new Map();
+        slots.forEach(slot => {
+            if (!slot.muscleGroup) return;
+            counts.set(slot.muscleGroup, (counts.get(slot.muscleGroup) || 0) + (Number(slot.sets) || 1));
+        });
+        return [...counts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([muscleId]) => muscleId);
+    }
+
+    formatSlotEditorMeta(slot) {
+        if (this.isCardioSlot(slot)) {
+            return this.getSlotSummaryMetrics(slot).slice(0, 3).join(' · ');
+        }
+        const range = Number(slot.repsMin) === Number(slot.repsMax) ? `${slot.repsMin}` : `${slot.repsMin}-${slot.repsMax}`;
+        const rest = Number(slot.rest) > 0 ? ` · repos ${this.formatRestShort(slot.rest)}` : '';
+        return `${slot.sets} séries × ${range} reps${rest}`;
+    }
+
+    formatRestShort(seconds) {
+        const value = Number(seconds) || 0;
+        if (value <= 0) return 'Aucun';
+        if (value < 60) return `${value} s`;
+        const minutes = Math.floor(value / 60);
+        const rest = value % 60;
+        return rest ? `${minutes} min ${String(rest).padStart(2, '0')}` : `${minutes} min`;
+    }
+
+    renderEditorIcon(name, size = 18) {
+        const paths = {
+            back: '<path d="M15 18l-6-6 6-6"/>',
+            chevron: '<path d="M9 18l6-6-6-6"/>',
+            plus: '<path d="M12 5v14M5 12h14"/>',
+            grip: '<circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/>',
+            swap: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+            trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+            minus: '<path d="M5 12h14"/>'
+        };
+        const fill = name === 'grip' ? 'currentColor' : 'none';
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ''}</svg>`;
+    }
+
     async showEditSessionsSheet() {
         const sessions = await db.getSessions();
         const sessionsWithStats = await Promise.all(
             sessions.map(async (session) => {
                 const slots = await db.getSlotsBySession(session.id);
-                const linkedTargets = new Set(
-                    slots
-                        .map((slot) => slot.supersetWith)
-                        .filter(Boolean)
-                );
-                const supersetCount = slots.filter((slot) => slot.supersetWith && !linkedTargets.has(slot.id)).length;
-
                 return {
                     ...session,
                     slotCount: slots.length,
-                    supersetCount
+                    setCount: slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0),
+                    duration: this.estimateSessionDuration(slots) || session.estimatedDuration || 45,
+                    muscles: this.getSessionTopMuscles(slots)
                 };
             })
         );
         const container = document.getElementById('edit-session-list');
-        
+
         container.innerHTML = `
-            <div class="edit-sessions-header">
-                <button class="btn btn-primary" id="btn-add-session">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    Créer une séance
-                </button>
-                <p class="edit-sessions-subtitle">
-                    Appuie sur une séance pour modifier ses exercices. Glisse pour réorganiser le cycle.
-                </p>
+            <div class="se-head">
+                <h3 class="se-title">Mes séances</h3>
+                <p class="se-sub">Elles s’enchaînent dans cet ordre. Appuie sur une séance pour la modifier.</p>
             </div>
-            <div class="sessions-reorder-list" id="sessions-reorder-list">
-                ${sessionsWithStats.map((session, index) => `
-                    <div class="session-reorder-item" data-session-id="${session.id}" data-order="${session.order}" draggable="true">
-                        <div class="drag-handle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2"/>
-                            </svg>
+            ${sessionsWithStats.length ? `
+                <div class="se-session-list" id="sessions-reorder-list">
+                    ${sessionsWithStats.map((session, index) => `
+                        <div class="session-reorder-item se-session-card" data-session-id="${session.id}" data-order="${session.order}" draggable="true" style="--accent: ${this.getSessionAccent(session.id, sessions)}">
+                            <div class="drag-handle se-grip" aria-label="Glisser pour réordonner">${this.renderEditorIcon('grip', 18)}</div>
+                            <button type="button" class="se-session-main" data-action="open-session-detail" data-session-id="${session.id}">
+                                <span class="se-session-index">${index + 1}</span>
+                                <span class="se-session-body">
+                                    <span class="se-session-name">${this.escapeHtml(session.name)}</span>
+                                    <span class="se-session-meta">${session.slotCount ? `${session.slotCount} exercice${session.slotCount > 1 ? 's' : ''} · ${session.setCount} séries · ~${session.duration} min` : 'Vide · à compléter'}</span>
+                                    ${session.muscles.length ? `<span class="se-session-muscles">${session.muscles.map(muscleId => this.renderMuscleBadge(muscleId)).join('')}</span>` : ''}
+                                </span>
+                                <span class="se-chevron">${this.renderEditorIcon('chevron', 18)}</span>
+                            </button>
                         </div>
-                        <div class="session-reorder-content" data-session-id="${session.id}" data-action="open-session-detail">
-                            <div class="session-reorder-name">${session.name}</div>
-                            <div class="session-reorder-meta-row">
-                                <span class="session-meta-chip">${session.slotCount} exo${session.slotCount > 1 ? 's' : ''}</span>
-                                <span class="session-meta-chip">~${session.estimatedDuration || 45} min</span>
-                                ${session.supersetCount > 0 ? `<span class="session-meta-chip">${session.supersetCount} superset${session.supersetCount > 1 ? 's' : ''}</span>` : ''}
-                            </div>
-                            <div class="session-reorder-meta">${index + 1}/${sessions.length} dans le cycle</div>
-                        </div>
-                        <button class="btn-icon-small btn-delete-session" data-session-id="${session.id}">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                            </svg>
-                        </button>
-                    </div>
-                `).join('')}
-            </div>
+                    `).join('')}
+                </div>
+            ` : `
+                <div class="se-empty">
+                    <div class="se-empty-emoji">🗓️</div>
+                    <strong>Aucune séance pour l’instant</strong>
+                    <p>Crée ta première séance : un modèle prêt à l’emploi suffit pour démarrer.</p>
+                </div>
+            `}
+            <button type="button" class="btn btn-primary btn-large se-add-session" id="btn-add-session">
+                ${this.renderEditorIcon('plus', 18)}
+                Nouvelle séance
+            </button>
         `;
 
         this.initDragAndDrop();
@@ -16757,10 +16845,127 @@ class App {
 
     hideEditSessionsSheet() {
         document.getElementById('sheet-edit-sessions').classList.remove('active');
+        this.refreshHomeAfterSessionEdits();
+    }
+
+    refreshHomeAfterSessionEdits() {
+        if (!this.sessionsEditorDirty) return;
+        this.sessionsEditorDirty = false;
+        if (this.currentScreen === 'home' || !this.currentScreen) {
+            this.renderHome();
+        }
+    }
+
+    showNewSessionView() {
+        const container = document.getElementById('edit-session-list');
+        if (!container) return;
+        this.newSessionDraft = { templateId: 'fullbody', nameTouched: false };
+        const templates = this.getSessionTemplates();
+
+        const templateCard = (template) => {
+            const definitions = template.exercises.map(name => this.resolveTemplateDefinition(name));
+            const duration = this.estimateSessionDuration(definitions);
+            return `
+                <button type="button" class="se-template ${template.id === this.newSessionDraft.templateId ? 'is-selected' : ''}" data-template="${template.id}">
+                    <span class="se-template-emoji" aria-hidden="true">${template.emoji}</span>
+                    <span class="se-template-name">${this.escapeHtml(template.name)}</span>
+                    <span class="se-template-hint">${this.escapeHtml(template.hint)}</span>
+                    <span class="se-template-meta">${definitions.length} exos · ~${duration} min</span>
+                </button>
+            `;
+        };
+
+        container.innerHTML = `
+            <div class="sheet-titlebar">
+                <button class="btn-icon-small sheet-back-button" id="btn-new-session-back" type="button" aria-label="Retour">${this.renderEditorIcon('back', 18)}</button>
+                <h3>Nouvelle séance</h3>
+                <div class="sheet-titlebar-spacer"></div>
+            </div>
+            <label class="se-label" for="new-session-name">Nom de la séance</label>
+            <input type="text" id="new-session-name" class="form-input se-name-field" maxlength="40" value="Full body" placeholder="Ex : Push, Jambes, Haut du corps" autocomplete="off">
+            <div class="se-section-title">Point de départ</div>
+            <p class="se-hint">Choisis un modèle prêt à l’emploi : séries, reps et repos sont déjà réglés. Tu pourras tout modifier ensuite.</p>
+            <div class="se-template-grid" id="new-session-templates">
+                ${templates.map(templateCard).join('')}
+                <button type="button" class="se-template se-template-blank" data-template="blank">
+                    <span class="se-template-emoji" aria-hidden="true">✏️</span>
+                    <span class="se-template-name">Séance vide</span>
+                    <span class="se-template-hint">Je choisis mes exercices</span>
+                </button>
+            </div>
+            <div class="se-sticky-footer">
+                <button type="button" class="btn btn-primary btn-large" id="btn-create-session-confirm">Créer la séance</button>
+            </div>
+        `;
+
+        const nameInput = document.getElementById('new-session-name');
+        nameInput.oninput = () => {
+            this.newSessionDraft.nameTouched = nameInput.value.trim() !== '';
+        };
+        nameInput.onkeydown = (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            nameInput.blur();
+        };
+        container.closest('.sheet-content')?.scrollTo({ top: 0 });
+    }
+
+    selectNewSessionTemplate(templateId) {
+        if (!this.newSessionDraft) return;
+        this.newSessionDraft.templateId = templateId;
+        document.querySelectorAll('#new-session-templates .se-template').forEach(card => {
+            card.classList.toggle('is-selected', card.dataset.template === templateId);
+        });
+        const nameInput = document.getElementById('new-session-name');
+        if (nameInput && !this.newSessionDraft.nameTouched) {
+            const template = this.getSessionTemplates().find(item => item.id === templateId);
+            nameInput.value = template ? template.name : '';
+        }
+    }
+
+    async confirmNewSession() {
+        if (this.isCreatingSession) return;
+        this.isCreatingSession = true;
+        try {
+            await this.createSessionFromDraft();
+        } finally {
+            this.isCreatingSession = false;
+        }
+    }
+
+    async createSessionFromDraft() {
+        const draft = this.newSessionDraft || { templateId: 'blank' };
+        const template = this.getSessionTemplates().find(item => item.id === draft.templateId) || null;
+        const typedName = document.getElementById('new-session-name')?.value.trim();
+        const name = typedName || template?.name || 'Nouvelle séance';
+
+        const session = await this.createSession({ name, openEditor: false });
+        if (template) {
+            const slots = template.exercises.map((exerciseName, order) => {
+                const slot = this.buildSlotFromExerciseDefinition(this.resolveTemplateDefinition(exerciseName), session.id, order);
+                slot.id = `${session.id}-${order}-${Math.random().toString(36).slice(2, 7)}`;
+                return slot;
+            });
+            for (const slot of slots) {
+                await db.put('slots', slot);
+            }
+            session.estimatedDuration = this.estimateSessionDuration(slots);
+            await db.put('sessions', session);
+        }
+
+        this.newSessionDraft = null;
+        this.sessionsEditorDirty = true;
+        this.hideEditSessionsSheet();
+        await this.showEditSessionDetailSheet(session.id);
+        this.showCoachToast(
+            template ? `« ${name} » est prête. Ajuste ce que tu veux.` : `« ${name} » créée. Ajoute tes exercices.`,
+            'hot',
+            '✨'
+        );
     }
 
     // ===== Generic Drag & Drop =====
-    initSortableList({ list, itemSelector, onSave }) {
+    initSortableList({ list, itemSelector, handleSelector = null, onSave }) {
         if (!list) return;
 
         let draggedElement = null;
@@ -16811,6 +17016,9 @@ class App {
         });
 
         list.addEventListener('touchstart', (e) => {
+            // Only the grip starts a touch drag, so scrolling the list never
+            // shuffles it by accident.
+            if (handleSelector && !e.target.closest(handleSelector)) return;
             const item = resolveItem(e.target);
             if (!item) return;
 
@@ -16876,6 +17084,7 @@ class App {
         this.initSortableList({
             list,
             itemSelector: '.session-reorder-item',
+            handleSelector: '.drag-handle',
             onSave: () => this.saveSessionsOrder()
         });
     }
@@ -16897,16 +17106,22 @@ class App {
             }
         }
 
+        this.sessionsEditorDirty = true;
         await this.showEditSessionsSheet();
     }
 
     // ===== Exercise Library =====
-    showExerciseLibrarySheet(sessionId) {
+    // mode 'add' appends a new exercise to the session; mode 'replace' swaps
+    // the exercise currently open in the exercise editor.
+    showExerciseLibrarySheet(sessionId, { mode = 'add' } = {}) {
         this.exerciseLibraryState = {
             sessionId,
+            mode,
             category: 'all',
             query: ''
         };
+        const title = document.getElementById('exercise-library-title');
+        if (title) title.textContent = mode === 'replace' ? 'Changer d’exercice' : 'Ajouter un exercice';
 
         const searchInput = document.getElementById('exercise-library-search');
         if (searchInput) {
@@ -16926,6 +17141,7 @@ class App {
         document.getElementById('sheet-exercise-library').classList.remove('active');
         this.exerciseLibraryState = {
             sessionId: null,
+            mode: 'add',
             category: 'all',
             query: ''
         };
@@ -16963,8 +17179,8 @@ class App {
         customBtn.disabled = false;
         customBtn.setAttribute('aria-disabled', (!(this.exerciseLibraryState.query || '').trim()).toString());
         customBtn.textContent = (this.exerciseLibraryState.query || '').trim()
-            ? `Créer "${(this.exerciseLibraryState.query || '').trim()}" en custom`
-            : 'Créer cet exercice en custom';
+            ? `Utiliser « ${(this.exerciseLibraryState.query || '').trim()} » (exercice perso)`
+            : 'Tape un nom pour créer ton propre exercice';
 
         const dbResultsHtml = this.renderExerciseDbLibraryResults(query, category, filtered);
 
@@ -17006,7 +17222,7 @@ class App {
                             </div>
                         ` : ''}
                     </div>
-                    <span class="exercise-library-item-action">Ajouter</span>
+                    <span class="exercise-library-item-action">${this.exerciseLibraryState.mode === 'replace' ? 'Choisir' : 'Ajouter'}</span>
                 </button>
             `;
         }).join('') + dbResultsHtml;
@@ -17055,7 +17271,7 @@ class App {
                         </div>
                         <div class="exercise-library-item-instructions">${this.escapeHtml(entry.en)}</div>
                     </div>
-                    <span class="exercise-library-item-action">Ajouter</span>
+                    <span class="exercise-library-item-action">${this.exerciseLibraryState.mode === 'replace' ? 'Choisir' : 'Ajouter'}</span>
                 </button>
             `).join('')}
         `;
@@ -17063,7 +17279,8 @@ class App {
 
     async createExerciseFromDb(entryId) {
         const sessionId = this.exerciseLibraryState.sessionId;
-        if (!sessionId) return;
+        const isReplace = this.exerciseLibraryState.mode === 'replace';
+        if (!sessionId && !isReplace) return;
         await exerciseDb.load();
         const entry = exerciseDb.getById(entryId);
         if (!entry) return;
@@ -17087,21 +17304,36 @@ class App {
         links[this.normalizeExerciseText(definition.name)] = entry.id;
         await db.setSetting('exerciseDbLinks', links);
 
+        if (isReplace) {
+            this.replaceEditedSlotExercise(definition, { dbId: entry.id });
+            return;
+        }
+
         const slots = await db.getSlotsBySession(sessionId);
         const newSlot = this.buildSlotFromExerciseDefinition(definition, sessionId, slots.length);
         newSlot.exerciseDbId = entry.id;
         await db.put('slots', newSlot);
         this.hideExerciseLibrarySheet();
+        this.sessionsEditorDirty = true;
         await this.showEditSessionDetailSheet(sessionId);
         this.showCoachToast(`${newSlot.name} ajouté à la séance.`, 'hot', '➕');
     }
 
     async createExerciseFromLibrary(exerciseName, { custom = false } = {}) {
         const sessionId = this.exerciseLibraryState.sessionId;
-        if (!sessionId) return;
+        const isReplace = this.exerciseLibraryState.mode === 'replace';
+        if (!sessionId && !isReplace) return;
 
         const trimmedName = (exerciseName || '').trim();
         if (!trimmedName) return;
+
+        if (isReplace) {
+            const definition = custom
+                ? this.inferCustomExerciseTemplate(trimmedName, { preferLibraryMatch: false, allowCardioInference: true })
+                : (this.findExerciseLibraryEntry(trimmedName) || this.inferCustomExerciseTemplate(trimmedName));
+            this.replaceEditedSlotExercise({ ...definition, name: definition.name || trimmedName });
+            return;
+        }
 
         const slots = await db.getSlotsBySession(sessionId);
         const order = slots.length;
@@ -17119,16 +17351,7 @@ class App {
 
         await db.put('slots', newSlot);
         this.hideExerciseLibrarySheet();
-
-        if (custom) {
-            const detailSheet = document.getElementById('sheet-edit-session-detail');
-            if (detailSheet?.classList.contains('active')) {
-                this.hideEditSessionDetailSheet({ preserveContext: true });
-            }
-            await this.showEditSlotSheet(newSlot.id);
-            return;
-        }
-
+        this.sessionsEditorDirty = true;
         await this.showEditSessionDetailSheet(sessionId);
         this.showCoachToast(`${newSlot.name} ajouté à la séance.`, 'hot', '➕');
     }
@@ -17160,12 +17383,9 @@ class App {
             return newSession;
         }
 
-        await this.showEditSessionsSheet();
-
-        setTimeout(() => {
-            this.hideEditSessionsSheet();
-            this.showEditSessionDetailSheet(newSession.id);
-        }, 100);
+        this.sessionsEditorDirty = true;
+        this.hideEditSessionsSheet();
+        await this.showEditSessionDetailSheet(newSession.id);
 
         return newSession;
     }
@@ -17175,9 +17395,16 @@ class App {
         const session = await db.get('sessions', sessionId);
         if (!session) return;
 
-        if (!confirm(`Supprimer la séance "${session.name}" et tous ses exercices ?\n\nCette action est irréversible.`)) {
-            return;
-        }
+        const confirmed = await this.showAppConfirm(
+            `« ${session.name} » et ses exercices seront retirés de ton programme. Ton historique déjà enregistré est conservé.`,
+            {
+                title: 'Supprimer la séance ?',
+                variant: 'danger',
+                confirmText: 'Supprimer',
+                cancelText: 'Annuler'
+            }
+        );
+        if (!confirmed) return;
 
         // Supprimer tous les slots de cette séance
         const slots = await db.getSlotsBySession(sessionId);
@@ -17195,10 +17422,46 @@ class App {
             await db.put('sessions', remainingSessions[i]);
         }
 
+        this.sessionsEditorDirty = true;
+        this.hideEditSessionDetailSheet();
         await this.showEditSessionsSheet();
+        this.showCoachToast(`« ${session.name} » supprimée.`, 'cold', '🗑️');
     }
 
     // ===== Edit Slot Sheet =====
+    // Simple first: goal presets + steppers for the four numbers that matter.
+    // Everything else lives in "Réglages avancés" with the same field ids, so
+    // saveSlot() and the autofill helpers keep working untouched.
+    getSlotGoalPresets() {
+        return [
+            { id: 'force', emoji: '🏋️', name: 'Force', sets: 4, repsMin: 4, repsMax: 6, rest: 180, rir: 2 },
+            { id: 'muscle', emoji: '💪', name: 'Muscle', sets: 3, repsMin: 8, repsMax: 12, rest: 90, rir: 2 },
+            { id: 'endurance', emoji: '🔁', name: 'Endurance', sets: 3, repsMin: 15, repsMax: 20, rest: 60, rir: 2 }
+        ];
+    }
+
+    getEffortLevels() {
+        return [
+            { value: 0, label: 'Échec', hint: 'Jusqu’à ne plus pouvoir faire une rep. À réserver aux confirmés.' },
+            { value: 1, label: 'Très dur', hint: 'Il te reste 1 rep en réserve à la fin de la série.' },
+            { value: 2, label: 'Dur', hint: 'Il te reste 2 reps en réserve : dur mais propre. Recommandé.' },
+            { value: 3, label: 'Modéré', hint: 'Il te reste 3 reps en réserve. Bien pour apprendre le mouvement.' },
+            { value: 4, label: 'Facile', hint: 'Il te reste 4 reps ou plus en réserve. Échauffement ou reprise.' }
+        ];
+    }
+
+    renderStepper({ id, value, step = 1, min = 0, max = 999, display = null, label = '' }) {
+        return `
+            <div class="se-stepper" data-step="${step}" data-min="${min}" data-max="${max}">
+                <button type="button" class="se-step-btn" data-dir="-1" aria-label="Diminuer ${label}">${this.renderEditorIcon('minus', 16)}</button>
+                ${display !== null
+                    ? `<input type="hidden" id="${id}" value="${value}"><output class="se-step-value" id="${id}-display">${display}</output>`
+                    : `<input type="number" id="${id}" class="se-step-value" value="${value}" min="${min}" max="${max}" inputmode="numeric" aria-label="${label}">`}
+                <button type="button" class="se-step-btn" data-dir="1" aria-label="Augmenter ${label}">${this.renderEditorIcon('plus', 16)}</button>
+            </div>
+        `;
+    }
+
     async showEditSlotSheet(slotId) {
         const slot = await db.get('slots', slotId);
         if (!slot) return;
@@ -17210,128 +17473,158 @@ class App {
         const loadingProfile = slot.loadingProfile || (progressionMode === 'bodyweight' ? 'bodyweight' : 'free_weight');
         const bodyweightProfile = slot.bodyweightProfile || {};
         const trackingMode = this.getTrackingMode(slot);
-        const trackingConfig = this.getTrackingModeFieldConfig(trackingMode);
         const slotPool = Array.isArray(slot.pool) && slot.pool.length
             ? slot.pool
             : [slot.activeExercise || slot.name].filter(Boolean);
         const activeExerciseName = slot.activeExercise || slot.name || '';
-        const matchedDefinition = this.findExerciseLibraryEntry(activeExerciseName);
-        const presetSummary = matchedDefinition
-            ? `${this.getExerciseCategoryLabel(matchedDefinition.category)} · ${this.getMuscleGroupLabel(matchedDefinition.muscleGroup) || 'général'} · ${matchedDefinition.sets}x${matchedDefinition.repsMin}-${matchedDefinition.repsMax}`
-            : 'Déduction automatique selon le nom tapé';
-        
-        const openAdvanced = progressionMode !== 'load' || loadingProfile !== 'free_weight';
+        const canRemove = Boolean(this.editingSessionId) && slot.sessionId === this.editingSessionId;
+        const rir = Number.isFinite(Number(slot.rir)) ? Number(slot.rir) : 2;
+
+        form.dataset.tracking = trackingMode;
         form.innerHTML = `
-            <div class="edit-slot-summary-card">
-                <div>
-                    <div class="edit-slot-summary-kicker">Réglage rapide</div>
-                    <div class="edit-slot-summary-title">${this.escapeHtml(activeExerciseName)}</div>
-                    <div class="edit-slot-summary-meta">${this.escapeHtml(presetSummary)}</div>
-                </div>
-                <button class="btn btn-outline btn-compact" id="btn-autofill-slot-template" type="button">
-                    Préremplir
+            <div class="se-ex-hero">
+                <div class="se-ex-hero-badge" id="edit-slot-hero-badge">${slot.muscleGroup ? this.renderMuscleBadge(slot.muscleGroup) : ''}</div>
+                <div class="se-ex-hero-name edit-slot-summary-title">${this.escapeHtml(activeExerciseName)}</div>
+                <div class="se-ex-hero-meta" id="edit-slot-hero-meta"></div>
+                <button type="button" class="btn se-ex-change" id="btn-change-slot-exercise">
+                    ${this.renderEditorIcon('swap', 16)}
+                    Changer d’exercice
                 </button>
             </div>
-            <div class="edit-slot-helper">
-                L'essentiel suffit: exercice, séries, objectif, repos. Le bouton Préremplir remet automatiquement les champs cohérents avec la base ou avec le nom custom.
-            </div>
-            <div class="edit-slot-block">
-                <div class="form-group">
-                    <label>Exercice actif</label>
-                    <input type="text" id="edit-slot-active" value="${this.escapeHtml(activeExerciseName)}" class="form-input" list="exercise-library-options">
-                    <small class="edit-slot-caption">Choisis dans la base ou tape un nom custom, puis Préremplir si tu veux tout régler d'un coup.</small>
-                </div>
-                <div class="form-group">
-                    <label>Nom affiché dans la séance</label>
-                    <input type="text" id="edit-slot-name" value="${this.escapeHtml(slot.name || activeExerciseName)}" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label>Format de suivi</label>
-                    <select id="edit-slot-tracking-mode" class="form-input form-select">
-                        <option value="strength" ${trackingMode === 'strength' ? 'selected' : ''}>Charge + reps</option>
-                        <option value="cardio" ${trackingMode === 'cardio' ? 'selected' : ''}>Durée + niveau / vitesse</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Séries</label>
-                        <input type="number" id="edit-slot-sets" value="${slot.sets}" class="form-input" min="1" max="10">
-                    </div>
-                    <div class="form-group">
-                        <label id="edit-slot-reps-min-label">${trackingConfig.repMinLabel}</label>
-                        <input type="number" id="edit-slot-reps-min" value="${slot.repsMin}" class="form-input" min="${trackingConfig.repsMinValue}" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
-                    </div>
-                    <div class="form-group">
-                        <label id="edit-slot-reps-max-label">${trackingConfig.repMaxLabel}</label>
-                        <input type="number" id="edit-slot-reps-max" value="${slot.repsMax}" class="form-input" min="${trackingConfig.repsMinValue}" max="50" step="${trackingConfig.repsStep}" inputmode="${trackingConfig.repsInputMode}">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label id="edit-slot-rest-label">${trackingConfig.restLabel}</label>
-                        <input type="number" id="edit-slot-rest" value="${slot.rest}" class="form-input" min="0" max="300" step="15">
-                    </div>
-                    <div class="form-group">
-                        <label id="edit-slot-rir-label">${trackingConfig.rirLabel}</label>
-                        <input type="number" id="edit-slot-rir" value="${slot.rir}" class="form-input" min="0" max="5">
-                    </div>
-                </div>
-                <div class="edit-slot-caption" id="edit-slot-tracking-helper" ${trackingConfig.helperText ? '' : 'hidden'}>
-                    ${trackingConfig.helperText}
-                </div>
-                <div class="form-group">
-                    <label>Type d'exercice</label>
-                    <div class="type-selector">
-                        <button type="button" class="type-btn ${slot.type === 'compound' ? 'active' : ''}" data-type="compound">
-                            <span class="type-icon">🏋️</span>
-                            <span class="type-label">Composé</span>
-                        </button>
-                        <button type="button" class="type-btn ${slot.type === 'isolation' ? 'active' : ''}" data-type="isolation">
-                            <span class="type-icon">💪</span>
-                            <span class="type-label">Isolation</span>
-                        </button>
-                    </div>
-                    <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
-                </div>
-                <div class="form-group">
-                    <label>Suivi gauche / droite</label>
-                    <div class="segmented-control" id="edit-slot-unilateral-selector" role="radiogroup" aria-label="Suivi gauche droite">
-                        ${[['auto', `Auto${this.isUnilateralExercise(slot.activeExercise || slot.name) ? ' · G/D' : ''}`], ['on', 'G / D'], ['off', 'Bilatéral']].map(([value, label]) => `
-                            <button type="button" class="segmented-btn ${(slot.unilateralMode || 'auto') === value ? 'active' : ''}" data-value="${value}" role="radio" aria-checked="${(slot.unilateralMode || 'auto') === value}">${label}</button>
-                        `).join('')}
-                    </div>
-                    <input type="hidden" id="edit-slot-unilateral-mode" value="${slot.unilateralMode || 'auto'}">
-                </div>
-                <div class="form-group">
-                    <label>Groupe musculaire principal</label>
-                    <select id="edit-slot-muscle-group" class="form-input form-select">
-                        <option value="">-- Sélectionner --</option>
-                        ${MUSCLE_GROUPS.map(mg => `
-                            <option value="${mg.id}" ${slot.muscleGroup === mg.id ? 'selected' : ''}>
-                                ${mg.name}
-                            </option>
-                        `).join('')}
-                    </select>
-                </div>
-            </div>
 
-            <details class="edit-slot-advanced" ${openAdvanced ? 'open' : ''}>
+            <section class="se-block se-strength-only">
+                <div class="se-block-title">Ton objectif</div>
+                <div class="se-presets" id="edit-slot-presets">
+                    ${this.getSlotGoalPresets().map(preset => `
+                        <button type="button" class="se-preset" data-preset="${preset.id}">
+                            <span class="se-preset-emoji" aria-hidden="true">${preset.emoji}</span>
+                            <strong>${preset.name}</strong>
+                            <small>${preset.sets} × ${preset.repsMin}-${preset.repsMax}</small>
+                        </button>
+                    `).join('')}
+                </div>
+                <p class="se-hint se-hint-tight">Un tap règle tout. Pas sûr ? « Muscle » convient à la plupart des exercices.</p>
+            </section>
+
+            <section class="se-block" id="edit-slot-numbers">
+                <div class="se-row">
+                    <div class="se-row-label">
+                        <strong id="edit-slot-sets-title">Séries</strong>
+                        <small>Combien de fois tu répètes l’exercice</small>
+                    </div>
+                    ${this.renderStepper({ id: 'edit-slot-sets', value: slot.sets ?? 3, min: 1, max: 10, label: 'les séries' })}
+                </div>
+                <div class="se-row se-row-stack">
+                    <div class="se-row-label">
+                        <strong id="edit-slot-reps-title">Répétitions</strong>
+                        <small id="edit-slot-reps-caption">Fourchette visée à chaque série</small>
+                    </div>
+                    <div class="se-range">
+                        <div class="se-range-col">
+                            <span class="se-range-label" id="edit-slot-reps-min-label">min</span>
+                            ${this.renderStepper({ id: 'edit-slot-reps-min', value: slot.repsMin ?? 8, min: 1, max: 100, label: 'le minimum' })}
+                        </div>
+                        <span class="se-range-sep">à</span>
+                        <div class="se-range-col">
+                            <span class="se-range-label" id="edit-slot-reps-max-label">max</span>
+                            ${this.renderStepper({ id: 'edit-slot-reps-max', value: slot.repsMax ?? 12, min: 1, max: 100, label: 'le maximum' })}
+                        </div>
+                    </div>
+                </div>
+                <div class="se-row">
+                    <div class="se-row-label">
+                        <strong id="edit-slot-rest-label">Repos</strong>
+                        <small>Pause entre deux séries</small>
+                    </div>
+                    ${this.renderStepper({ id: 'edit-slot-rest', value: slot.rest ?? 90, step: 15, min: 0, max: 600, display: this.formatRestShort(slot.rest ?? 90), label: 'le repos' })}
+                </div>
+                <div class="se-row se-row-stack se-strength-only">
+                    <div class="se-row-label">
+                        <strong id="edit-slot-rir-label">Intensité</strong>
+                        <small>À quel point la fin de série doit être dure</small>
+                    </div>
+                    <div class="se-effort" id="edit-slot-effort" role="radiogroup" aria-label="Intensité">
+                        ${this.getEffortLevels().map(level => `
+                            <button type="button" class="se-effort-btn" data-rir="${level.value}" role="radio" aria-checked="false">${level.label}</button>
+                        `).join('')}
+                    </div>
+                    <input type="hidden" id="edit-slot-rir" value="${rir}">
+                    <p class="se-hint se-hint-tight" id="edit-slot-rir-hint"></p>
+                </div>
+                <div class="se-hint se-hint-tight" id="edit-slot-tracking-helper" hidden></div>
+            </section>
+
+            <details class="se-advanced">
                 <summary>
-                    Personnalisation avancée
-                    <span>Progression, machine, poids du corps</span>
+                    <span>
+                        <strong>Réglages avancés</strong>
+                        <small>Nom, muscle, côté G/D, progression, consignes, variantes</small>
+                    </span>
+                    <span class="se-chevron">${this.renderEditorIcon('chevron', 18)}</span>
                 </summary>
-                <div class="edit-slot-advanced-content">
+                <div class="se-advanced-content">
                     <div class="form-group">
-                        <label>Mode de progression</label>
+                        <label for="edit-slot-active">Exercice</label>
+                        <div class="se-inline-field">
+                            <input type="text" id="edit-slot-active" value="${this.escapeHtml(activeExerciseName)}" class="form-input" list="exercise-library-options">
+                            <button class="btn btn-outline btn-compact" id="btn-autofill-slot-template" type="button">Préremplir</button>
+                        </div>
+                        <small class="edit-slot-caption">« Préremplir » remet les réglages conseillés pour cet exercice.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-slot-name">Nom affiché dans la séance</label>
+                        <input type="text" id="edit-slot-name" value="${this.escapeHtml(slot.name || activeExerciseName)}" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-slot-muscle-group">Muscle principal</label>
+                        <select id="edit-slot-muscle-group" class="form-input form-select">
+                            <option value="">-- Sélectionner --</option>
+                            ${MUSCLE_GROUPS.map(mg => `
+                                <option value="${mg.id}" ${slot.muscleGroup === mg.id ? 'selected' : ''}>${mg.name}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-slot-tracking-mode">Ce que tu notes</label>
+                        <select id="edit-slot-tracking-mode" class="form-input form-select">
+                            <option value="strength" ${trackingMode === 'strength' ? 'selected' : ''}>Charge + répétitions</option>
+                            <option value="cardio" ${trackingMode === 'cardio' ? 'selected' : ''}>Durée + niveau / vitesse (cardio)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Type d'exercice</label>
+                        <div class="type-selector">
+                            <button type="button" class="type-btn ${slot.type === 'compound' ? 'active' : ''}" data-type="compound">
+                                <span class="type-icon">🏋️</span>
+                                <span class="type-label">Polyarticulaire</span>
+                            </button>
+                            <button type="button" class="type-btn ${slot.type === 'isolation' ? 'active' : ''}" data-type="isolation">
+                                <span class="type-icon">💪</span>
+                                <span class="type-label">Isolation</span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="edit-slot-type" value="${slot.type || 'compound'}">
+                    </div>
+                    <div class="form-group">
+                        <label>Suivi gauche / droite</label>
+                        <div class="segmented-control" id="edit-slot-unilateral-selector" role="radiogroup" aria-label="Suivi gauche droite">
+                            ${[['auto', `Auto${this.isUnilateralExercise(slot.activeExercise || slot.name) ? ' · G/D' : ''}`], ['on', 'G / D'], ['off', 'Bilatéral']].map(([value, label]) => `
+                                <button type="button" class="segmented-btn ${(slot.unilateralMode || 'auto') === value ? 'active' : ''}" data-value="${value}" role="radio" aria-checked="${(slot.unilateralMode || 'auto') === value}">${label}</button>
+                            `).join('')}
+                        </div>
+                        <input type="hidden" id="edit-slot-unilateral-mode" value="${slot.unilateralMode || 'auto'}">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-slot-progression-mode">Mode de progression</label>
                         <select id="edit-slot-progression-mode" class="form-input form-select">
                             <option value="load" ${progressionMode === 'load' ? 'selected' : ''}>Charge</option>
                             <option value="capped_load" ${progressionMode === 'capped_load' ? 'selected' : ''}>Charge plafonnée</option>
                             <option value="bodyweight" ${progressionMode === 'bodyweight' ? 'selected' : ''}>Poids du corps</option>
                         </select>
-                        <small class="edit-slot-caption">Active "charge plafonnée" si ta machine est au max.</small>
+                        <small class="edit-slot-caption">« Charge plafonnée » si ta machine est déjà au max.</small>
                     </div>
                     <div class="form-group">
-                        <label>Profil de charge</label>
+                        <label for="edit-slot-loading-profile">Matériel</label>
                         <select id="edit-slot-loading-profile" class="form-input form-select">
                             <option value="free_weight" ${loadingProfile === 'free_weight' ? 'selected' : ''}>Charge libre</option>
                             <option value="machine_stack" ${loadingProfile === 'machine_stack' ? 'selected' : ''}>Machine à stack</option>
@@ -17424,51 +17717,194 @@ class App {
                             </div>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label for="edit-slot-instructions">Consignes d'exécution</label>
+                        <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Ex : dos plaqué, descente contrôlée…">${this.escapeHtml(slot.instructions || '')}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Variantes de remplacement</label>
+                        <small class="edit-slot-caption">Proposées si la machine est prise ou si tu stagnes.</small>
+                        <div class="pool-editor" id="pool-editor">
+                            ${slotPool.map((ex, i) => `
+                                <div class="pool-item-edit" data-index="${i}">
+                                    <input type="text" class="pool-input" value="${this.escapeHtml(ex)}" placeholder="Nom de l'exercice" list="exercise-library-options">
+                                    <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${i}">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"/>
+                                            <line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-add-pool-item" id="btn-add-pool-item">
+                            ${this.renderEditorIcon('plus', 16)}
+                            Ajouter une variante
+                        </button>
+                    </div>
                 </div>
             </details>
 
-            <div class="edit-slot-block">
-                <div class="form-group">
-                    <label>Consignes d'exécution</label>
-                    <textarea id="edit-slot-instructions" class="form-textarea" rows="3" placeholder="Consignes techniques...">${this.escapeHtml(slot.instructions || '')}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Pool d'exercices variantes</label>
-                    <div class="pool-editor" id="pool-editor">
-                        ${slotPool.map((ex, i) => `
-                            <div class="pool-item-edit" data-index="${i}">
-                                <input type="text" class="pool-input" value="${this.escapeHtml(ex)}" placeholder="Nom de l'exercice" list="exercise-library-options">
-                                <button type="button" class="btn-icon-small btn-remove-pool-item" data-index="${i}">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"/>
-                                        <line x1="6" y1="6" x2="18" y2="18"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        `).join('')}
-                    </div>
-                    <button type="button" class="btn btn-ghost btn-add-pool-item" id="btn-add-pool-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        Ajouter une variante
-                    </button>
-                </div>
-            </div>
+            <input type="hidden" id="edit-slot-db-id" value="">
 
-            <button class="btn btn-primary btn-large" id="btn-save-slot" data-slot-id="${slotId}">
-                Enregistrer les changements
-            </button>
+            ${canRemove ? `
+                <button type="button" class="se-danger-link" id="btn-delete-slot-editor" data-slot-id="${slotId}">
+                    ${this.renderEditorIcon('trash', 16)}
+                    Retirer de la séance
+                </button>
+            ` : ''}
+
+            <div class="se-sticky-footer">
+                <button class="btn btn-primary btn-large" id="btn-save-slot" data-slot-id="${slotId}">Enregistrer</button>
+            </div>
         `;
 
         sheet.classList.add('active');
+        sheet.querySelector('.sheet-content')?.scrollTo({ top: 0 });
         this.bindPoolEditorEvents();
         this.bindTypeSelector();
         this.bindTrackingModeEditor();
         this.bindProgressionModeEditor();
         this.bindEditSlotAutofill();
+        this.bindEditSlotQuickControls();
+        this.syncEditSlotControls();
     }
-    
+
+    bindEditSlotQuickControls() {
+        const form = document.getElementById('edit-slot-form');
+        if (!form) return;
+
+        form.onclick = (event) => {
+            const stepBtn = event.target.closest('.se-step-btn');
+            if (stepBtn) {
+                const stepper = stepBtn.closest('.se-stepper');
+                const input = stepper?.querySelector('input');
+                if (!input) return;
+                const step = Number(stepper.dataset.step) || 1;
+                const min = Number(stepper.dataset.min);
+                const max = Number(stepper.dataset.max);
+                const current = Number(input.value);
+                const base = Number.isFinite(current) ? current : min;
+                // Snap to the step grid so 7.3 min becomes 8, not 8.3.
+                const next = Number(stepBtn.dataset.dir) > 0
+                    ? Math.floor(base / step) * step + step
+                    : Math.ceil(base / step) * step - step;
+                input.value = Math.min(max, Math.max(min, next));
+                this.syncEditSlotControls(input.id);
+                return;
+            }
+
+            const presetBtn = event.target.closest('.se-preset');
+            if (presetBtn) {
+                const preset = this.getSlotGoalPresets().find(item => item.id === presetBtn.dataset.preset);
+                if (!preset) return;
+                ['sets', 'repsMin', 'repsMax', 'rest', 'rir'].forEach(key => {
+                    const id = { sets: 'edit-slot-sets', repsMin: 'edit-slot-reps-min', repsMax: 'edit-slot-reps-max', rest: 'edit-slot-rest', rir: 'edit-slot-rir' }[key];
+                    const input = document.getElementById(id);
+                    if (input) input.value = preset[key];
+                });
+                this.syncEditSlotControls();
+                return;
+            }
+
+            const effortBtn = event.target.closest('.se-effort-btn');
+            if (effortBtn) {
+                document.getElementById('edit-slot-rir').value = effortBtn.dataset.rir;
+                this.syncEditSlotControls();
+                return;
+            }
+
+            if (event.target.closest('#btn-change-slot-exercise')) {
+                this.showExerciseLibrarySheet(this.editingSessionId, { mode: 'replace' });
+            }
+        };
+
+        form.oninput = (event) => {
+            if (event.target.matches('.se-step-value')) {
+                this.syncEditSlotControls(null);
+            }
+        };
+        form.onchange = (event) => {
+            if (event.target.matches('.se-step-value')) {
+                this.syncEditSlotControls(event.target.id);
+            }
+            if (event.target.id === 'edit-slot-muscle-group') {
+                this.refreshEditSlotHero();
+            }
+        };
+    }
+
+    // Keeps the friendly widgets (rest label, presets, effort) in sync with
+    // the underlying inputs. `changedId` tells which reps bound to respect.
+    syncEditSlotControls(changedId = null) {
+        const value = (id) => Number(document.getElementById(id)?.value);
+        const repsMinInput = document.getElementById('edit-slot-reps-min');
+        const repsMaxInput = document.getElementById('edit-slot-reps-max');
+        if (repsMinInput && repsMaxInput && changedId) {
+            const repsMin = Number(repsMinInput.value);
+            const repsMax = Number(repsMaxInput.value);
+            if (Number.isFinite(repsMin) && Number.isFinite(repsMax) && repsMin > repsMax) {
+                if (changedId === 'edit-slot-reps-max') repsMinInput.value = repsMax;
+                else repsMaxInput.value = repsMin;
+            }
+        }
+
+        const restDisplay = document.getElementById('edit-slot-rest-display');
+        if (restDisplay) restDisplay.textContent = this.formatRestShort(value('edit-slot-rest'));
+
+        const rir = value('edit-slot-rir');
+        const level = this.getEffortLevels().find(item => item.value === Math.min(4, Math.max(0, Math.round(rir))));
+        document.querySelectorAll('#edit-slot-effort .se-effort-btn').forEach(btn => {
+            const isActive = level && Number(btn.dataset.rir) === level.value;
+            btn.classList.toggle('active', Boolean(isActive));
+            btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        });
+        const rirHint = document.getElementById('edit-slot-rir-hint');
+        if (rirHint) rirHint.textContent = level?.hint || '';
+
+        const current = {
+            sets: value('edit-slot-sets'),
+            repsMin: value('edit-slot-reps-min'),
+            repsMax: value('edit-slot-reps-max'),
+            rest: value('edit-slot-rest'),
+            rir
+        };
+        document.querySelectorAll('#edit-slot-presets .se-preset').forEach(btn => {
+            const preset = this.getSlotGoalPresets().find(item => item.id === btn.dataset.preset);
+            const matches = preset && preset.repsMin === current.repsMin && preset.repsMax === current.repsMax;
+            btn.classList.toggle('active', Boolean(matches));
+        });
+
+        this.refreshEditSlotHero();
+    }
+
+    refreshEditSlotHero() {
+        const badge = document.getElementById('edit-slot-hero-badge');
+        const muscleId = document.getElementById('edit-slot-muscle-group')?.value || '';
+        if (badge) badge.innerHTML = muscleId ? this.renderMuscleBadge(muscleId) : '';
+
+        const meta = document.getElementById('edit-slot-hero-meta');
+        if (!meta) return;
+        const isCardio = document.getElementById('edit-slot-tracking-mode')?.value === 'cardio';
+        const sets = document.getElementById('edit-slot-sets')?.value || '3';
+        const repsMin = document.getElementById('edit-slot-reps-min')?.value || '';
+        const repsMax = document.getElementById('edit-slot-reps-max')?.value || '';
+        const range = repsMin === repsMax ? repsMin : `${repsMin}-${repsMax}`;
+        const rest = Number(document.getElementById('edit-slot-rest')?.value) || 0;
+        meta.textContent = isCardio
+            ? `${sets} bloc${Number(sets) > 1 ? 's' : ''} · ${range} min · repos ${this.formatRestShort(rest).toLowerCase()}`
+            : `${sets} séries · ${range} reps · repos ${this.formatRestShort(rest).toLowerCase()}`;
+    }
+
+    replaceEditedSlotExercise(definition, { dbId = null } = {}) {
+        if (!definition) return;
+        this.hideExerciseLibrarySheet();
+        this.applyExerciseDefinitionToEditForm(definition, { updateName: true, toast: false });
+        const dbInput = document.getElementById('edit-slot-db-id');
+        if (dbInput) dbInput.value = dbId || '';
+        this.showCoachToast(`${definition.name} choisi. Vérifie les réglages puis enregistre.`, 'hot', '⇄');
+    }
+
     bindTypeSelector() {
         const typeSelector = document.querySelector('.type-selector');
         if (!typeSelector) return;
@@ -17501,19 +17937,21 @@ class App {
         if (!trackingModeInput) return;
 
         const syncTrackingUi = () => {
-            const config = this.getTrackingModeFieldConfig(trackingModeInput.value || 'strength');
-            const repsMinLabel = document.getElementById('edit-slot-reps-min-label');
-            const repsMaxLabel = document.getElementById('edit-slot-reps-max-label');
-            const restLabel = document.getElementById('edit-slot-rest-label');
-            const rirLabel = document.getElementById('edit-slot-rir-label');
+            const mode = trackingModeInput.value || 'strength';
+            const config = this.getTrackingModeFieldConfig(mode);
+            const isCardio = mode === 'cardio';
+            const form = document.getElementById('edit-slot-form');
+            const setsTitle = document.getElementById('edit-slot-sets-title');
+            const repsTitle = document.getElementById('edit-slot-reps-title');
+            const repsCaption = document.getElementById('edit-slot-reps-caption');
             const trackingHelper = document.getElementById('edit-slot-tracking-helper');
             const repsMinInput = document.getElementById('edit-slot-reps-min');
             const repsMaxInput = document.getElementById('edit-slot-reps-max');
 
-            if (repsMinLabel) repsMinLabel.textContent = config.repMinLabel;
-            if (repsMaxLabel) repsMaxLabel.textContent = config.repMaxLabel;
-            if (restLabel) restLabel.textContent = config.restLabel;
-            if (rirLabel) rirLabel.textContent = config.rirLabel;
+            if (form) form.dataset.tracking = mode;
+            if (setsTitle) setsTitle.textContent = isCardio ? 'Blocs' : 'Séries';
+            if (repsTitle) repsTitle.textContent = isCardio ? 'Durée (min)' : 'Répétitions';
+            if (repsCaption) repsCaption.textContent = isCardio ? 'Durée visée pour chaque bloc' : 'Fourchette visée à chaque série';
             if (trackingHelper) {
                 trackingHelper.hidden = !config.helperText;
                 trackingHelper.textContent = config.helperText || '';
@@ -17530,7 +17968,10 @@ class App {
             }
         };
 
-        trackingModeInput.onchange = syncTrackingUi;
+        trackingModeInput.onchange = () => {
+            syncTrackingUi();
+            this.refreshEditSlotHero();
+        };
         syncTrackingUi();
     }
 
@@ -17702,6 +18143,8 @@ class App {
             ].filter(Boolean).join(' · ');
         }
 
+        this.syncEditSlotControls();
+
         if (toast) {
             this.showCoachToast('Exercice prérempli: séries, reps, repos, consignes et variantes sont prêts.', 'hot', '✓');
         }
@@ -17848,6 +18291,19 @@ class App {
             return;
         }
 
+        const pickedDbId = document.getElementById('edit-slot-db-id')?.value;
+        if (pickedDbId) {
+            slot.exerciseDbId = pickedDbId;
+        } else if (activeExercise !== slot.activeExercise) {
+            delete slot.exerciseDbId;
+        }
+        if (activeExercise !== slot.activeExercise) {
+            // A different movement gets its own identity, otherwise its sets
+            // would be charted under the previous exercise.
+            const definition = this.findExerciseLibraryEntry(activeExercise);
+            slot.exerciseStableId = this.getStableExerciseId(definition || activeExercise);
+            slot.exerciseFamilyId = this.getExerciseFamilyId(definition || activeExercise);
+        }
         slot.name = name;
         slot.activeExercise = activeExercise;
         const parsedSets = parseInt(document.getElementById('edit-slot-sets').value, 10);
@@ -17933,6 +18389,7 @@ class App {
         await this.persistCustomExerciseDefinition(this.buildExerciseDefinitionFromSlot(slot));
 
         await db.put('slots', slot);
+        if (this.editingSessionId) this.sessionsEditorDirty = true;
         this.hideEditSlotSheet();
         
         // Rafraîchir l'interface selon l'écran actuel
@@ -17961,111 +18418,106 @@ class App {
     async showEditSessionDetailSheet(sessionId) {
         this.editingSessionId = sessionId;
         const session = await db.get('sessions', sessionId);
+        if (!session) return;
+        const sessions = await db.getSessions();
         const slots = await db.getSlotsBySession(sessionId);
-        
+
         const sheet = document.getElementById('sheet-edit-session-detail');
         const content = document.getElementById('edit-session-detail-content');
-        
-        const linkedTargets = new Set(
-            slots
-                .map((slot) => slot.supersetWith)
-                .filter(Boolean)
-        );
-        const supersetCount = slots.filter((slot) => slot.supersetWith && !linkedTargets.has(slot.id)).length;
-        
+
+        const linkedTargets = new Set(slots.map((slot) => slot.supersetWith).filter(Boolean));
+        const totalSets = slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0);
+        const duration = this.estimateSessionDuration(slots);
+
+        // Keep the home card's "~X min" honest with what the session contains.
+        if (duration && session.estimatedDuration !== duration) {
+            session.estimatedDuration = duration;
+            await db.put('sessions', session);
+            this.sessionsEditorDirty = true;
+        }
+
+        const renderConnector = (slot, index) => {
+            const next = slots[index + 1];
+            if (!next) return '';
+            const isLinked = slot.supersetWith === next.id;
+            const canLink = !slot.supersetWith && !linkedTargets.has(slot.id) && !next.supersetWith && !linkedTargets.has(next.id);
+            if (isLinked) {
+                return `
+                    <button type="button" class="se-link is-linked btn-link-superset" data-slot-id="${slot.id}" data-next-slot-id="${next.id}">
+                        <span>⚡ Superset</span><small>Séparer</small>
+                    </button>
+                `;
+            }
+            if (canLink) {
+                return `
+                    <button type="button" class="se-link se-link-add btn-link-superset" data-slot-id="${slot.id}" data-next-slot-id="${next.id}" aria-label="Lier ces deux exercices en superset" title="Lier en superset">⚡</button>
+                `;
+            }
+            return '<div class="se-link-spacer"></div>';
+        };
+
         content.innerHTML = `
-            <div class="edit-session-header">
-                <div class="edit-session-topbar">
-                    <button class="btn-icon-small btn-back-edit-sessions" id="btn-back-edit-sessions" aria-label="Retour aux séances">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M15 18l-6-6 6-6"/>
-                        </svg>
-                    </button>
-                    <span class="edit-session-topbar-title">Personnaliser la séance</span>
-                </div>
-                <div class="edit-session-title-group">
-                    <input type="text" class="edit-session-name-input" id="edit-session-name" value="${session.name}" placeholder="Nom de la séance">
-                    <button class="btn btn-ghost btn-save-session-name" id="btn-save-session-name" data-session-id="${sessionId}">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="edit-session-metrics">
-                    <span class="edit-session-metric-chip">${slots.length} exercice${slots.length > 1 ? 's' : ''}</span>
-                    <span class="edit-session-metric-chip">~${session.estimatedDuration || 45} min</span>
-                    ${supersetCount > 0 ? `<span class="edit-session-metric-chip">${supersetCount} superset${supersetCount > 1 ? 's' : ''}</span>` : ''}
-                </div>
-                <button class="btn btn-outline" data-action="add-slot" data-session-id="${sessionId}">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    Ajouter un exercice
-                </button>
+            <div class="sheet-titlebar">
+                <button class="btn-icon-small sheet-back-button" id="btn-back-edit-sessions" type="button" aria-label="Retour à mes séances">${this.renderEditorIcon('back', 18)}</button>
+                <h3>Modifier la séance</h3>
+                <div class="sheet-titlebar-spacer"></div>
             </div>
+
+            <div class="se-session-hero" style="--accent: ${this.getSessionAccent(sessionId, sessions)}">
+                <label class="se-hero-label" for="edit-session-name">Nom de la séance</label>
+                <input type="text" class="se-hero-name" id="edit-session-name" value="${this.escapeHtml(session.name)}" maxlength="40" placeholder="Nom de la séance" autocomplete="off" data-session-id="${sessionId}">
+                <div class="se-stats">
+                    <div class="se-stat"><strong>${slots.length}</strong><span>exercice${slots.length > 1 ? 's' : ''}</span></div>
+                    <div class="se-stat"><strong>${totalSets}</strong><span>séries</span></div>
+                    <div class="se-stat"><strong>${duration ? `~${duration}` : '–'}</strong><span>min</span></div>
+                </div>
+            </div>
+
             ${slots.length === 0 ? `
-                <div class="session-edit-empty">
-                    <p>Cette séance est vide pour l'instant.</p>
-                    <button class="btn btn-primary" data-action="add-slot" data-session-id="${sessionId}">
-                        Ajouter le premier exercice
-                    </button>
+                <div class="se-empty">
+                    <div class="se-empty-emoji">🏋️</div>
+                    <strong>Ta séance est vide</strong>
+                    <p>Ajoute ton premier exercice : les séries, reps et repos conseillés sont réglés automatiquement.</p>
                 </div>
             ` : `
-                <div class="edit-slots-detail-list" id="edit-slots-detail-list">
+                <div class="se-section-title">Exercices</div>
+                <div class="se-slot-list" id="edit-slots-detail-list">
                     ${slots.map((slot, index) => {
-                        const isFirstInSuperset = Boolean(slot.supersetWith) && !linkedTargets.has(slot.id);
-                        const isSecondInSuperset = linkedTargets.has(slot.id);
-                        const supersetBadge = (isFirstInSuperset || isSecondInSuperset)
-                            ? '<span class="superset-badge">⚡ SuperSet</span>'
-                            : '';
-                        const cardClass = isFirstInSuperset ? 'superset-start' : (isSecondInSuperset ? 'superset-end' : '');
-                        const canLinkWithNext = !isSecondInSuperset && index < slots.length - 1 && !slots[index + 1].supersetWith;
-
+                        const inSuperset = Boolean(slot.supersetWith) || linkedTargets.has(slot.id);
+                        const name = slot.activeExercise || slot.name;
+                        const meta = this.formatSlotEditorMeta(slot);
                         return `
-                            <div class="edit-slot-detail-card ${cardClass}" data-slot-id="${slot.id}" data-order="${slot.order}" draggable="true">
-                                <div class="drag-handle-slot">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2"/>
-                                    </svg>
-                                </div>
-                                <div class="slot-detail-content slot-detail-main" data-action="open-slot" data-slot-id="${slot.id}">
-                                    <div class="slot-detail-header">
-                                        <div class="slot-detail-title">
-                                            <span class="slot-id-badge">${slot.slotId}</span>
-                                            <strong>${slot.activeExercise || slot.name}</strong>
-                                            ${supersetBadge}
-                                        </div>
-                                        <div class="slot-detail-actions">
-                                            ${canLinkWithNext ? `
-                                                <button class="btn-icon-small btn-link-superset ${isFirstInSuperset ? 'linked' : ''}" 
-                                                        data-slot-id="${slot.id}" 
-                                                        data-next-slot-id="${slots[index + 1]?.id || ''}"
-                                                        title="${isFirstInSuperset ? 'Délier le superset' : 'Lier en superset avec le suivant'}">
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                                                    </svg>
-                                                </button>
-                                            ` : ''}
-                                            <button class="btn-icon-small btn-delete-slot" data-slot-id="${slot.id}" title="Supprimer l'exercice">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="slot-detail-metrics">
-                                        ${this.getSlotSummaryMetrics(slot)
-                                            .map(metric => `<span class="slot-detail-metric">${metric}</span>`)
-                                            .join('')}
-                                    </div>
-                                    <div class="slot-detail-hint">Appuie pour éditer cet exercice</div>
-                                </div>
+                            <div class="edit-slot-detail-card se-slot-card ${inSuperset ? 'in-superset' : ''}" data-slot-id="${slot.id}" data-order="${slot.order}" draggable="true">
+                                <div class="drag-handle-slot se-grip" aria-label="Glisser pour réordonner">${this.renderEditorIcon('grip', 18)}</div>
+                                <button type="button" class="se-slot-main" data-action="open-slot" data-slot-id="${slot.id}">
+                                    <span class="se-slot-num">${index + 1}</span>
+                                    <span class="se-slot-body">
+                                        <span class="se-slot-name">${this.escapeHtml(name)}</span>
+                                        <span class="se-slot-meta">${this.escapeHtml(meta)}</span>
+                                    </span>
+                                    ${slot.muscleGroup ? this.renderMuscleBadge(slot.muscleGroup, { label: '', className: 'se-slot-muscle' }) : ''}
+                                    <span class="se-chevron">${this.renderEditorIcon('chevron', 18)}</span>
+                                </button>
                             </div>
+                            ${renderConnector(slot, index)}
                         `;
                     }).join('')}
                 </div>
             `}
+
+            <button type="button" class="se-add-slot" data-action="add-slot" data-session-id="${sessionId}">
+                <span class="se-add-slot-icon">${this.renderEditorIcon('plus', 18)}</span>
+                Ajouter un exercice
+            </button>
+
+            ${slots.length > 1 ? `
+                <p class="se-tip">Maintiens <span class="se-tip-grip">${this.renderEditorIcon('grip', 14)}</span> pour changer l’ordre. Touche ⚡ entre deux exercices pour les faire en superset (enchaînés sans pause).</p>
+            ` : ''}
+
+            <button type="button" class="se-danger-link" id="btn-delete-session-detail" data-session-id="${sessionId}">
+                ${this.renderEditorIcon('trash', 16)}
+                Supprimer cette séance
+            </button>
         `;
 
         const nameInput = document.getElementById('edit-session-name');
@@ -18073,7 +18525,10 @@ class App {
             nameInput.onkeydown = (event) => {
                 if (event.key !== 'Enter') return;
                 event.preventDefault();
-                this.saveSessionName(sessionId);
+                nameInput.blur();
+            };
+            nameInput.onchange = () => {
+                this.pendingSessionNameSave = this.saveSessionName(sessionId);
             };
         }
 
@@ -18086,6 +18541,7 @@ class App {
         document.getElementById('sheet-edit-session-detail').classList.remove('active');
         if (!preserveContext) {
             this.editingSessionId = null;
+            this.refreshHomeAfterSessionEdits();
         }
     }
 
@@ -18095,6 +18551,7 @@ class App {
         this.initSortableList({
             list,
             itemSelector: '.edit-slot-detail-card',
+            handleSelector: '.drag-handle-slot',
             onSave: () => this.saveSlotsOrder()
         });
     }
@@ -18117,6 +18574,7 @@ class App {
                 await db.put('slots', slot);
             }
         }
+        this.sessionsEditorDirty = true;
 
         // Rafraîchir la vue avec la session en cours d'édition
         if (this.editingSessionId) {
@@ -18125,10 +18583,20 @@ class App {
     }
 
     async deleteSlot(slotId) {
-        if (!confirm('Supprimer cet exercice ?')) return;
-        
-        // Also unlink any superset
         const slot = await db.get('slots', slotId);
+        if (!slot) return false;
+        const confirmed = await this.showAppConfirm(
+            `« ${slot.activeExercise || slot.name} » sera retiré de cette séance. Ton historique sur cet exercice est conservé.`,
+            {
+                title: 'Retirer l’exercice ?',
+                variant: 'danger',
+                confirmText: 'Retirer',
+                cancelText: 'Annuler'
+            }
+        );
+        if (!confirmed) return false;
+
+        // Also unlink any superset
         if (slot && slot.supersetWith) {
             const linkedSlot = await db.get('slots', slot.supersetWith);
             if (linkedSlot) {
@@ -18147,10 +18615,22 @@ class App {
         }
         
         await db.delete('slots', slotId);
-        
+
+        // Keep A1, B2… labels and order contiguous after a removal.
+        const remaining = await db.getSlotsBySession(slot.sessionId);
+        for (let index = 0; index < remaining.length; index++) {
+            const item = remaining[index];
+            if (item.order === index) continue;
+            item.order = index;
+            item.slotId = String.fromCharCode(65 + index) + (index + 1);
+            await db.put('slots', item);
+        }
+        this.sessionsEditorDirty = true;
+
         if (this.editingSessionId) {
             await this.showEditSessionDetailSheet(this.editingSessionId);
         }
+        return true;
     }
     
     // ===== SuperSet Toggle =====
@@ -18167,6 +18647,7 @@ class App {
             slot.supersetWith = nextSlotId;
             await db.put('slots', slot);
         }
+        this.sessionsEditorDirty = true;
         
         // Refresh the edit view
         if (this.editingSessionId) {
@@ -18183,17 +18664,19 @@ class App {
         const session = await db.get('sessions', sessionId);
         if (!session) return;
 
-        const newName = document.getElementById('edit-session-name').value.trim();
+        const nameInput = document.getElementById('edit-session-name');
+        const newName = nameInput?.value.trim();
         if (!newName) {
+            if (nameInput) nameInput.value = session.name;
             this.showCoachToast('Le nom de la séance ne peut pas être vide', 'warning', '⚠️');
             return;
         }
 
+        if (newName === session.name) return;
         session.name = newName;
         await db.put('sessions', session);
-        
-        // Rafraîchir l'interface
-        await this.showEditSessionDetailSheet(sessionId);
+        this.sessionsEditorDirty = true;
+        this.showCoachToast('Nom enregistré.', 'hot', '✓');
     }
 
     // ===== Export/Import =====
@@ -19006,20 +19489,35 @@ class App {
             const saveBtn = e.target.closest('#btn-save-slot');
             if (saveBtn) {
                 this.saveSlot(saveBtn.dataset.slotId);
+                return;
+            }
+            const removeBtn = e.target.closest('#btn-delete-slot-editor');
+            if (removeBtn) {
+                this.deleteSlot(removeBtn.dataset.slotId).then((removed) => {
+                    if (removed) document.getElementById('sheet-edit-slot').classList.remove('active');
+                });
             }
         };
 
         // Edit session detail sheet
-        document.getElementById('sheet-edit-session-detail').onclick = (e) => {
+        document.getElementById('sheet-edit-session-detail').onclick = async (e) => {
             if (e.target.classList.contains('sheet-backdrop')) {
+                await this.pendingSessionNameSave;
                 this.hideEditSessionDetailSheet();
                 return;
             }
 
             const backBtn = e.target.closest('#btn-back-edit-sessions');
             if (backBtn) {
+                await this.pendingSessionNameSave;
                 this.hideEditSessionDetailSheet();
                 this.showEditSessionsSheet();
+                return;
+            }
+
+            const deleteSessionBtn = e.target.closest('#btn-delete-session-detail');
+            if (deleteSessionBtn) {
+                this.deleteSession(deleteSessionBtn.dataset.sessionId);
                 return;
             }
             
@@ -19052,7 +19550,23 @@ class App {
         document.getElementById('edit-session-list').onclick = (e) => {
             const addBtn = e.target.closest('#btn-add-session');
             if (addBtn) {
-                this.createSession();
+                this.showNewSessionView();
+                return;
+            }
+
+            if (e.target.closest('#btn-new-session-back')) {
+                this.showEditSessionsSheet();
+                return;
+            }
+
+            const templateBtn = e.target.closest('.se-template');
+            if (templateBtn) {
+                this.selectNewSessionTemplate(templateBtn.dataset.template);
+                return;
+            }
+
+            if (e.target.closest('#btn-create-session-confirm')) {
+                this.confirmNewSession();
                 return;
             }
 
@@ -19074,14 +19588,6 @@ class App {
             }
         };
         
-        // Save session name
-        document.getElementById('sheet-edit-session-detail').addEventListener('click', (e) => {
-            const saveNameBtn = e.target.closest('#btn-save-session-name');
-            if (saveNameBtn) {
-                this.saveSessionName(saveNameBtn.dataset.sessionId);
-            }
-        });
-
         const exerciseLibraryBack = document.getElementById('btn-back-exercise-library');
         if (exerciseLibraryBack) {
             exerciseLibraryBack.onclick = () => this.hideExerciseLibrarySheet();

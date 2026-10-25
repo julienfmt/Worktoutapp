@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '5.5.18';
+const SW_VERSION = '5.5.20';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 // Exercise thumbnails/GIFs are fetched on demand from the dataset repo and
@@ -11,17 +11,34 @@ const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=5.5.16',
-    './streak-score.css?v=5.5.16',
-    './theme.css?v=5.5.16',
-    './db.js?v=5.5.16',
+    './styles.css?v=5.5.17',
+    './streak-score.css?v=5.5.17',
+    './theme.css?v=5.5.17',
+    './ai-coach.css?v=5.5.17',
+    './db.js?v=5.5.17',
     './exercises-db.json?v=2',
-    './data.js?v=5.5.16',
-    './exercise-db.js?v=5.5.16',
-    './app.js?v=5.5.16',
+    './data.js?v=5.5.17',
+    './exercise-db.js?v=5.5.17',
+    './app.js?v=5.5.17',
+    './ai-coach.js?v=5.5.17',
+    './ai-coach-ui.js?v=5.5.17',
     './manifest.json',
     './icons/icon-192.png',
-    './icons/icon-512.png'
+    './icons/icon-512.png',
+    './icons/muscles/pectoraux.png',
+    './icons/muscles/dos.png',
+    './icons/muscles/epaules.png',
+    './icons/muscles/biceps.png',
+    './icons/muscles/triceps.png',
+    './icons/muscles/avant-bras.png',
+    './icons/muscles/quadriceps.png',
+    './icons/muscles/ischio-jambiers.png',
+    './icons/muscles/fessiers.png',
+    './icons/muscles/mollets.png',
+    './icons/muscles/abdominaux.png',
+    './icons/muscles/lombaires.png',
+    './icons/muscles/trapezes.png',
+    './icons/muscles/coiffe.png'
 ];
 
 function isCacheableRequest(request) {

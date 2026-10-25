@@ -19,9 +19,11 @@ const MUSCLE_GROUPS = [
 ];
 
 const APP_ICON_SVGS = {
-    'recovery-checkin': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>
-        <circle cx="12" cy="12" r="3.5"/>
+    // Stethoscope — SVG Repo "checkup-doctor-health-healthcare-hospital-medical" (96px grid, recoloured to currentColor).
+    'recovery-checkin': `<svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 56V76.86A17.07 17.07 0 0 0 38 94h0A17.07 17.07 0 0 0 55 76.86V54"/>
+        <circle cx="21" cy="48" r="8"/>
+        <path d="M36 4H31.91C29 4 26.67 7 27 10.35 29.25 30.54 38.69 54 55 54S80.75 30.54 83 10.35C83.33 7 81 4 78.09 4H74"/>
     </svg>`,
     'recovery-info': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="9"/>
@@ -85,20 +87,20 @@ function renderAppIcon(iconKey, options = {}) {
 // Couleur + pictogramme par muscle : badges des cartes de séance, de l'écran
 // exercice et de la carte « physique » de l'accueil.
 const MUSCLE_THEME = {
-    'pectoraux':       { color: '#f43f5e', icon: 'M4 7c2-2 5-2 8 0 3-2 6-2 8 0v5c0 3-3 5-8 5s-8-2-8-5z M12 7v10' },
-    'dos':             { color: '#0ea5e9', icon: 'M5 5l7 3 7-3-2 14H7z M12 8v11' },
-    'epaules':         { color: '#f59e0b', icon: 'M3 16c0-5 4-9 9-9s9 4 9 9 M8 16v-3 M16 16v-3' },
-    'biceps':          { color: '#8b5cf6', icon: 'M5 19c0-6 2-10 5-13l3 3-2 2c2 0 5 1 6 4 1 2 0 4-2 4z' },
-    'triceps':         { color: '#6366f1', icon: 'M19 19c0-6-2-10-5-13l-3 3 2 2c-2 0-5 1-6 4-1 2 0 4 2 4z' },
-    'avant-bras':      { color: '#a855f7', icon: 'M6 18 18 6 M15 4l5 5 M4 15l5 5' },
-    'quadriceps':      { color: '#22c55e', icon: 'M9 3h6l-1 9 1 9h-4l-1-9z' },
-    'ischio-jambiers': { color: '#14b8a6', icon: 'M10 3h5l-1 8 1 10h-4l-1-10z M12 6v4' },
-    'fessiers':        { color: '#ec4899', icon: 'M4 9c2-3 14-3 16 0 M4 9c0 6 3 9 8 9s8-3 8-9 M12 9v9' },
-    'mollets':         { color: '#84cc16', icon: 'M10 3h4l1 7-2 7v4h-3v-4l-1-7z' },
-    'abdominaux':      { color: '#f97316', icon: 'M8 4h8v16H8z M8 9.3h8 M8 14.6h8 M12 4v16' },
-    'lombaires':       { color: '#eab308', icon: 'M12 3v18 M8 7h8 M8 12h8 M8 17h8' },
-    'trapèzes':        { color: '#06b6d4', icon: 'M4 17 9 6h6l5 11z' },
-    'coiffe':          { color: '#64748b', icon: 'M20 12a8 8 0 1 1-3-6.2 M20 4v4h-4' },
+    'pectoraux':       { color: '#f43f5e', img: 'icons/muscles/pectoraux.png', icon: 'M4 7c2-2 5-2 8 0 3-2 6-2 8 0v5c0 3-3 5-8 5s-8-2-8-5z M12 7v10' },
+    'dos':             { color: '#0ea5e9', img: 'icons/muscles/dos.png', icon: 'M5 5l7 3 7-3-2 14H7z M12 8v11' },
+    'epaules':         { color: '#f59e0b', img: 'icons/muscles/epaules.png', icon: 'M3 16c0-5 4-9 9-9s9 4 9 9 M8 16v-3 M16 16v-3' },
+    'biceps':          { color: '#8b5cf6', img: 'icons/muscles/biceps.png', icon: 'M5 19c0-6 2-10 5-13l3 3-2 2c2 0 5 1 6 4 1 2 0 4-2 4z' },
+    'triceps':         { color: '#6366f1', img: 'icons/muscles/triceps.png', icon: 'M19 19c0-6-2-10-5-13l-3 3 2 2c-2 0-5 1-6 4-1 2 0 4 2 4z' },
+    'avant-bras':      { color: '#a855f7', img: 'icons/muscles/avant-bras.png', icon: 'M6 18 18 6 M15 4l5 5 M4 15l5 5' },
+    'quadriceps':      { color: '#22c55e', img: 'icons/muscles/quadriceps.png', icon: 'M9 3h6l-1 9 1 9h-4l-1-9z' },
+    'ischio-jambiers': { color: '#14b8a6', img: 'icons/muscles/ischio-jambiers.png', icon: 'M10 3h5l-1 8 1 10h-4l-1-10z M12 6v4' },
+    'fessiers':        { color: '#ec4899', img: 'icons/muscles/fessiers.png', icon: 'M4 9c2-3 14-3 16 0 M4 9c0 6 3 9 8 9s8-3 8-9 M12 9v9' },
+    'mollets':         { color: '#84cc16', img: 'icons/muscles/mollets.png', icon: 'M10 3h4l1 7-2 7v4h-3v-4l-1-7z' },
+    'abdominaux':      { color: '#f97316', img: 'icons/muscles/abdominaux.png', icon: 'M8 4h8v16H8z M8 9.3h8 M8 14.6h8 M12 4v16' },
+    'lombaires':       { color: '#eab308', img: 'icons/muscles/lombaires.png', icon: 'M12 3v18 M8 7h8 M8 12h8 M8 17h8' },
+    'trapèzes':        { color: '#06b6d4', img: 'icons/muscles/trapezes.png', icon: 'M4 17 9 6h6l5 11z' },
+    'coiffe':          { color: '#64748b', img: 'icons/muscles/coiffe.png', icon: 'M20 12a8 8 0 1 1-3-6.2 M20 4v4h-4' },
     'cardio':          { color: '#ef4444', icon: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' },
     'default':         { color: '#8b5cf6', icon: 'M6 12h12 M4 9v6 M20 9v6 M7 7v10 M17 7v10' }
 };
