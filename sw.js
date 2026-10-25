@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '5.5.15';
+const SW_VERSION = '5.5.18';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 // Exercise thumbnails/GIFs are fetched on demand from the dataset repo and
@@ -11,14 +11,14 @@ const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=5.5.15',
-    './streak-score.css?v=5.5.15',
-    './theme.css?v=5.5.15',
-    './db.js?v=5.5.15',
+    './styles.css?v=5.5.16',
+    './streak-score.css?v=5.5.16',
+    './theme.css?v=5.5.16',
+    './db.js?v=5.5.16',
     './exercises-db.json?v=2',
-    './data.js?v=5.5.15',
-    './exercise-db.js?v=5.5.15',
-    './app.js?v=5.5.15',
+    './data.js?v=5.5.16',
+    './exercise-db.js?v=5.5.16',
+    './app.js?v=5.5.16',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'

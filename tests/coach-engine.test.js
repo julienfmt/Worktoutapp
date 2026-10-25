@@ -155,6 +155,99 @@ async function run() {
     assert.equal(leftHistory.length, 1);
     assert.equal(leftHistory[0].reps, 12);
 
+    // ---- Deload, sibling slots, plateaus, gaps ----
+    const daysAgo = days => new Date(Date.now() - days * 86400000).toISOString();
+    const mkSets = (workoutId, slotId, exerciseId, date, weight, repsList, extra = {}) => repsList.map((reps, index) => ({
+        id: `${workoutId}-${index}`, workoutId, slotId, exerciseId, exerciseName: exerciseId, setNumber: index + 1,
+        weight, reps, rpe: 8, rpeSource: 'default', date, targetRepsMin: 8, targetRepsMax: 12,
+        targetSetCount: repsList.length, programmedSetCount: repsList.length, ...extra
+    }));
+    const pulldown = app.normalizeSlotProgressionConfig({
+        id: 'S3-B2', sessionId: 'S3', name: 'Tirage test', activeExercise: 'Tirage test', type: 'compound',
+        trackingMode: 'strength', progressionMode: 'load', sets: 2, repsMin: 8, repsMax: 12, rest: 120, rir: 2,
+        loadingProfile: 'machine_stack', minIncrementKg: 1
+    });
+    stores.slots = [pulldown];
+    stores.setHistory = [
+        ...mkSets('w1', 'S3-B2', 'Tirage test', daysAgo(18), 66, [10, 10]),
+        ...mkSets('w2', 'S3-B2', 'Tirage test', daysAgo(9), 59, [12, 12], { isDeload: true, deloadSource: 'cycle' })
+    ];
+    app.invalidateExerciseHistoryCaches();
+    app.currentWorkout = null;
+    const postDeload = await app.calculateCoachingAdviceForSlot(pulldown, { dryRun: true });
+    assert.equal(postDeload.referenceWeight, 66, 'a deload session never becomes the load reference');
+    assert.equal(postDeload.suggestedWeight, 66);
+    assert.ok(postDeload.postDeload && /deload/.test(postDeload.message), 'the coach says it ignored the deload');
+
+    // Logbook reference (prefill, set-vs-history, summaries) skips the deload too.
+    const groups = [
+        { date: daysAgo(9), sets: mkSets('w2', 'S3-B2', 'Tirage test', daysAgo(9), 59, [12, 12], { isDeload: true }) },
+        { date: daysAgo(18), sets: mkSets('w1', 'S3-B2', 'Tirage test', daysAgo(18), 66, [10, 10]) }
+    ];
+    assert.equal(app.pickReferenceHistory(groups).sets[0].weight, 66);
+    assert.equal(app.pickReferenceHistory(groups.slice(0, 1)), null);
+
+    // Same exercise in another session of the plan with more sets: not a program change.
+    const legCurlDay2 = { id: 'S2-H8', sessionId: 'S2', name: 'Leg curl test', activeExercise: 'Leg curl test', type: 'isolation',
+        trackingMode: 'strength', progressionMode: 'load', sets: 2, repsMin: 10, repsMax: 15, rest: 90, rir: 1, minIncrementKg: 0.5 };
+    const legCurlDay4 = { ...legCurlDay2, id: 'S4-B2', sessionId: 'S4', sets: 3 };
+    stores.slots = [legCurlDay2, legCurlDay4];
+    stores.setHistory = mkSets('w3', 'S2-H8', 'Leg curl test', daysAgo(3), 45, [15, 15], { targetRepsMin: 10, targetRepsMax: 15 });
+    app.invalidateExerciseHistoryCaches();
+    const sibling = await app.calculateCoachingAdviceForSlot(legCurlDay4, { dryRun: true });
+    assert.notEqual(sibling.type, 'decrease', 'a sibling slot with more sets must not trigger a load cut');
+    assert.ok(!/Programme mis à jour/.test(sibling.message));
+
+    // Unilateral exposures store one row per side: 3 sets, not 6.
+    const uniWorkouts = app.buildWorkoutsFromSetHistory([
+        ...mkSets('w4', 'x', 'Lateral', daysAgo(2), 4.5, [25, 25, 25], { side: 'left' }),
+        ...mkSets('w4', 'x', 'Lateral', daysAgo(2), 4.5, [25, 25, 25], { side: 'right' })
+    ].map((set, index) => ({ ...set, id: `u${index}`, programmedSetCount: undefined, targetSetCount: undefined })));
+    assert.equal(uniWorkouts[0].targetSetCount, 3);
+
+    // No observed step on a plate machine: a realistic 2.5 kg jump, not 0.5 kg.
+    assert.equal(app.inferExerciseLoadIncrement(
+        [{ sets: [{ weight: 86, reps: 20 }] }, { sets: [{ weight: 86, reps: 20 }] }],
+        { loadingProfile: 'plate_stack', minIncrementKg: 0.5, type: 'isolation', sets: 1 },
+        0.5
+    ), 2.5);
+    // ...but capped on very light loads.
+    assert.equal(app.inferExerciseLoadIncrement(
+        [{ sets: [{ weight: 4.5, reps: 25 }] }],
+        { loadingProfile: 'machine_stack', minIncrementKg: 0.5, type: 'isolation', sets: 1 },
+        0.5
+    ), 0.5);
+
+    // Plateau without RPE: 3 exposures with no rep gained → warning, 4 → micro-reset.
+    const press = { id: 'S1-A1', sessionId: 'S1', name: 'Press test', activeExercise: 'Press test', type: 'compound',
+        trackingMode: 'strength', progressionMode: 'load', sets: 3, repsMin: 6, repsMax: 10, rest: 180, rir: 2, incrementKg: 2.5 };
+    stores.slots = [press];
+    stores.setHistory = [
+        ...mkSets('p1', 'S1-A1', 'Press test', daysAgo(20), 70, [8, 8, 7], { targetRepsMin: 6, targetRepsMax: 10 }),
+        ...mkSets('p2', 'S1-A1', 'Press test', daysAgo(13), 70, [8, 7, 7], { targetRepsMin: 6, targetRepsMax: 10 }),
+        ...mkSets('p3', 'S1-A1', 'Press test', daysAgo(6), 70, [7, 7, 7], { targetRepsMin: 6, targetRepsMax: 10 })
+    ];
+    app.invalidateExerciseHistoryCaches();
+    const plateauWarn = await app.calculateCoachingAdviceForSlot(press, { dryRun: true });
+    assert.equal(plateauWarn.type, 'maintain');
+    assert.ok(plateauWarn.plateau);
+    stores.setHistory.unshift(...mkSets('p0', 'S1-A1', 'Press test', daysAgo(27), 70, [8, 8, 8], { targetRepsMin: 6, targetRepsMax: 10 }));
+    app.invalidateExerciseHistoryCaches();
+    const plateauReset = await app.calculateCoachingAdviceForSlot(press, { dryRun: true });
+    assert.equal(plateauReset.type, 'decrease');
+    assert.equal(plateauReset.suggestedWeight, 67.5);
+
+    // Long break: no load jump after 3+ weeks, a ~10% reload after 6+ weeks.
+    stores.setHistory = mkSets('g1', 'S1-A1', 'Press test', daysAgo(25), 70, [10, 10, 10], { targetRepsMin: 6, targetRepsMax: 10 });
+    app.invalidateExerciseHistoryCaches();
+    const gap = await app.calculateCoachingAdviceForSlot(press, { dryRun: true });
+    assert.equal(gap.suggestedWeight, 70, 'after 3+ weeks off, confirm before increasing');
+    stores.setHistory = mkSets('g2', 'S1-A1', 'Press test', daysAgo(50), 70, [10, 10, 10], { targetRepsMin: 6, targetRepsMax: 10 });
+    app.invalidateExerciseHistoryCaches();
+    const longGap = await app.calculateCoachingAdviceForSlot(press, { dryRun: true });
+    assert.equal(longGap.type, 'decrease');
+    assert.ok(longGap.suggestedWeight < 70 && longGap.suggestedWeight >= 62.5);
+
     console.log('coach-engine tests: OK');
 }
 

@@ -2347,17 +2347,7 @@ class App {
         const nextSession = sessions[nextIndex];
         
         if (nextSession) {
-            document.getElementById('session-name').textContent = nextSession.name;
-            document.getElementById('session-duration').textContent = `~${nextSession.estimatedDuration} min`;
-            
-            const slots = this.getSlotsForSessionFromSnapshot(nextSession.id, homeData);
-            document.getElementById('session-slots').textContent = `${slots.length} exo${slots.length > 1 ? 's' : ''}`;
-            const totalSets = slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0);
-            const setsEl = document.getElementById('session-sets');
-            if (setsEl) setsEl.textContent = `${totalSets} série${totalSets > 1 ? 's' : ''}`;
-            this.renderNextSessionMuscles(slots);
-            
-            this.currentSession = nextSession;
+            this.renderHomeSessionCard(nextSession, this.getSlotsForSessionFromSnapshot(nextSession.id, homeData), sessions, true);
             document.getElementById('btn-start-session').disabled = false;
             document.getElementById('btn-change-session').disabled = false;
 
@@ -2377,6 +2367,7 @@ class App {
             const setsEl = document.getElementById('session-sets');
             if (setsEl) setsEl.textContent = '0 série';
             this.renderNextSessionMuscles([]);
+            this.applyHomeSessionAccent(null);
             this.renderLastSessionInfo('');
             const cyclePreview = document.getElementById('session-cycle-preview');
             if (cyclePreview) cyclePreview.textContent = 'Nouveau cycle';
@@ -2403,6 +2394,30 @@ class App {
 
         // Render stats
         await this.renderStats(homeData);
+    }
+
+    // Fills the home "next session" card and tints it with the session colour.
+    renderHomeSessionCard(session, slots = [], sessions = [], isSuggested = true) {
+        document.getElementById('session-name').textContent = session.name;
+        document.getElementById('session-duration').textContent = `~${session.estimatedDuration} min`;
+        document.getElementById('session-slots').textContent = `${slots.length} exo${slots.length > 1 ? 's' : ''}`;
+        const totalSets = slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0);
+        const setsEl = document.getElementById('session-sets');
+        if (setsEl) setsEl.textContent = `${totalSets} série${totalSets > 1 ? 's' : ''}`;
+        this.renderNextSessionMuscles(slots);
+
+        const tagEl = document.getElementById('session-tag');
+        if (tagEl) tagEl.textContent = isSuggested ? 'Prochaine séance' : 'Séance choisie';
+        this.applyHomeSessionAccent(this.getSessionAccent(session.id, sessions));
+        this.currentSession = session;
+    }
+
+    applyHomeSessionAccent(color) {
+        const card = document.getElementById('suggested-session');
+        if (!card) return;
+        if (color) card.style.setProperty('--session-accent', color);
+        else card.style.removeProperty('--session-accent');
+        card.classList.toggle('has-accent', Boolean(color));
     }
 
     // Up to three muscle badges for the home "next session" card, most trained first.
@@ -2456,8 +2471,14 @@ class App {
     }
 
     getCalendarAccent(index) {
-        const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#0ea5e9', '#8b5cf6', '#ec4899', '#14b8a6'];
+        const palette = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#0ea5e9', '#a855f7', '#ec4899', '#14b8a6'];
         return palette[index % palette.length];
+    }
+
+    // One colour per session, shared by the calendar, the home card and the session picker.
+    getSessionAccent(sessionId, sessions = []) {
+        const index = sessions.findIndex(session => session.id === sessionId);
+        return index >= 0 ? this.getCalendarAccent(index) : '#94a3b8';
     }
 
     hexToRgba(hex, alpha) {
@@ -2478,20 +2499,6 @@ class App {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
-    abbreviateSessionName(name) {
-        const trimmed = (name || '').trim();
-        if (!trimmed) return '--';
-        if (trimmed.length <= 10) return trimmed;
-
-        const tokens = trimmed.split(/\s+/).filter(Boolean);
-        const acronym = tokens.map(token => token[0]?.toUpperCase() || '').join('');
-        if (acronym.length >= 2 && acronym.length <= 5) {
-            return acronym;
-        }
-
-        return `${trimmed.slice(0, 9).trim()}…`;
-    }
-
     renderCurrentMonthCalendar(history, sessions, sessionNameArchive = {}) {
         const kickerEl = document.getElementById('history-calendar-kicker');
         const titleEl = document.getElementById('history-calendar-title');
@@ -2506,7 +2513,7 @@ class App {
         const activeMonth = this.currentCalendarDate instanceof Date
             ? this.currentCalendarDate
             : new Date();
-        const { start, end } = this.getCurrentMonthRange(activeMonth);
+        const { start } = this.getCurrentMonthRange(activeMonth);
         titleEl.textContent = start.toLocaleDateString('fr-FR', {
             month: 'long',
             year: 'numeric'
@@ -2517,12 +2524,7 @@ class App {
         kickerEl.textContent = isCurrentMonth ? 'Mois en cours' : 'Historique';
         nextBtn.disabled = isCurrentMonth;
 
-        const sessionLookup = new Map();
-        const sessionColors = new Map();
-        sessions.forEach((session, index) => {
-            sessionLookup.set(session.id, session);
-            sessionColors.set(session.id, this.getCalendarAccent(index));
-        });
+        const sessionLookup = new Map(sessions.map(session => [session.id, session]));
 
         const targetYear = start.getFullYear();
         const targetMonth = start.getMonth();
@@ -2544,7 +2546,7 @@ class App {
             }
 
             workoutsByDay.get(key).push({
-                sessionId: workout.sessionId,
+                color: this.getSessionAccent(workout.sessionId, sessions),
                 sessionName: this.getSessionDisplayNameFromArchive(workout.sessionId, sessionLookup, sessionNameArchive)
             });
         }
@@ -2558,29 +2560,31 @@ class App {
             gridEl.appendChild(emptyCell);
         }
 
+        const todayKey = this.getLocalDateKey(now);
         const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(start.getFullYear(), start.getMonth(), day);
             const key = this.getLocalDateKey(date);
             const workouts = workoutsByDay.get(key) || [];
-            const primaryColor = sessionColors.get(workouts[0]?.sessionId) || '#6366f1';
 
             const dayEl = document.createElement('div');
             dayEl.className = `calendar-day${workouts.length ? ' has-workout' : ''}`;
-            const todayKey = this.getLocalDateKey(new Date());
             if (key === todayKey) dayEl.classList.add('is-today');
             else if (key > todayKey) dayEl.classList.add('is-future');
-            if (workouts.length) {
-                const prevKey = this.getLocalDateKey(new Date(start.getFullYear(), start.getMonth(), day - 1));
-                const nextKey = this.getLocalDateKey(new Date(start.getFullYear(), start.getMonth(), day + 1));
-                if (workoutsByDay.has(prevKey) && day > 1) dayEl.classList.add('chain-prev');
-                if (workoutsByDay.has(nextKey) && day < daysInMonth) dayEl.classList.add('chain-next');
-                dayEl.style.setProperty('--calendar-accent', primaryColor);
-            }
 
+            const dateLabel = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
             if (workouts.length) {
-                dayEl.style.setProperty('--calendar-accent-soft', this.hexToRgba(primaryColor, 0.14));
-                dayEl.style.setProperty('--calendar-accent-border', this.hexToRgba(primaryColor, 0.24));
+                const colors = [...new Set(workouts.map(workout => workout.color))];
+                dayEl.style.setProperty('--calendar-accent', colors[0]);
+                if (colors.length > 1) {
+                    // Several different sessions on one day: split the tile diagonally.
+                    dayEl.style.setProperty('--calendar-fill', `linear-gradient(135deg, ${colors[0]} 50%, ${colors[1]} 50%)`);
+                }
+                const names = workouts.map(workout => workout.sessionName).join(', ');
+                dayEl.title = names;
+                dayEl.setAttribute('aria-label', `${dateLabel} : ${names}`);
+            } else {
+                dayEl.setAttribute('aria-label', dateLabel);
             }
 
             const numberEl = document.createElement('span');
@@ -2588,32 +2592,22 @@ class App {
             numberEl.textContent = day;
             dayEl.appendChild(numberEl);
 
-            if (workouts.length) {
-                const badgesEl = document.createElement('div');
-                badgesEl.className = 'calendar-day-badges';
-
-                workouts.slice(0, 2).forEach(workout => {
-                    const badge = document.createElement('span');
-                    const accent = sessionColors.get(workout.sessionId) || primaryColor;
-                    badge.className = 'calendar-session-badge';
-                    badge.style.setProperty('--calendar-badge-bg', this.hexToRgba(accent, 0.14));
-                    badge.style.setProperty('--calendar-badge-text', accent);
-                    badge.textContent = this.abbreviateSessionName(workout.sessionName);
-                    badge.title = workout.sessionName;
-                    badgesEl.appendChild(badge);
-                });
-
-                if (workouts.length > 2) {
-                    const moreBadge = document.createElement('span');
-                    moreBadge.className = 'calendar-more-badge';
-                    moreBadge.textContent = `+${workouts.length - 2}`;
-                    badgesEl.appendChild(moreBadge);
-                }
-
-                dayEl.appendChild(badgesEl);
+            if (workouts.length > 1) {
+                const countEl = document.createElement('span');
+                countEl.className = 'calendar-day-count';
+                countEl.textContent = `×${workouts.length}`;
+                dayEl.appendChild(countEl);
             }
 
             gridEl.appendChild(dayEl);
+        }
+
+        const legendEl = document.getElementById('history-calendar-legend');
+        if (legendEl) {
+            legendEl.innerHTML = sessions.map(session => `
+                <span class="calendar-legend-item" style="--legend-accent: ${this.getSessionAccent(session.id, sessions)}">${this.escapeHtml(session.name)}</span>
+            `).join('');
+            legendEl.hidden = sessions.length === 0;
         }
     }
     
@@ -4485,23 +4479,32 @@ class App {
         const referenceWeight = Number(context.lastWeight || lastWorkout.maxWeight || 0);
         const lastTotalReps = Number(lastWorkout.totalReps || 0);
         const avgRpe = Number(context.avgRpe || 8);
+        // The challenge never contradicts the coach: a load challenge only exists
+        // when the coach itself prescribes the jump, at the exact (snapped) load.
+        const coachAdvice = await this.calculateCoachingAdviceForSlot(normalizedSlot, { dryRun: true }).catch(() => null);
+        const coachLoad = Number(coachAdvice?.suggestedWeight);
+        const coachLoadTarget = coachAdvice?.type === 'increase' && Number.isFinite(coachLoad) && coachLoad > referenceWeight
+            ? coachLoad
+            : null;
+        const coachTargetReps = (coachAdvice?.targetRepsArray || []).map(Number).filter(value => value > 0);
+        const loadChallengeMinReps = Math.max(normalizedSlot.repsMin || 1, coachTargetReps.length ? Math.min(...coachTargetReps) : 0);
         const canPushLoad = !isBodyweight
             && referenceWeight > 0
-            && context.canIncreaseLoad !== false
-            && context.nextLoadCandidate > referenceWeight
+            && coachLoadTarget != null
             && avgRpe <= 9.1
             && lmsPenalty.worstScore < 2;
+        const coachHoldsOrLowers = coachAdvice && ['decrease', 'deload', 'reactive_deload'].includes(coachAdvice.type);
 
-        if (canPushLoad && (context.lastExposure?.allSetsHitTargets || context.avgReps >= normalizedSlot.repsMax - 0.5)) {
+        if (canPushLoad) {
             candidates.push(this.buildChallengeCandidate(normalizedSlot, 'increase_load', {
                 title: `Monte la charge sur ${exerciseName}`,
-                targetLabel: `Tente ${context.nextLoadCandidate} kg sur au moins 1 série à ${normalizedSlot.repsMin}+ reps.`,
+                targetLabel: `Tente ${coachLoadTarget} kg sur au moins 1 série à ${loadChallengeMinReps}+ reps.`,
                 coachReason: context.lastExposure?.allSetsHitTargets
-                    ? 'Tes cibles récentes sont validées: une petite montée de charge est pertinente.'
-                    : 'Ton haut de fourchette est proche: le coach propose un top set contrôlé.',
+                    ? 'Tes cibles récentes sont validées: le coach prescrit ce palier.'
+                    : 'Ton haut de fourchette est atteint: le coach prescrit ce palier.',
                 instructions: 'Si la technique se dégrade, reste propre et valide la séance normalement.',
                 baseline: { weight: referenceWeight, totalReps: lastTotalReps },
-                target: { weight: context.nextLoadCandidate, minReps: normalizedSlot.repsMin },
+                target: { weight: coachLoadTarget, minReps: loadChallengeMinReps },
                 score: 9.4 - lmsPenalty.penalty,
                 xpExerciseBonus: 25,
                 xpFinishBonus: 55
@@ -4509,7 +4512,7 @@ class App {
         }
 
         const repIncrease = Math.max(1, Math.min(3, Math.ceil(targetSetCount / 2)));
-        if (lastTotalReps > 0 && lmsPenalty.worstScore < 3) {
+        if (lastTotalReps > 0 && lmsPenalty.worstScore < 3 && !coachHoldsOrLowers && !canPushLoad) {
             candidates.push(this.buildChallengeCandidate(normalizedSlot, 'increase_reps', {
                 title: `Ajoute des reps sur ${exerciseName}`,
                 targetLabel: `Atteins ${lastTotalReps + repIncrease} reps totales sans baisser la charge de référence${referenceWeight > 0 ? ` (${referenceWeight} kg)` : ''}.`,
@@ -8943,7 +8946,18 @@ class App {
             }
         }
 
-        if (!candidates.length) return this.normalizeLoadPrecision(fallback);
+        if (!candidates.length) {
+            // No observed step yet: a 0.5 kg jump does not exist on most stacks
+            // or plate machines, so use a realistic step for the equipment,
+            // capped at ~10% of the working load to stay sane on light loads.
+            const referenceLoad = referenceWeights[0] || 0;
+            const profileStep = { plate_stack: 2.5, machine_stack: 2.5, free_weight: slot.type === 'isolation' ? 1 : 2.5 }[slot.loadingProfile];
+            if (profileStep && referenceLoad > 0) {
+                const cappedStep = Math.min(profileStep, Math.max(fallback, referenceLoad * 0.1));
+                return this.normalizeLoadPrecision(Math.max(fallback, cappedStep));
+            }
+            return this.normalizeLoadPrecision(fallback);
+        }
 
         const recentPlausible = candidates.find(candidate => candidate <= fallback * 3);
         const inferred = recentPlausible || Math.min(...candidates);
@@ -8987,7 +9001,14 @@ class App {
     async buildProgressionContext(slot, options = {}) {
         const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
         const exerciseId = normalizedSlot.activeExercise || normalizedSlot.name;
-        const workouts = await this.getExerciseWorkoutHistory(exerciseId, { excludeDeload: true });
+        const allExposures = await this.getExerciseWorkoutHistory(exerciseId);
+        // Deload sessions are planned light work: never a performance reference.
+        const workouts = allExposures.filter(workout => !workout.isDeload);
+        const latestExposure = allExposures[0] || null;
+        const skippedDeload = latestExposure?.isDeload ? latestExposure : null;
+        const daysSinceLastExposure = latestExposure?.date
+            ? Math.max(0, Math.floor((Date.now() - new Date(latestExposure.date).getTime()) / 86400000))
+            : null;
         const baseWeightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
         const fallbackIncrement = normalizedSlot.type === 'isolation'
             ? Math.min(baseWeightIncrement, normalizedSlot.minIncrementKg || 1)
@@ -9034,7 +9055,7 @@ class App {
         const consecutiveExposureSuccess = lastExposureSuccessful
             ? 1 + (prevExposure?.allSetsHitTargets && prevExposure?.inEffortZone ? 1 : 0)
             : 0;
-        const exposureSummaries = referenceWorkouts.slice(0, 3).map(workout => {
+        const exposureSummaries = referenceWorkouts.slice(0, 4).map(workout => {
             const reps = this.getWorkoutRepVector(workout, normalizedSlot.sets);
             const referenceWeight = this.getReferenceWeight(workout, normalizedSlot);
             return {
@@ -9067,6 +9088,7 @@ class App {
                 break;
             }
         }
+        const exposureTotals = exposureSummaries.map(exposure => exposure.reps.reduce((sum, value) => sum + value, 0));
         const previousRepVector = this.getWorkoutRepVector(prevWorkout, normalizedSlot.sets);
         const previousTotalReps = previousRepVector.reduce((sum, reps) => sum + reps, 0);
         const lastTotalReps = lastRepVector.reduce((sum, reps) => sum + reps, 0);
@@ -9076,7 +9098,15 @@ class App {
         const sessionContext = this.getSessionFatigueContextForSlot(normalizedSlot, options);
         const canIncreaseLoad = normalizedSlot.maxSelectableLoadKg == null || nextLoadCandidate <= normalizedSlot.maxSelectableLoadKg;
         const atCap = normalizedSlot.maxSelectableLoadKg != null && lastWeight >= normalizedSlot.maxSelectableLoadKg;
-        const programTargetChange = this.getProgramTargetChange(normalizedSlot, lastWorkout);
+        // Same exercise programmed in another session of the current plan (e.g. leg
+        // curl on day 2 and day 4): its set count is not a program change.
+        const currentProgramSlotIds = new Set((await db.getAll('slots')).map(item => String(item?.id)));
+        const lastWorkoutSlotIds = (lastWorkout?.slotIds || []).map(String);
+        const siblingExposure = Boolean(lastWorkout)
+            && lastWorkoutSlotIds.length > 0
+            && !lastWorkoutSlotIds.includes(String(normalizedSlot.id))
+            && lastWorkoutSlotIds.some(id => currentProgramSlotIds.has(id));
+        const programTargetChange = this.getProgramTargetChange(normalizedSlot, lastWorkout, { siblingExposure });
         const trendSummary = this.buildExerciseTrendSummary(workouts, normalizedSlot);
 
         return {
@@ -9106,13 +9136,16 @@ class App {
             consecutiveExposureSuccess,
             consecutiveUnderRange,
             stalledExposureCount,
+            exposureTotals,
             repDeltaVsPrevious,
             sameLoadAsPrevious,
             trendSummary,
             sessionContext,
             atCap,
             canIncreaseLoad,
-            programTargetChange
+            programTargetChange,
+            skippedDeload,
+            daysSinceLastExposure
         };
     }
 
@@ -9141,7 +9174,7 @@ class App {
             : 0;
     }
 
-    getProgramTargetChange(slot, lastWorkout) {
+    getProgramTargetChange(slot, lastWorkout, options = {}) {
         if (!slot || !lastWorkout) return null;
 
         const previous = lastWorkout.programSnapshot || null;
@@ -9161,7 +9194,7 @@ class App {
             : 0;
         const setsDelta = Number.isFinite(prevSets) && currentSets > 0 ? currentSets - prevSets : 0;
         const repsChanged = hasRepSnapshot && Math.abs(repsDelta) >= 1;
-        const setsChanged = Math.abs(setsDelta) >= 1;
+        const setsChanged = !options.siblingExposure && Math.abs(setsDelta) >= 1;
 
         if (!repsChanged && !setsChanged) return null;
 
@@ -9180,6 +9213,7 @@ class App {
             setsDelta,
             repsChanged,
             setsChanged,
+            source: options.siblingExposure ? 'sibling_slot' : 'program',
             higherRepDemand: repsChanged && repsDelta > 0,
             lowerRepDemand: repsChanged && repsDelta < 0,
             higherVolumeDemand: setsChanged && setsDelta > 0,
@@ -9216,7 +9250,9 @@ class App {
         const hasTargetLoad = Number.isFinite(Number(targetLoad)) && Number(targetLoad) > 0;
         const previousLabel = this.formatProgramTargetLabel(change.previous);
         const currentLabel = this.formatProgramTargetLabel(change.current);
-        const messagePrefix = `Programme mis à jour (${previousLabel} → ${currentLabel}).`;
+        const messagePrefix = change.source === 'sibling_slot'
+            ? `Dernier passage sur une autre séance avec une autre plage (${previousLabel} → ${currentLabel}).`
+            : `Programme mis à jour (${previousLabel} → ${currentLabel}).`;
 
         if (change.higherRepDemand || change.higherVolumeDemand) {
             const suggestedWeight = hasTargetLoad
@@ -9443,6 +9479,39 @@ class App {
             };
         }
 
+        // Plateau read from reps alone (RPE is rarely logged): same load, required
+        // sets done, and no rep gained over 3 then 4 exposures.
+        if (!effort.isReliable && context.stalledExposureCount >= 2 && avgReps < slot.repsMax) {
+            const stalledReps = (context.exposureTotals || []).slice(0, context.stalledExposureCount + 1).reverse().join(' → ');
+            if (context.stalledExposureCount >= 3 && step > 0) {
+                const resetWeight = this.normalizeLoadPrecision(Math.max(0, lastWeight - step));
+                return {
+                    type: 'decrease',
+                    icon: 'decrease',
+                    title: 'Plateau confirmé : micro-reset',
+                    message: `${context.stalledExposureCount + 1} séances à ${lastWeight}kg sans rep gagnée (reps totales ${stalledReps}). Descends d’un palier à ${resetWeight}kg, garde toutes les séries et remonte les reps: c’est le moyen le plus fiable de relancer la progression.`,
+                    suggestedWeight: resetWeight,
+                    suggestedReps: this.formatTargetReps(context.reduceLoadTargetRepsArray),
+                    suggestedRir: standardRir,
+                    progressionAxis: 'reps',
+                    weightTrend: 'down',
+                    plateau: true
+                };
+            }
+            return {
+                type: 'maintain',
+                icon: 'target',
+                title: 'Plateau en vue',
+                message: `${context.stalledExposureCount + 1} séances à ${lastWeight}kg sans rep gagnée (reps totales ${stalledReps}). Garde ${lastWeight}kg, respecte bien le repos prévu et vise +1 rep sur la première série. Si rien ne bouge la prochaine fois, le coach fera un micro-reset d’un palier.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: targetReps,
+                suggestedRir: standardRir,
+                progressionAxis: 'reps',
+                weightTrend: 'neutral',
+                plateau: true
+            };
+        }
+
         if (avgReps < slot.repsMin) {
             return {
                 type: 'maintain',
@@ -9472,6 +9541,70 @@ class App {
             progressionAxis: 'reps',
             weightTrend: 'neutral'
         };
+    }
+
+    // After a long break the last numbers overstate today's capacity.
+    applyTrainingGapAdjustment(advice, slot, context = {}) {
+        const gapDays = Number(context.daysSinceLastExposure);
+        const lastWeight = Number(context.lastWeight || 0);
+        if (!advice || !Number.isFinite(gapDays) || gapDays < 21 || lastWeight <= 0) return advice;
+        if (slot.progressionMode === 'bodyweight' || this.currentWorkout?.isDeload) return advice;
+
+        const weeks = Math.round(gapDays / 7);
+        if (gapDays >= 42) {
+            const step = Number(context.weightIncrement) || 1;
+            const reloadWeight = this.snapLoadToStep(lastWeight * 0.9, lastWeight, step, 'down');
+            if (Number(advice.suggestedWeight) > reloadWeight) {
+                return {
+                    ...advice,
+                    type: 'decrease',
+                    icon: 'decrease',
+                    title: 'Reprise après une pause',
+                    message: `Dernier passage il y a ${weeks} semaines: reprends à ${reloadWeight}kg (~-10%) avec 2-3 reps en réserve. La force revient vite, le coach remontera dès que les reps suivent.`,
+                    suggestedWeight: reloadWeight,
+                    suggestedRir: Math.max(2, Number(advice.suggestedRir) || 2),
+                    weightTrend: 'down',
+                    trainingGapDays: gapDays
+                };
+            }
+            return advice;
+        }
+
+        if (advice.type === 'increase') {
+            return {
+                ...advice,
+                type: 'maintain',
+                icon: 'target',
+                title: 'Reprise : on confirme d’abord',
+                message: `Dernier passage il y a ${weeks} semaines: garde ${lastWeight}kg aujourd’hui pour reprendre tes repères. Si toutes les séries passent proprement, la charge montera à la prochaine séance.`,
+                suggestedWeight: lastWeight,
+                suggestedReps: context.targetReps,
+                weightTrend: 'neutral',
+                trainingGapDays: gapDays
+            };
+        }
+        return advice;
+    }
+
+    // Makes it explicit that the last (deload) session was ignored.
+    annotateSkippedDeload(advice, context = {}) {
+        const deload = context.skippedDeload;
+        if (!advice || !deload || !context.lastWorkout || this.currentWorkout?.isDeload) return advice;
+        const deloadDate = this.formatShortFrDate(deload.date);
+        const referenceDate = this.formatShortFrDate(context.lastWorkout.date);
+        const referenceLoad = Number(context.lastWeight) > 0 ? ` à ${context.lastWeight}kg` : '';
+        return {
+            ...advice,
+            message: `${advice.message} Ta dernière séance (${deloadDate}) était un deload: le coach l’ignore et repart de ta séance du ${referenceDate}${referenceLoad}.`,
+            skippedDeloadDate: deload.date,
+            postDeload: true
+        };
+    }
+
+    formatShortFrDate(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
     }
 
     async applyDeloadOverlayToAdvice(advice, slot, context = {}) {
@@ -9962,6 +10095,8 @@ class App {
             advice.referenceWeight = context.lastWeight;
         }
         advice.weightIncrement = context.weightIncrement;
+        advice = this.applyTrainingGapAdjustment(advice, normalizedSlot, context);
+        advice = this.annotateSkippedDeload(advice, context);
         advice.targetRepsArray = this.getAdviceTargetRepsArray(advice, context.targetRepsArray);
         advice.suggestedRir ??= this.getTargetRirForSlot(normalizedSlot);
 
@@ -9970,7 +10105,7 @@ class App {
         advice = await this.applyDeloadOverlayToAdvice(advice, normalizedSlot, context);
         advice = this.enforceProgressionConstraints(advice, normalizedSlot, context);
         // Unilateral sides share one slot record: only the left side persists state.
-        if (options.side !== 'right') {
+        if (options.side !== 'right' && !options.dryRun) {
             await this.syncSlotProgressionStateFromAdvice(normalizedSlot, advice, context);
         }
 
@@ -10176,10 +10311,21 @@ class App {
             };
         });
         
-        // Keep backward compatibility
-        this.lastSupersetHistory = this.lastSupersetHistoryAll[0] || null;
+        // Reference for prefill/comparisons: never a deload session.
+        this.lastSupersetHistory = this.pickReferenceHistory(
+            workoutIds.map(wId => workoutGroups[wId]),
+            workout => ({
+                date: workout.date,
+                sets: workout.sets,
+                totalReps: workout.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
+                maxWeight: Math.max(...workout.sets.map(s => s.weight || 0)),
+                isDeload: workout.isDeload,
+                cycleWeek: workout.cycleWeek,
+                ...this.buildExerciseHistoryMetrics(workout.sets, this.supersetSlot)
+            })
+        ) || this.lastSupersetHistoryAll[0] || null;
         
-        this.renderSupersetLogbook(this.lastSupersetHistory);
+        this.renderSupersetLogbook(this.lastSupersetHistoryAll[0] || null);
     }
     
     renderSupersetLogbook(history) {
@@ -10686,6 +10832,19 @@ class App {
     }
     
     // ===== Logbook =====
+    isDeloadHistoryGroup(group) {
+        return Boolean(group?.isDeload || (group?.sets || []).some(set => set?.isDeload));
+    }
+
+    // Groups are sorted most recent first. Returns the most recent non-deload
+    // group (mapped), or null when every group is a deload.
+    pickReferenceHistory(groups = [], mapGroup = group => group) {
+        const reference = (groups || []).find(group => group?.sets?.length && !this.isDeloadHistoryGroup(group));
+        if (!reference) return null;
+        reference.sets.sort((a, b) => Number(a?.setNumber || 0) - Number(b?.setNumber || 0));
+        return mapGroup(reference);
+    }
+
     async loadLogbook() {
         const exerciseId = this.currentSlot.activeExercise || this.currentSlot.name;
         
@@ -10735,9 +10894,14 @@ class App {
             this.buildExerciseHistorySession(workoutGroups[wId], this.currentSlot)
         );
         
-        // Keep backward compatibility: lastExerciseHistory = most recent
-        this.lastExerciseHistory = this.lastExerciseHistoryAll[0];
-        
+        // lastExerciseHistory is the performance reference (prefill, set-vs-history,
+        // live analysis, summaries): a deload session is shown in the logbook but
+        // never becomes the baseline, unless the whole history is deload.
+        this.lastExerciseHistory = this.pickReferenceHistory(
+            workoutIds.map(wId => workoutGroups[wId]),
+            group => this.buildExerciseHistorySession(group, this.currentSlot)
+        ) || this.lastExerciseHistoryAll[0];
+
         this.renderLogbook(this.lastExerciseHistoryAll);
     }
     
@@ -10905,7 +11069,8 @@ class App {
                 const prevSet = previous?.sets?.find(entry => Number(entry.setNumber) === Number(set.setNumber))
                     || previous?.sets?.[setIndex];
                 let deltaHtml = '';
-                if (!isCardio && prevSet) {
+                // A deload is a planned lighter session, not a regression: no red deltas.
+                if (!isCardio && prevSet && !history.isDeload) {
                     const weightDiff = Math.round((Number(set.weight || 0) - Number(prevSet.weight || 0)) * 10) / 10;
                     const repsDiff = Number(set.reps || 0) - Number(prevSet.reps || 0);
                     if (weightDiff !== 0) {
@@ -10959,6 +11124,11 @@ class App {
             `;
 
             const annotations = [];
+            if (history.isDeload) {
+                annotations.push(previous
+                    ? `Séance deload : ignorée par le coach, la référence reste ta séance du ${this.formatLogbookDate(previous.date)}`
+                    : 'Séance deload : ignorée par le coach pour la progression');
+            }
             if (history.qualityLabels?.length) {
                 annotations.push(`Qualité notée : ${history.qualityLabels.join(' · ')}`);
             }
@@ -13743,6 +13913,9 @@ class App {
         if (!set || !previousSet || this.isCardioSlot(slot)) return null;
         const weightDelta = Math.round(((Number(set.weight) || 0) - (Number(previousSet.weight) || 0)) * 10) / 10;
         const repsDelta = (Number(set.reps) || 0) - (Number(previousSet.reps) || 0);
+        if (this.currentWorkout?.isDeload && (weightDelta < 0 || repsDelta < 0)) {
+            return { tone: 'same', text: 'Deload : allègement prévu' };
+        }
         if (weightDelta > 0) return { tone: 'up', text: `+${String(weightDelta).replace('.', ',')} kg vs la dernière fois` };
         if (weightDelta < 0) return { tone: 'down', text: `${String(weightDelta).replace('.', ',')} kg vs la dernière fois` };
         if (repsDelta > 0) return { tone: 'up', text: `+${repsDelta} rep${repsDelta > 1 ? 's' : ''} vs la dernière fois` };
@@ -15440,7 +15613,16 @@ class App {
         const summaryIcon = document.getElementById('summary-icon');
         const summaryTitle = document.getElementById('summary-title');
         
-        if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isCardioExercise) {
+        if (this.currentWorkout?.isDeload && !isCardioExercise) {
+            summaryIcon.textContent = '🔋';
+            summaryTitle.textContent = 'Deload validé';
+            comparison.innerHTML = `
+                <div class="comparison-card neutral">
+                    <span class="comparison-icon">🔋</span>
+                    <span class="comparison-text">Séance allégée volontairement: elle n’est pas comparée à tes séances normales et le coach ne s’en servira pas comme référence de charge.</span>
+                </div>
+            `;
+        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isCardioExercise) {
             const lastTotalReps = this.lastExerciseHistory.totalReps;
             const lastMaxWeight = this.lastExerciseHistory.maxWeight;
             const repsDiff = totalReps - lastTotalReps;
@@ -16437,36 +16619,69 @@ class App {
 
     // ===== Change Session Sheet =====
     async showChangeSessionSheet() {
-        const sessions = await db.getSessions();
-        const history = await db.getAll('workoutHistory');
-        const storedIndex = (await db.getSetting('nextSessionIndex')) ?? 0;
-        const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex);
+        const [sessions, history, storedIndex, allSlots] = await Promise.all([
+            db.getSessions(),
+            db.getAll('workoutHistory'),
+            db.getSetting('nextSessionIndex'),
+            db.getAll('slots')
+        ]);
+        const nextIndex = this.getSuggestedSessionIndex(sessions, history, storedIndex ?? 0);
         const container = document.getElementById('session-options');
         container.innerHTML = '';
 
-        for (let i = 0; i < sessions.length; i++) {
-            const session = sessions[i];
-            const isCurrent = i === nextIndex;
-            
+        const lastDoneBySession = new Map();
+        for (const workout of history) {
+            const time = new Date(workout.date).getTime();
+            if (!workout.sessionId || Number.isNaN(time)) continue;
+            if (time > (lastDoneBySession.get(workout.sessionId) ?? -Infinity)) lastDoneBySession.set(workout.sessionId, time);
+        }
+
+        sessions.forEach((session, i) => {
+            const isSuggested = i === nextIndex;
+            const isSelected = this.currentSession?.id === session.id;
+            const slots = allSlots.filter(slot => slot.sessionId === session.id).sort((a, b) => a.order - b.order);
+            const color = this.getSessionAccent(session.id, sessions);
+
+            const muscleCounts = new Map();
+            slots.forEach(slot => {
+                if (slot.muscleGroup) muscleCounts.set(slot.muscleGroup, (muscleCounts.get(slot.muscleGroup) || 0) + (Number(slot.sets) || 1));
+            });
+            const muscles = [...muscleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+                .map(([muscleId]) => this.getMuscleGroupLabel(muscleId)).join(' · ');
+
+            const lastDone = lastDoneBySession.get(session.id);
+            let lastText = 'Jamais faite';
+            if (lastDone !== undefined) {
+                const daysAgo = Math.floor((Date.now() - lastDone) / (1000 * 60 * 60 * 24));
+                lastText = daysAgo <= 0 ? "Faite aujourd'hui" : daysAgo === 1 ? 'Faite hier' : `Il y a ${daysAgo} j`;
+            }
+
+            const initial = (session.name || '?').trim().charAt(0).toUpperCase() || '?';
             const btn = document.createElement('button');
-            btn.className = `session-option ${isCurrent ? 'current' : ''}`;
+            btn.type = 'button';
+            btn.className = `session-option${isSelected ? ' current' : ''}`;
+            btn.style.setProperty('--session-accent', color);
             btn.innerHTML = `
-                <span class="session-option-name">${session.name}</span>
-                ${isCurrent ? '<span class="session-option-meta">Suggérée</span>' : ''}
+                <span class="session-option-swatch" aria-hidden="true">${this.escapeHtml(initial)}</span>
+                <span class="session-option-body">
+                    <span class="session-option-title">
+                        <span class="session-option-name">${this.escapeHtml(session.name)}</span>
+                        ${isSuggested ? '<span class="session-option-badge">Suggérée</span>' : ''}
+                    </span>
+                    <span class="session-option-meta">${this.escapeHtml(muscles || `${slots.length} exo${slots.length > 1 ? 's' : ''}`)}</span>
+                    <span class="session-option-sub">${slots.length} exo${slots.length > 1 ? 's' : ''} · ${lastText}</span>
+                </span>
+                <span class="session-option-check" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </span>
             `;
             btn.onclick = async () => {
-                this.currentSession = session;
-                document.getElementById('session-name').textContent = session.name;
-                const slots = await db.getSlotsBySession(session.id);
-                document.getElementById('session-slots').textContent = `${slots.length} exercices`;
-                document.getElementById('session-duration').textContent = `~${session.estimatedDuration} min`;
-                
+                this.renderHomeSessionCard(session, slots, sessions, isSuggested);
                 await db.setSetting('nextSessionIndex', i);
-                
                 this.hideChangeSessionSheet();
             };
             container.appendChild(btn);
-        }
+        });
 
         document.getElementById('sheet-change-session').classList.add('active');
     }
@@ -20671,7 +20886,15 @@ class App {
         for (const workout of Object.values(workoutGroups)) {
             workout.sets.sort((a, b) => a.setNumber - b.setNumber);
             workout.slotIds = Array.from(workout.slotIds);
-            workout.targetSetCount = Math.max(workout.targetSetCount || 0, workout.sets.length);
+            // Unilateral exposures store one row per side: count sets per side.
+            const setsPerSide = {};
+            workout.sets.forEach(set => {
+                const sideKey = set?.side || 'both';
+                setsPerSide[sideKey] = (setsPerSide[sideKey] || 0) + 1;
+            });
+            const performedSetCount = Math.max(0, ...Object.values(setsPerSide));
+            workout.isUnilateralExposure = workout.sets.some(set => set?.side === 'left' || set?.side === 'right');
+            workout.targetSetCount = Math.max(workout.targetSetCount || 0, performedSetCount);
             workout.programmedSetCount = Math.max(workout.programmedSetCount || 0, workout.targetSetCount);
             if (workout.targetRepsMin != null && workout.targetRepsMax != null) {
                 workout.programSnapshot = {

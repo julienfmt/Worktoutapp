@@ -15,10 +15,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=5.5.15" as="script">
-    <link rel="stylesheet" href="styles.css?v=5.5.15">
-    <link rel="stylesheet" href="streak-score.css?v=5.5.15">
-    <link rel="stylesheet" href="theme.css?v=5.5.15">
+    <link rel="preload" href="app.js?v=5.5.16" as="script">
+    <link rel="stylesheet" href="styles.css?v=5.5.16">
+    <link rel="stylesheet" href="streak-score.css?v=5.5.16">
+    <link rel="stylesheet" href="theme.css?v=5.5.16">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -65,6 +65,7 @@
                 <div class="suggested-session-card next-quest" id="suggested-session">
                     <div class="next-quest-head">
                         <div class="next-quest-heading">
+                            <span class="next-quest-tag" id="session-tag">Prochaine séance</span>
                             <h2 class="session-name" id="session-name">Chargement...</h2>
                             <div class="next-quest-muscles" id="session-muscles"></div>
                         </div>
@@ -95,21 +96,23 @@
 
                 <section class="history-calendar-section" id="history-calendar-section">
                     <div class="history-calendar-header">
-                        <div>
-                            <div class="history-calendar-kicker" id="history-calendar-kicker">Mois en cours</div>
-                            <div class="history-calendar-title-row">
-                                <button class="calendar-nav-btn" id="history-calendar-prev" type="button" aria-label="Mois précédent">
-                                    <span aria-hidden="true">&#8249;</span>
-                                </button>
-                                <h3 id="history-calendar-title">Historique du mois</h3>
-                                <button class="calendar-nav-btn" id="history-calendar-next" type="button" aria-label="Mois suivant">
-                                    <span aria-hidden="true">&#8250;</span>
-                                </button>
+                        <div class="history-calendar-heading">
+                            <div class="history-calendar-meta">
+                                <span class="history-calendar-kicker" id="history-calendar-kicker">Mois en cours</span>
+                                <span class="history-calendar-summary" id="history-calendar-summary">0 séance</span>
                             </div>
+                            <h3 id="history-calendar-title">Historique du mois</h3>
                         </div>
-                        <div class="history-calendar-summary" id="history-calendar-summary">0 séance</div>
+                        <div class="history-calendar-nav">
+                            <button class="calendar-nav-btn" id="history-calendar-prev" type="button" aria-label="Mois précédent">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                            </button>
+                            <button class="calendar-nav-btn" id="history-calendar-next" type="button" aria-label="Mois suivant">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="history-calendar-weekdays">
+                    <div class="history-calendar-weekdays" aria-hidden="true">
                         <span>L</span>
                         <span>M</span>
                         <span>M</span>
@@ -121,6 +124,7 @@
                     <div class="history-calendar-grid" id="history-calendar-grid">
                         <!-- Calendrier généré dynamiquement -->
                     </div>
+                    <div class="history-calendar-legend" id="history-calendar-legend"></div>
                     <div class="history-calendar-empty" id="history-calendar-empty" style="display: none;">
                         Aucune séance sur ce mois.
                     </div>
@@ -196,7 +200,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v5.4.0</span>
+                    <span class="app-version">v5.4.1</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -1068,6 +1072,7 @@
             <div class="sheet-content">
                 <div class="sheet-handle"></div>
                 <h3>Choisir une séance</h3>
+                <p class="session-options-hint">Une couleur par séance, comme dans le calendrier.</p>
                 <div class="session-options" id="session-options">
                     <!-- Options générées dynamiquement -->
                 </div>
@@ -1674,10 +1679,10 @@
         </div>
     </div>
 
-    <script defer src="db.js?v=5.5.15"></script>
-    <script defer src="data.js?v=5.5.15"></script>
-    <script defer src="exercise-db.js?v=5.5.15"></script>
-    <script defer src="app.js?v=5.5.15"></script>
+    <script defer src="db.js?v=5.5.16"></script>
+    <script defer src="data.js?v=5.5.16"></script>
+    <script defer src="exercise-db.js?v=5.5.16"></script>
+    <script defer src="app.js?v=5.5.16"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
@@ -1687,7 +1692,7 @@
             navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
         }
         if ('serviceWorker' in navigator && !isLocalDevHost) {
-            const APP_VERSION = '5.4.0';
+            const APP_VERSION = '5.4.1';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {
