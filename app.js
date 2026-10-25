@@ -2357,6 +2357,16 @@ class App {
 
             const dayEl = document.createElement('div');
             dayEl.className = `calendar-day${workouts.length ? ' has-workout' : ''}`;
+            const todayKey = this.getLocalDateKey(new Date());
+            if (key === todayKey) dayEl.classList.add('is-today');
+            else if (key > todayKey) dayEl.classList.add('is-future');
+            if (workouts.length) {
+                const prevKey = this.getLocalDateKey(new Date(start.getFullYear(), start.getMonth(), day - 1));
+                const nextKey = this.getLocalDateKey(new Date(start.getFullYear(), start.getMonth(), day + 1));
+                if (workoutsByDay.has(prevKey) && day > 1) dayEl.classList.add('chain-prev');
+                if (workoutsByDay.has(nextKey) && day < daysInMonth) dayEl.classList.add('chain-next');
+                dayEl.style.setProperty('--calendar-accent', primaryColor);
+            }
 
             if (workouts.length) {
                 dayEl.style.setProperty('--calendar-accent-soft', this.hexToRgba(primaryColor, 0.14));
@@ -15709,17 +15719,28 @@ class App {
                 `
                 : '';
 
+            const finStatIcons = {
+                duration: '<circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 2.5M9 2h6"></path>',
+                sets: '<path d="M12 3 3 8l9 5 9-5-9-5Z"></path><path d="m3 13 9 5 9-5"></path>',
+                volume: '<path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"></path>',
+                cardio: '<path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 1 0-7.8 7.8L12 22l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"></path>',
+                record: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4ZM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"></path>',
+                intensity: '<path d="M12 2s5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S9 11 11 11c0-4 1-9 1-9Z"></path>'
+            };
             const heroMetricsHtml = heroMetrics.length
-                ? heroMetrics.map(metric => `
-                    <div class="stimulus-metric-card ${this.escapeHtml(metric.theme || 'neutral')}">
-                        <div class="stimulus-metric-topline">
-                            <div class="stimulus-metric-label">${this.escapeHtml(metric.label)}</div>
-                            <div class="stimulus-metric-dot"></div>
+                ? heroMetrics.map((metric, index) => {
+                    const match = String(metric.value).match(/^(\D*?)\s*([\d.,]+k?|--)\s*(.*)$/);
+                    const number = match ? match[2] : metric.value;
+                    const unit = match ? `${match[1]} ${match[3]}`.trim() : '';
+                    const theme = this.escapeHtml(metric.theme || 'neutral');
+                    return `
+                        <div class="fin-stat ${theme}" title="${this.escapeHtml(metric.note || '')}" style="animation-delay:${(0.5 + index * 0.08).toFixed(2)}s">
+                            <span class="fin-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${finStatIcons[metric.theme] || finStatIcons.intensity}</svg></span>
+                            <span class="fin-stat-value">${this.escapeHtml(number)}${unit ? `<small>${this.escapeHtml(unit)}</small>` : ''}</span>
+                            <span class="fin-stat-label">${this.escapeHtml(metric.label)}</span>
                         </div>
-                        <div class="stimulus-metric-value">${this.escapeHtml(metric.value)}</div>
-                        <div class="stimulus-metric-note">${this.escapeHtml(metric.note)}</div>
-                    </div>
-                `).join('')
+                    `;
+                }).join('')
                 : '';
 
             const renderTrendRows = (rows, emptyMessage, tone = 'positive') => {
@@ -15756,6 +15777,7 @@ class App {
 
                         <div class="stimulus-score-hero">
                             <div class="stimulus-score-gauge ${quality}">
+                                <div class="stimulus-rank-stamp rank-${normalizedScore >= 90 ? 's' : normalizedScore >= 75 ? 'a' : normalizedScore >= 55 ? 'b' : 'c'}" aria-label="Rang">${normalizedScore >= 90 ? 'S' : normalizedScore >= 75 ? 'A' : normalizedScore >= 55 ? 'B' : 'C'}</div>
                                 <svg class="stimulus-score-gauge-svg" viewBox="0 0 120 120" aria-hidden="true">
                                     <circle class="stimulus-score-gauge-track" cx="60" cy="60" r="52"></circle>
                                     <circle class="stimulus-score-gauge-progress" cx="60" cy="60" r="52" style="stroke-dasharray:${scoreCircumference};stroke-dashoffset:${scoreOffset};"></circle>
@@ -15777,11 +15799,15 @@ class App {
                             </div>
                         </div>
 
+                        ${this.renderSessionFinishXp(recap?.charts?.xp)}
+
                         ${heroMetricsHtml ? `
-                            <div class="stimulus-metrics-grid">
+                            <div class="fin-stats">
                                 ${heroMetricsHtml}
                             </div>
                         ` : ''}
+
+                        ${this.renderSessionFinishCharts(recap?.charts)}
 
                         ${achievementsHtml}
 
@@ -20553,7 +20579,19 @@ class App {
             summaryLine += ` Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}.`;
         }
 
+        const charts = await this.buildSessionFinishCharts({
+            recapSets,
+            slotMap,
+            sessionSlots,
+            muscleStimulus,
+            sessionHistory,
+            workoutId,
+            previousSession,
+            stimulusScore
+        });
+
         return {
+            charts,
             heroMetrics,
             summaryLine,
             comparison,
@@ -20571,6 +20609,270 @@ class App {
             totalReps: currentStats.totalReps,
             stimulusScore: stimulusScore.total
         };
+    }
+
+    async buildSessionFinishCharts({ recapSets, slotMap, sessionSlots, muscleStimulus, sessionHistory, workoutId, previousSession, stimulusScore }) {
+        const getSlot = id => slotMap.get(String(id)) || slotMap.get(id) || null;
+        const setLoad = set => {
+            const reps = Number(set.reps) || 0;
+            const weight = Number(set.weight) || 0;
+            return weight > 0 ? weight * reps : reps;
+        };
+        const strengthSets = sets => sets.filter(set => {
+            const slot = getSlot(set.slotId);
+            return slot && !this.isCardioSlot(slot);
+        });
+        const sumBySlot = sets => sets.reduce((map, set) => {
+            const key = String(set.slotId);
+            map.set(key, (map.get(key) || 0) + setLoad(set));
+            return map;
+        }, new Map());
+        const sumLoad = sets => sets.reduce((sum, set) => sum + setLoad(set), 0);
+
+        const currentSets = strengthSets(recapSets);
+        const currentBySlot = sumBySlot(currentSets);
+        const previousSets = previousSession
+            ? strengthSets(await db.getByIndex('setHistory', 'workoutId', previousSession.id))
+            : [];
+        const previousBySlot = sumBySlot(previousSets);
+
+        const exerciseBars = sessionSlots
+            .filter(slot => currentBySlot.has(String(slot.id)))
+            .map(slot => ({
+                label: slot.activeExercise || slot.name,
+                value: currentBySlot.get(String(slot.id)),
+                previous: previousBySlot.has(String(slot.id)) ? previousBySlot.get(String(slot.id)) : null
+            }));
+
+        const slotOrder = new Map(sessionSlots.map((slot, index) => [String(slot.id), index]));
+        const setTimeline = currentSets
+            .map((set, index) => ({ set, index }))
+            .sort((a, b) => {
+                const orderDelta = (slotOrder.get(String(a.set.slotId)) ?? 99) - (slotOrder.get(String(b.set.slotId)) ?? 99);
+                return orderDelta || (a.set.setNumber || a.index) - (b.set.setNumber || b.index);
+            })
+            .map(({ set }) => ({
+                load: setLoad(set),
+                rpe: this.getStatsRpe(set, getSlot(set.slotId)),
+                group: String(set.slotId),
+                label: `${getSlot(set.slotId)?.activeExercise || getSlot(set.slotId)?.name || ''} · ${Number(set.weight) || 0} kg × ${Number(set.reps) || 0}`
+            }));
+
+        const muscleTotal = Array.from(muscleStimulus.values()).reduce((sum, value) => sum + value, 0);
+        const sortedMuscles = Array.from(muscleStimulus.entries()).sort((a, b) => b[1] - a[1]);
+        const muscleSplit = muscleTotal > 0
+            ? sortedMuscles.slice(0, 5).map(([muscleId, value]) => ({
+                label: this.getMuscleDisplayName(muscleId),
+                share: value / muscleTotal
+            }))
+            : [];
+        const otherShare = muscleTotal > 0
+            ? sortedMuscles.slice(5).reduce((sum, [, value]) => sum + value, 0) / muscleTotal
+            : 0;
+        if (otherShare > 0.01) muscleSplit.push({ label: 'Autres', share: otherShare });
+
+        const pastSessions = (sessionHistory || [])
+            .filter(workout => workout.id !== workoutId && !workout.isDeload)
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 7)
+            .reverse();
+        const volumeTrend = [];
+        for (const workout of pastSessions) {
+            const sets = strengthSets(await db.getByIndex('setHistory', 'workoutId', workout.id));
+            volumeTrend.push({ date: workout.date, value: sumLoad(sets) });
+        }
+        volumeTrend.push({ date: new Date().toISOString(), value: sumLoad(currentSets), current: true });
+
+        const xpBefore = (await db.getSetting('xp')) ?? 0;
+        const xpGain = Math.max(0, Math.round((stimulusScore?.total || 0) * 2));
+
+        return {
+            exerciseBars,
+            setTimeline,
+            muscleSplit,
+            volumeTrend: volumeTrend.filter(point => point.value > 0),
+            xp: {
+                gain: xpGain,
+                before: this.getPlayerLevel(xpBefore),
+                after: this.getPlayerLevel(xpBefore + xpGain)
+            }
+        };
+    }
+
+    renderSessionFinishXp(xp) {
+        if (!xp) return '';
+        const { before, after, gain } = xp;
+        const levelUp = after.level > before.level;
+        const pct = level => {
+            const span = Math.max(1, level.ceil - level.floor);
+            return Math.max(0, Math.min(100, ((level.xp - level.floor) / span) * 100));
+        };
+        const fromPct = levelUp ? 0 : pct(before);
+        const toPct = pct(after);
+        return `
+            <div class="fin-xp${levelUp ? ' is-level-up' : ''}">
+                <div class="fin-xp-top">
+                    <span class="fin-xp-level">${this.escapeHtml(after.title?.emoji || '⚡')} Niv. ${after.level} · ${this.escapeHtml(after.title?.name || '')}</span>
+                    <span class="fin-xp-gain">+${gain} XP</span>
+                </div>
+                <div class="fin-xp-track">
+                    <div class="fin-xp-base" style="width:${fromPct.toFixed(1)}%"></div>
+                    <div class="fin-xp-fill" style="--fin-xp-from:${fromPct.toFixed(1)}%;--fin-xp-to:${toPct.toFixed(1)}%"></div>
+                </div>
+                <div class="fin-xp-note">${levelUp
+                    ? `LEVEL UP · Niv. ${before.level} → ${after.level}`
+                    : `${Math.max(0, after.ceil - after.xp)} XP avant le niveau ${after.level + 1}`}</div>
+            </div>
+        `;
+    }
+
+    renderSessionFinishCharts(charts) {
+        if (!charts) return '';
+        const palette = ['#8b5cf6', '#ec4899', '#f97316', '#facc15', '#22d3ee', '#64748b'];
+        const fmt = value => this.formatVolume(Math.round(value));
+        const cards = [];
+
+        const trend = charts.volumeTrend || [];
+        if (trend.length >= 2) {
+            const width = 300;
+            const height = 110;
+            const pad = 12;
+            const values = trend.map(point => point.value);
+            const max = Math.max(...values);
+            const min = Math.min(...values);
+            const range = Math.max(1, max - min);
+            const points = trend.map((point, index) => ({
+                x: pad + (index * (width - pad * 2)) / (trend.length - 1),
+                y: pad + (1 - (point.value - min) / range) * (height - pad * 2 - 14),
+                ...point
+            }));
+            const line = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+            const area = `${line} L${points[points.length - 1].x.toFixed(1)},${height} L${points[0].x.toFixed(1)},${height} Z`;
+            const last = points[points.length - 1];
+            const pastAvg = values.slice(0, -1).reduce((sum, value) => sum + value, 0) / (values.length - 1);
+            const delta = pastAvg > 0 ? ((last.value - pastAvg) / pastAvg) * 100 : 0;
+            const isBest = last.value >= max;
+            cards.push(`
+                <div class="fin-chart-card fin-chart-wide">
+                    <div class="fin-chart-head">
+                        <div>
+                            <div class="fin-chart-kicker">Volume · ${trend.length} séances</div>
+                            <div class="fin-chart-big">${fmt(last.value)} <small>kg</small></div>
+                        </div>
+                        <span class="fin-delta ${delta >= 0 ? 'up' : 'down'}">${isBest ? '👑 Record · ' : ''}${delta >= 0 ? '+' : ''}${Math.round(delta)}% vs moy.</span>
+                    </div>
+                    <svg class="fin-trend-svg" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="finTrendArea" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.55"></stop>
+                                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"></stop>
+                            </linearGradient>
+                            <linearGradient id="finTrendLine" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#8b5cf6"></stop>
+                                <stop offset="70%" stop-color="#ec4899"></stop>
+                                <stop offset="100%" stop-color="#f97316"></stop>
+                            </linearGradient>
+                        </defs>
+                        <path class="fin-trend-area" d="${area}" fill="url(#finTrendArea)"></path>
+                        <path class="fin-trend-line" d="${line}" stroke="url(#finTrendLine)" pathLength="1"></path>
+                        ${points.slice(0, -1).map(point => `<circle class="fin-trend-dot" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3"></circle>`).join('')}
+                        <circle class="fin-trend-pulse" cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="9"></circle>
+                        <circle class="fin-trend-last" cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5"></circle>
+                    </svg>
+                </div>
+            `);
+        }
+
+        const bars = charts.exerciseBars || [];
+        if (bars.length) {
+            const max = Math.max(...bars.map(bar => Math.max(bar.value, bar.previous || 0)), 1);
+            cards.push(`
+                <div class="fin-chart-card fin-chart-wide">
+                    <div class="fin-chart-head">
+                        <div class="fin-chart-kicker">Volume par exercice</div>
+                        <span class="fin-legend-ghost">▏ séance précédente</span>
+                    </div>
+                    <div class="fin-bars">
+                        ${bars.map((bar, index) => {
+                            const rawDelta = bar.previous ? ((bar.value - bar.previous) / bar.previous) * 100 : null;
+                            const delta = rawDelta != null && Math.abs(rawDelta) >= 0.5 ? rawDelta : null;
+                            return `
+                                <div class="fin-bar-row" style="--fin-delay:${(0.15 + index * 0.08).toFixed(2)}s">
+                                    <div class="fin-bar-label">
+                                        <span>${this.escapeHtml(bar.label)}</span>
+                                        <span class="fin-bar-value">${fmt(bar.value)}${delta == null ? '' : ` <em class="${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '▲' : '▼'}${Math.abs(Math.round(delta))}%</em>`}</span>
+                                    </div>
+                                    <div class="fin-bar-track">
+                                        <div class="fin-bar-fill${delta != null && delta > 0 ? ' is-up' : ''}" style="width:${((bar.value / max) * 100).toFixed(1)}%"></div>
+                                        ${bar.previous ? `<div class="fin-bar-ghost" style="left:${((bar.previous / max) * 100).toFixed(1)}%"></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `);
+        }
+
+        const timeline = charts.setTimeline || [];
+        if (timeline.length) {
+            const max = Math.max(...timeline.map(item => item.load), 1);
+            const rpeTone = rpe => rpe == null ? 'mid' : rpe >= 9 ? 'max' : rpe >= 8 ? 'high' : rpe >= 7 ? 'mid' : 'low';
+            cards.push(`
+                <div class="fin-chart-card fin-chart-wide">
+                    <div class="fin-chart-head">
+                        <div class="fin-chart-kicker">Série par série</div>
+                        <span class="fin-rpe-legend"><i class="low"></i>RPE&lt;7<i class="mid"></i>7<i class="high"></i>8<i class="max"></i>9+</span>
+                    </div>
+                    <div class="fin-eq">
+                        ${timeline.map((item, index) => `
+                            <div class="fin-eq-bar ${rpeTone(item.rpe)}${index > 0 && timeline[index - 1].group !== item.group ? ' is-new-group' : ''}"
+                                 title="${this.escapeHtml(item.label)}"
+                                 style="height:${Math.max(8, (item.load / max) * 100).toFixed(1)}%;animation-delay:${(0.2 + index * 0.035).toFixed(3)}s"></div>
+                        `).join('')}
+                    </div>
+                </div>
+            `);
+        }
+
+        const split = charts.muscleSplit || [];
+        if (split.length) {
+            const radius = 40;
+            const circumference = 2 * Math.PI * radius;
+            let offset = 0;
+            const segments = split.map((item, index) => {
+                const length = item.share * circumference;
+                const segment = `<circle cx="50" cy="50" r="${radius}" stroke="${palette[index % palette.length]}"
+                    stroke-dasharray="${Math.max(0, length - 2).toFixed(2)} ${circumference.toFixed(2)}"
+                    stroke-dashoffset="${(-offset).toFixed(2)}" style="animation-delay:${(0.3 + index * 0.1).toFixed(2)}s"></circle>`;
+                offset += length;
+                return segment;
+            }).join('');
+            cards.push(`
+                <div class="fin-chart-card fin-chart-wide">
+                    <div class="fin-chart-kicker">Muscles ciblés</div>
+                    <div class="fin-donut-wrap">
+                        <div class="fin-donut">
+                            <svg viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="fin-donut-track" cx="50" cy="50" r="${radius}"></circle>
+                                ${segments}
+                            </svg>
+                            <div class="fin-donut-center">
+                                <strong>${Math.round(split[0].share * 100)}%</strong>
+                                <span>${this.escapeHtml(split[0].label)}</span>
+                            </div>
+                        </div>
+                        <ul class="fin-donut-legend">
+                            ${split.map((item, index) => `
+                                <li><i style="background:${palette[index % palette.length]}"></i><span>${this.escapeHtml(item.label)}</span><b>${Math.round(item.share * 100)}%</b></li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `);
+        }
+
+        return cards.length ? `<div class="fin-charts">${cards.join('')}</div>` : '';
     }
 
     buildExerciseTrendSummary(workouts, slot) {
