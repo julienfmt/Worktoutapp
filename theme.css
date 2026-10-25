@@ -3215,8 +3215,8 @@
 
 /* Illustrated muscle (PNG pack): fills the whole chip on a cream disc. */
 .muscle-badge-icon:has(img) {
-    background: #fff8ef;
-    border: 1.5px solid var(--muscle);
+    background: color-mix(in srgb, var(--muscle) 22%, transparent);
+    border: none;
     box-shadow: none;
     overflow: hidden;
     width: 24px;
@@ -3266,10 +3266,10 @@
 }
 
 .muscle-badge-lg .muscle-badge-icon:has(img) {
+    box-shadow: none;
     width: 48px;
     height: 48px;
     border-radius: 16px;
-    border-width: 2px;
 }
 
 .muscle-badge-lg .muscle-badge-icon svg {
@@ -7473,7 +7473,16 @@ output.se-step-value { width: auto; min-width: 74px; font-size: 15px; white-spac
 }
 .se-effort-btn.active { color: #fff; background: var(--grad-primary); box-shadow: 0 3px 0 var(--primary-3d); }
 
-#edit-slot-form[data-tracking="cardio"] .se-strength-only { display: none; }
+#edit-slot-form[data-tracking="cardio"] .se-strength-only,
+#edit-slot-form[data-tracking="timed"] .se-strength-only { display: none; }
+
+#edit-slot-form[data-tracking="timed"] .se-range-col .se-step-value {
+    width: 50px;
+    min-width: 50px;
+    font-size: 15px;
+}
+
+.info-item.is-hidden { display: none; }
 
 .se-advanced {
     margin-top: 4px;

@@ -1322,7 +1322,8 @@ class App {
             '- Chaque séance doit avoir "name", "estimatedDuration" et "slots".',
             '- Chaque slot doit avoir au minimum: "name", "sets", "repsMin", "repsMax", "rest", "rir", "type", "trackingMode".',
             '- "type" doit être "compound" ou "isolation".',
-            '- "trackingMode" doit être "strength" sauf pour un vrai exercice cardio, dans ce cas "cardio".',
+            '- "trackingMode" vaut "strength" pour charge + reps, "cardio" pour les appareils avec durée + repère, et "timed" pour un temps tenu (gainage, maintien, farmer carry, poussée de traîneau).',
+            '- "repsMin"/"repsMax" sont des reps en mode strength, des minutes en mode cardio, et des secondes en mode timed. Pour un appareil cardio, garde "cardioMetric" si le programme actuel en contient un.',
             `- "muscleGroup" doit idéalement utiliser l’un de ces ids: ${muscleIds}.`,
             '- "pool" doit contenir le nom principal en premier puis 1 à 3 variantes proches quand c’est pertinent.',
             '- Les temps de repos doivent être réalistes.',
@@ -1462,6 +1463,23 @@ class App {
             return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
         };
 
+        const coerceTrackingTarget = (value, fallback, trackingMode) => {
+            const parser = trackingMode === 'cardio' ? parseFloat : parseInt;
+            const parsed = parser(value, 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+        };
+
+        const isLegacyStrengthPreset = rawSlot => [
+            [4, 4, 6, 180],
+            [3, 8, 12, 90],
+            [3, 15, 20, 60]
+        ].some(([sets, repsMin, repsMax, rest]) => (
+            Number(rawSlot?.sets) === sets
+            && Number(rawSlot?.repsMin) === repsMin
+            && Number(rawSlot?.repsMax) === repsMax
+            && Number(rawSlot?.rest) === rest
+        ));
+
         sessions.forEach((session, sessionIndex) => {
             const sessionName = (session?.name || session?.title || `Séance ${sessionIndex + 1}`).trim();
             const sessionId = `session-${timestamp}-${sessionIndex + 1}`;
@@ -1496,19 +1514,37 @@ class App {
                 const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
                     allowCardioInference: true
                 });
+                const inferredTrackingMode = inferred?.trackingMode || 'strength';
+                const trackingModeSource = rawSlot?.trackingModeSource === 'user'
+                    || (rawSlot?.trackingMode && rawSlot.trackingMode === inferredTrackingMode)
+                    ? 'user'
+                    : 'definition';
+                const trackingMode = trackingModeSource === 'user' && rawSlot?.trackingMode
+                    ? rawSlot.trackingMode
+                    : (inferredTrackingMode !== 'strength'
+                        ? inferredTrackingMode
+                        : (['cardio', 'timed'].includes(rawSlot?.trackingMode) ? rawSlot.trackingMode : 'strength'));
+                const repairCardioPreset = trackingMode === 'cardio'
+                    && trackingModeSource !== 'user'
+                    && rawSlot?.trackingMode !== 'cardio'
+                    && isLegacyStrengthPreset(rawSlot);
 
                 const definition = {
                     ...inferred,
                     name: exerciseName,
-                    sets: coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
-                    repsMin: coercePositiveInt(rawSlot?.repsMin, inferred?.repsMin ?? 8),
-                    repsMax: coercePositiveInt(rawSlot?.repsMax, inferred?.repsMax ?? 12),
-                    rest: coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
+                    sets: repairCardioPreset ? (inferred?.sets ?? 1) : coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
+                    repsMin: repairCardioPreset ? (inferred?.repsMin ?? 10) : coerceTrackingTarget(rawSlot?.repsMin, inferred?.repsMin ?? 8, trackingMode),
+                    repsMax: repairCardioPreset ? (inferred?.repsMax ?? 30) : coerceTrackingTarget(rawSlot?.repsMax, inferred?.repsMax ?? 12, trackingMode),
+                    rest: repairCardioPreset ? (inferred?.rest ?? 0) : coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
                     rir: coerceNonNegativeInt(rawSlot?.rir, inferred?.rir ?? 2),
                     type: rawSlot?.type === 'isolation' ? 'isolation' : (inferred?.type || 'compound'),
                     muscleGroup: rawSlot?.muscleGroup || inferred?.muscleGroup || '',
                     instructions: rawSlot?.instructions || inferred?.instructions || '',
-                    trackingMode: rawSlot?.trackingMode === 'cardio' ? 'cardio' : (inferred?.trackingMode || 'strength'),
+                    trackingMode,
+                    trackingModeSource,
+                    durationUnit: rawSlot?.durationUnit || (trackingMode === 'timed' ? 'seconds' : null),
+                    cardioMetric: rawSlot?.cardioMetric || inferred?.cardioMetric || null,
+                    timedLoad: rawSlot?.timedLoad || inferred?.timedLoad || null,
                     progressionMode: rawSlot?.progressionMode || inferred?.progressionMode || null,
                     loadingProfile: rawSlot?.loadingProfile || inferred?.loadingProfile || null,
                     pool: Array.isArray(rawSlot?.pool) && rawSlot.pool.length
@@ -1575,19 +1611,37 @@ class App {
                 const inferred = this.findExerciseLibraryEntry(exerciseName) || this.inferCustomExerciseTemplate(exerciseName, {
                     allowCardioInference: true
                 });
+                const inferredTrackingMode = inferred?.trackingMode || 'strength';
+                const trackingModeSource = rawSlot?.trackingModeSource === 'user'
+                    || (rawSlot?.trackingMode && rawSlot.trackingMode === inferredTrackingMode)
+                    ? 'user'
+                    : 'definition';
+                const trackingMode = trackingModeSource === 'user' && rawSlot?.trackingMode
+                    ? rawSlot.trackingMode
+                    : (inferredTrackingMode !== 'strength'
+                        ? inferredTrackingMode
+                        : (['cardio', 'timed'].includes(rawSlot?.trackingMode) ? rawSlot.trackingMode : 'strength'));
+                const repairCardioPreset = trackingMode === 'cardio'
+                    && trackingModeSource !== 'user'
+                    && rawSlot?.trackingMode !== 'cardio'
+                    && isLegacyStrengthPreset(rawSlot);
 
                 const slot = this.buildSlotFromExerciseDefinition({
                     ...inferred,
                     name: exerciseName,
-                    sets: coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
-                    repsMin: coercePositiveInt(rawSlot?.repsMin, inferred?.repsMin ?? 8),
-                    repsMax: coercePositiveInt(rawSlot?.repsMax, inferred?.repsMax ?? 12),
-                    rest: coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
+                    sets: repairCardioPreset ? (inferred?.sets ?? 1) : coercePositiveInt(rawSlot?.sets, inferred?.sets ?? 3),
+                    repsMin: repairCardioPreset ? (inferred?.repsMin ?? 10) : coerceTrackingTarget(rawSlot?.repsMin, inferred?.repsMin ?? 8, trackingMode),
+                    repsMax: repairCardioPreset ? (inferred?.repsMax ?? 30) : coerceTrackingTarget(rawSlot?.repsMax, inferred?.repsMax ?? 12, trackingMode),
+                    rest: repairCardioPreset ? (inferred?.rest ?? 0) : coerceNonNegativeInt(rawSlot?.rest, inferred?.rest ?? 90),
                     rir: coerceNonNegativeInt(rawSlot?.rir, inferred?.rir ?? 2),
                     type: rawSlot?.type === 'isolation' ? 'isolation' : (inferred?.type || 'compound'),
                     muscleGroup: rawSlot?.muscleGroup || inferred?.muscleGroup || '',
                     instructions: rawSlot?.instructions || inferred?.instructions || '',
-                    trackingMode: rawSlot?.trackingMode === 'cardio' ? 'cardio' : (inferred?.trackingMode || 'strength'),
+                    trackingMode,
+                    trackingModeSource,
+                    durationUnit: rawSlot?.durationUnit || (trackingMode === 'timed' ? 'seconds' : null),
+                    cardioMetric: rawSlot?.cardioMetric || inferred?.cardioMetric || null,
+                    timedLoad: rawSlot?.timedLoad || inferred?.timedLoad || null,
                     progressionMode: rawSlot?.progressionMode || inferred?.progressionMode || null,
                     loadingProfile: rawSlot?.loadingProfile || inferred?.loadingProfile || null,
                     pool: Array.isArray(rawSlot?.pool) && rawSlot.pool.length
@@ -3619,7 +3673,7 @@ class App {
 
     getSetLoadedVolume(set, slot = null) {
         if (!set) return 0;
-        if (slot && this.isCardioSlot(slot)) return 0;
+        if (slot && this.isTimedSlot(slot)) return 0;
 
         const weight = Number(set.weight || 0);
         const reps = Number(set.reps || 0);
@@ -3634,7 +3688,7 @@ class App {
             return Number(set.rpe);
         }
 
-        if (slot && !this.isCardioSlot(slot)) {
+        if (slot && !this.isTimedSlot(slot)) {
             return this.estimateSetRpe(set, this.buildSlotCoachMeta(slot));
         }
 
@@ -3665,7 +3719,7 @@ class App {
 
         const directSlot = await db.get('slots', slotId);
         if (directSlot) {
-            return this.normalizeSlotProgressionConfig(directSlot);
+            return (await this.normalizeStoredSlots([directSlot]))[0] || null;
         }
 
         const numericSlotId = Number(slotId);
@@ -3674,7 +3728,20 @@ class App {
         }
 
         const numericSlot = await db.get('slots', numericSlotId);
-        return numericSlot ? this.normalizeSlotProgressionConfig(numericSlot) : null;
+        return numericSlot ? (await this.normalizeStoredSlots([numericSlot]))[0] || null : null;
+    }
+
+    async normalizeStoredSlots(slots = []) {
+        const fieldsToPersist = ['trackingMode', 'sets', 'repsMin', 'repsMax', 'rest', 'durationUnit', 'cardioMetric'];
+        const normalizedSlots = [];
+        for (const storedSlot of slots || []) {
+            if (!storedSlot) continue;
+            const normalizedSlot = this.normalizeSlotProgressionConfig({ ...storedSlot });
+            const needsPersist = fieldsToPersist.some(field => storedSlot[field] !== normalizedSlot[field]);
+            if (needsPersist) await db.put('slots', normalizedSlot);
+            normalizedSlots.push(normalizedSlot);
+        }
+        return normalizedSlots;
     }
 
     buildExerciseStats(setHistory, slotMap, now = new Date()) {
@@ -3694,7 +3761,7 @@ class App {
 
         for (const set of sortedSets) {
             const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
-            if (slot && this.isCardioSlot(slot)) continue;
+            if (slot && this.isTimedSlot(slot)) continue;
 
             const weight = Number(set.weight || 0);
             const reps = Number(set.reps || 0);
@@ -3845,7 +3912,7 @@ class App {
             const setDate = this.getSafeDate(set.date);
             const loadedVolume = this.getSetLoadedVolume(set, slot);
             const rpe = this.getStatsRpe(set, slot);
-            const isStrengthSet = !(slot && this.isCardioSlot(slot));
+            const isStrengthSet = !(slot && this.isTimedSlot(slot));
 
             totalLoadedVolume += loadedVolume;
             if (set?.reps > 0) totalSetsAll += 1;
@@ -4465,7 +4532,7 @@ class App {
 
     async buildChallengeCandidatesForSlot(slot, history) {
         const normalizedSlot = this.normalizeSlotProgressionConfig({ ...slot });
-        if (this.isCardioSlot(normalizedSlot)) return [];
+        if (this.isTimedSlot(normalizedSlot)) return [];
 
         const candidates = [];
         const context = await this.buildProgressionContext(normalizedSlot);
@@ -5492,7 +5559,9 @@ class App {
             : (numericWeight <= 0 && this.getBodyweightAutoConfig(exerciseName).autoMode);
 
         if (isCardio) {
-            return numericWeight > 0 ? `${numericWeight}` : 'Libre';
+            if (!(numericWeight > 0)) return 'Libre';
+            const metric = this.getCardioMetricConfig(slot || exerciseName);
+            return `${this.formatOneDecimal(numericWeight)}${metric.unit ? ` ${metric.unit}` : ''}`;
         }
 
         if (isPureBodyweight && numericWeight <= 0) {
@@ -5505,7 +5574,11 @@ class App {
     getLoadFieldLabel(slotOrMeta) {
         const slot = typeof slotOrMeta === 'object' ? this.normalizeSlotProgressionConfig({ ...slotOrMeta }) : null;
         if (!slot) return 'Charge (kg)';
-        if (this.isCardioSlot(slot)) return 'Niveau / vitesse';
+        if (this.isCardioSlot(slot)) {
+            const metric = this.getCardioMetricConfig(slot);
+            return metric.unit ? `${metric.label} (${metric.unit})` : metric.label;
+        }
+        if (this.getTrackingMode(slot) === 'timed' && slot.timedLoad === 'weight') return 'Charge (kg)';
         if (slot.progressionMode !== 'bodyweight') return 'Charge (kg)';
         if (slot.bodyweightProfile?.allowAssistance) return 'Assistance (kg)';
         if (slot.bodyweightProfile?.allowExternalLoad) return 'Lest (kg)';
@@ -6350,7 +6423,7 @@ class App {
             ...(sourceMatchesExercise && Array.isArray(sourceSlot?.secondaryMuscles) ? sourceSlot.secondaryMuscles : [])
         ].filter(Boolean))).filter(muscleId => !primaryMuscles.includes(muscleId));
         const sourceType = sourceMatchesExercise ? sourceSlot?.type : null;
-        const sourceTrackingMode = sourceMatchesExercise ? sourceSlot?.trackingMode : null;
+        const sourceTrackingMode = sourceMatchesExercise && sourceSlot ? this.getTrackingMode(sourceSlot) : null;
         const sourceInstructions = sourceMatchesExercise ? sourceSlot?.instructions : null;
 
         return {
@@ -6360,7 +6433,7 @@ class App {
             primaryMuscles,
             secondaryMuscles,
             type: (isSlotObject ? sourceSlot?.type : definition?.type) || definition?.type || sourceType || 'compound',
-            trackingMode: (isSlotObject ? sourceSlot?.trackingMode : definition?.trackingMode)
+            trackingMode: (isSlotObject ? this.getTrackingMode(sourceSlot) : definition?.trackingMode)
                 || definition?.trackingMode
                 || sourceTrackingMode
                 || this.getTrackingMode(exerciseName),
@@ -7287,6 +7360,17 @@ class App {
             || 'strength';
 
         if (typeof slotOrExercise === 'object') {
+            const storedMode = slotOrExercise.trackingMode;
+            const userSelectedMode = slotOrExercise.trackingModeSource === 'user';
+
+            // A deliberate choice in the editor is authoritative. Older slots
+            // have no source marker, so trust the exercise definition first;
+            // this also repairs cardio slots previously rewritten to strength
+            // when their progression defaults were normalized.
+            if (userSelectedMode && storedMode) return storedMode;
+            if (inferredTrackingMode !== 'strength') return inferredTrackingMode;
+            if (storedMode) return storedMode;
+
             const usesStrengthProgression =
                 slotOrExercise.progressionMode === 'load' ||
                 slotOrExercise.progressionMode === 'capped_load' ||
@@ -7296,22 +7380,9 @@ class App {
                 slotOrExercise.loadingProfile === 'plate_stack' ||
                 slotOrExercise.loadingProfile === 'bodyweight';
 
-            if (slotOrExercise.trackingMode === 'cardio') {
-                if (usesStrengthProgression || inferredTrackingMode !== 'cardio') {
-                    return 'strength';
-                }
-                return 'cardio';
-            }
-
-            if (slotOrExercise.trackingMode) {
-                return slotOrExercise.trackingMode;
-            }
-
-            // Legacy slots without explicit tracking should stay on the classic
-            // load/reps flow when they already use standard progression settings.
-            if (usesStrengthProgression) {
-                return 'strength';
-            }
+            // Legacy slots with no exercise match and standard progression
+            // settings remain on the load-and-reps flow.
+            if (usesStrengthProgression) return 'strength';
         }
 
         return inferredTrackingMode;
@@ -7321,15 +7392,68 @@ class App {
         return this.getTrackingMode(slotOrExercise) === 'cardio';
     }
 
+    isTimedSlot(slotOrExercise) {
+        const mode = this.getTrackingMode(slotOrExercise);
+        return mode === 'cardio' || mode === 'timed';
+    }
+
+    getCardioMetricConfig(slotOrExercise, metricOverride = null) {
+        const metric = metricOverride || (typeof slotOrExercise === 'object'
+            ? (slotOrExercise.cardioMetric || this.findExerciseLibraryEntry(this.getSlotExerciseName(slotOrExercise))?.cardioMetric || 'level')
+            : (this.findExerciseLibraryEntry(slotOrExercise)?.cardioMetric || 'level'));
+        const configs = {
+            speed: { label: 'Vitesse', unit: 'km/h', step: '0.1', inputMode: 'decimal' },
+            resistance: { label: 'Résistance', unit: 'niveau', step: '1', inputMode: 'numeric' },
+            level: { label: 'Niveau', unit: '', step: '1', inputMode: 'numeric' },
+            power: { label: 'Puissance', unit: 'W', step: '1', inputMode: 'decimal' },
+            cadence: { label: 'Cadence', unit: 'tr/min', step: '1', inputMode: 'numeric' },
+            'distance-m': { label: 'Distance', unit: 'm', step: '10', inputMode: 'numeric' },
+            load: { label: 'Charge', unit: 'kg', step: '0.5', inputMode: 'decimal' },
+            effort: { label: 'Intensité', unit: '/10', step: '1', inputMode: 'numeric' },
+            none: { label: 'Repère facultatif', unit: '', step: '1', inputMode: 'decimal' }
+        };
+        const normalizedMetric = Object.prototype.hasOwnProperty.call(configs, metric) ? metric : 'level';
+        return { key: normalizedMetric, ...configs[normalizedMetric] };
+    }
+
+    getSetDurationSeconds(set, slotOrExercise = null) {
+        if (!set) return 0;
+        const savedSeconds = Number(set.durationSeconds);
+        if (Number.isFinite(savedSeconds) && savedSeconds > 0) return savedSeconds;
+
+        const value = Number(set.reps || 0);
+        if (!(value > 0)) return 0;
+        if (set.trackingMode === 'cardio') return value * 60;
+        if (set.trackingMode === 'timed') return value;
+
+        const slotMode = this.getTrackingMode(slotOrExercise);
+        if (slotMode === 'cardio') return value * 60;
+        // Pre-fix holds stored a fraction of a minute in `reps`; an explicit
+        // trackingMode on newer entries distinguishes a real 1–4 second hold.
+        if (slotMode === 'timed') return value <= 5 ? value * 60 : value;
+        return 0;
+    }
+
+    formatDurationLabel(seconds, { compact = false } = {}) {
+        const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+        const minutes = Math.floor(safeSeconds / 60);
+        const remainder = safeSeconds % 60;
+        if (!minutes) return `${remainder} s`;
+        if (!remainder) return `${minutes} min`;
+        return compact ? `${minutes}:${String(remainder).padStart(2, '0')}` : `${minutes} min ${remainder} s`;
+    }
+
     getRepFieldLabel(slotOrMeta) {
-        return this.isCardioSlot(slotOrMeta) ? 'Durée (min)' : 'Reps';
+        if (this.isCardioSlot(slotOrMeta)) return 'Durée (min)';
+        if (this.getTrackingMode(slotOrMeta) === 'timed') return 'Durée (s)';
+        return 'Reps';
     }
 
     formatSlotRepRange(slotOrMeta) {
         const slot = typeof slotOrMeta === 'object' ? slotOrMeta : null;
         if (!slot) return '--';
-        return this.isCardioSlot(slot)
-            ? `${this.formatSetInputValue(slot.repsMin, slot)}-${this.formatSetInputValue(slot.repsMax, slot)} min`
+        return this.isTimedSlot(slot)
+            ? `${this.formatSetInputValue(slot.repsMin, slot)}-${this.formatSetInputValue(slot.repsMax, slot)} ${this.isCardioSlot(slot) ? 'min' : 's'}`
             : `${slot.repsMin}-${slot.repsMax}`;
     }
 
@@ -7358,15 +7482,15 @@ class App {
 
         return [
             this.formatSlotSetsLabel(slot),
-            this.isCardioSlot(slot) ? this.formatSlotRepRange(slot) : `${this.formatSlotRepRange(slot)} reps`,
+            this.isTimedSlot(slot) ? this.formatSlotRepRange(slot) : `${this.formatSlotRepRange(slot)} reps`,
             this.formatSlotRestLabel(slot),
-            this.isCardioSlot(slot) ? 'Cardio' : `RIR ${slot.rir}`
+            this.isCardioSlot(slot) ? 'Cardio' : (this.getTrackingMode(slot) === 'timed' ? 'Chronométré' : `RIR ${slot.rir}`)
         ].filter(Boolean);
     }
 
     formatRepTargetValue(value, slotOrMeta) {
-        return this.isCardioSlot(slotOrMeta)
-            ? `${this.formatSetInputValue(value, slotOrMeta)} min`
+        return this.isTimedSlot(slotOrMeta)
+            ? `${this.formatSetInputValue(value, slotOrMeta)} ${this.isCardioSlot(slotOrMeta) ? 'min' : 's'}`
             : `${value}`;
     }
 
@@ -7374,11 +7498,13 @@ class App {
         const numericValue = Number(value);
         if (!Number.isFinite(numericValue) || numericValue <= 0) return '';
 
-        if (!this.isCardioSlot(slotOrMeta)) {
+        if (!this.isTimedSlot(slotOrMeta)) {
             return `${Math.round(numericValue)}`;
         }
 
-        const rounded = Math.round(numericValue * 10) / 10;
+        const rounded = this.isCardioSlot(slotOrMeta)
+            ? Math.round(numericValue * 10) / 10
+            : Math.round(numericValue);
         return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
     }
 
@@ -7395,30 +7521,53 @@ class App {
 
     getTrackingModeFieldConfig(trackingMode = 'strength') {
         const isCardio = trackingMode === 'cardio';
+        const isTimed = trackingMode === 'timed';
 
         return {
-            repMinLabel: isCardio ? 'Durée min (min)' : 'Reps min',
-            repMaxLabel: isCardio ? 'Durée max (min)' : 'Reps max',
+            repMinLabel: isCardio ? 'Durée min (min)' : (isTimed ? 'Durée min (s)' : 'Reps min'),
+            repMaxLabel: isCardio ? 'Durée max (min)' : (isTimed ? 'Durée max (s)' : 'Reps max'),
             restLabel: isCardio ? 'Repos entre blocs (s)' : 'Repos (secondes)',
-            rirLabel: isCardio ? 'Marge / RIR' : 'RIR',
+            rirLabel: isTimed ? 'Intensité' : 'RIR',
             helperText: isCardio
-                ? 'Pour ce format, la charge sert à noter un niveau, une vitesse ou une résistance.'
-                : '',
+                ? 'Note une durée et un repère simple : vitesse, résistance, puissance ou niveau.'
+                : (isTimed ? 'Définis le temps de chaque série en secondes. Le chrono peut le mesurer pour toi.' : ''),
             repsStep: isCardio ? '0.1' : '1',
             repsInputMode: isCardio ? 'decimal' : 'numeric',
-            repsMinValue: isCardio ? '0.1' : '1'
+            repsMinValue: isCardio ? '0.1' : '1',
+            repsMaxValue: isCardio ? '300' : (isTimed ? '3600' : '100')
         };
+    }
+
+    getCardioMetricOptions() {
+        return [
+            ['speed', 'Vitesse (km/h)'],
+            ['resistance', 'Résistance'],
+            ['level', 'Niveau'],
+            ['power', 'Puissance (W)'],
+            ['cadence', 'Cadence (tr/min)'],
+            ['distance-m', 'Distance (m)'],
+            ['load', 'Charge (kg)'],
+            ['effort', 'Intensité (/10)'],
+            ['none', 'Aucun repère']
+        ];
     }
 
     formatSetResult(set, slotOrExercise = null) {
         if (!set) return '--';
 
-        if (this.isCardioSlot(slotOrExercise)) {
-            const duration = this.formatSetInputValue(set.reps, slotOrExercise) || '0';
-            const effortValue = Number(set.weight || 0);
-            return effortValue > 0
-                ? `${duration} min · niveau ${effortValue}`
-                : `${duration} min`;
+        if (this.isTimedSlot(slotOrExercise)) {
+            const duration = this.getSetDurationSeconds(set, slotOrExercise);
+            const durationText = this.formatDurationLabel(duration);
+            if (this.isCardioSlot(slotOrExercise)) {
+                const metric = this.getCardioMetricConfig(slotOrExercise, set.cardioMetric);
+                const value = Number(set.cardioMetricValue ?? set.weight ?? 0);
+                const metricText = value > 0
+                    ? `${metric.label.toLowerCase()} ${this.formatOneDecimal(value)}${metric.unit ? ` ${metric.unit}` : ''}`
+                    : '';
+                return [durationText, metricText].filter(Boolean).join(' · ');
+            }
+            const load = Number(set.weight || 0);
+            return load > 0 ? `${durationText} · ${load} kg` : durationText;
         }
 
         return `${this.formatSetWeight(set.weight, slotOrExercise)} × ${set.reps}`;
@@ -7459,6 +7608,27 @@ class App {
             const needle = this.normalizeExerciseText(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             return needle && new RegExp(`(^|[^a-z0-9])${needle}($|[^a-z0-9])`).test(normalizedName);
         });
+        const inferCardioMetric = () => {
+            if (hasAnyWord(['treadmill', 'assault runner', 'tapis'])) return 'speed';
+            if (hasAnyWord(['stair', 'stairmaster', 'stepmill', 'step mill', 'stepper', 'escalier'])) return 'level';
+            if (hasAnyWord(['rameur', 'rowing', 'rower', 'ski erg', 'skierg', 'air bike', 'airbike', 'assault bike', 'assaultbike', 'ergometer'])) return 'power';
+            if (hasAnyWord(['natation', 'swimming', 'swim'])) return 'distance-m';
+            if (hasAnyWord(['jump rope', 'skip rope', 'corde à sauter'])) return 'cadence';
+            if (hasAnyWord(['battle rope', 'rope waves'])) return 'cadence';
+            if (hasAnyWord(['cross trainer', 'crosstrainer', 'elliptique', 'elliptical', 'stationary bike', 'stationarybike', 'exercise bike', 'exercisebike', 'cycling', 'bicycle', 'bike', 'velo', 'vélo'])) return 'resistance';
+            if (hasAnyWord(['course', 'running', 'jogging', 'hiking', 'marche', 'walking'])) return 'speed';
+            return 'resistance';
+        };
+        const loadedCarryKeywords = [
+            'farmer carry', 'farmers carry', 'farmer walk', 'farmers walk', 'suitcase carry',
+            'loaded carry', 'yoke carry', 'sandbag carry', 'overhead carry', 'overhead walk',
+            'waiter carry', 'waiter walk', 'front rack carry', 'marche du fermier'
+        ];
+        const isLoadedCarry = hasAnyWord(loadedCarryKeywords);
+        const sledKeywords = ['prowler push', 'sled push', 'sled drag'];
+        const isSledInterval = hasAnyWord(sledKeywords);
+        const weightedHold = hasAnyWord(['weighted plank', 'weighted hold', 'loaded plank', 'weighted front plank', 'weighted side plank', 'gainage lesté', 'gainage lestee']);
+        const isLoadedTimedExercise = isLoadedCarry || isSledInterval || weightedHold;
         const isolationKeywords = [
             'curl', 'extension', 'elevation', 'élévation', 'oiseau',
             'kickback', 'leg curl', 'leg extension', 'pec deck', 'fly', 'ecarte', 'écarté',
@@ -7467,24 +7637,77 @@ class App {
             'face pull', 'woodchopper', 'side crunch', 'rotation externe',
             'external rotation', 'bayesian'
         ];
-        const cardioTemplate = allowCardioInference && hasAnyWord([
-            'tapis', 'course', 'marche inclinée', 'marche inclinee', 'rameur', 'velo', 'vélo', 'bike', 'elliptique',
-            'stair', 'escalier', 'ski erg', 'skierg', 'air bike', 'assault bike', 'cardio'
+        const timedTemplate = hasAnyWord([
+            'gainage', 'plank', 'side plank', 'wall sit', 'wall squat hold', 'wall squat', 'chaise contre un mur', 'chaise au mur',
+            'dead hang', 'passive hang', 'bar hang', 'active hang', 'isometric hold', 'static hold',
+            'hollow hold', 'hollow body hold', 'squat hold', 'split squat hold', 'horse stance', 'l sit', 'l-sit', 'v sit hold', 'chair pose',
+            'glute bridge hold', 'pont fessier tenu', 'isometric squat',
+            ...loadedCarryKeywords,
+            ...sledKeywords
+        ]) && !hasAnyWord([
+            'plank row', 'renegade row', 'plank tap', 'shoulder tap', 'plank with twist', 'front plank with twist',
+            'plank jack', 'plank reach', 'side plank hip adduction', 'side plank hip abduction',
+            'side plank with rear fly', 'push-up to side plank', 'push up to side plank', 'pushup to side plank',
+            'plank to push up', 'plank to pushup', 'plank up down', 'gainage rotation', 'gainage tap',
+            'gainage adduction', 'gainage oiseau', 'pompe gainage', 'fente', 'lunge'
         ])
+            ? {
+                category: hasAnyWord(['gainage', 'plank', 'side plank', 'wall sit', 'chaise contre un mur']) ? 'abdominaux' : 'fullbody',
+                equipment: isLoadedTimedExercise
+                    ? (isSledInterval ? 'traîneau' : (weightedHold ? 'lesté' : 'haltères'))
+                    : 'poids du corps',
+                trackingMode: 'timed',
+                timedLoad: isLoadedTimedExercise ? 'weight' : null,
+                progressionMode: isLoadedTimedExercise ? 'load' : 'bodyweight',
+                loadingProfile: isLoadedTimedExercise ? null : 'bodyweight',
+                sets: isSledInterval ? 6 : 3,
+                repsMin: isSledInterval ? 15 : 30,
+                repsMax: isSledInterval ? 30 : 60,
+                rest: isSledInterval ? 60 : 45,
+                rir: 2,
+                instructions: isSledInterval
+                    ? 'Pousse ou tire le traîneau sur une courte distance, puis récupère avant le passage suivant.'
+                    : (isLoadedCarry
+                        ? 'Marche avec la charge pendant le temps prévu, buste droit et prise ferme.'
+                        : (weightedHold
+                            ? 'Tiens la position pendant le temps prévu avec la charge indiquée, sans perdre une posture propre.'
+                            : 'Tiens la position pendant le temps prévu, sans perdre une posture propre.')),
+                pool: [exerciseName],
+                aliases: []
+            }
+            : null;
+        const cardioTemplate = allowCardioInference && hasAnyWord([
+            'tapis', 'treadmill', 'assault runner', 'course', 'running', 'jogging', 'hiking', 'marche', 'walking', 'marche inclinée', 'marche inclinee',
+            'rameur', 'rowing', 'rower', 'velo', 'vélo', 'bike', 'bicycle', 'cycling', 'cycle ergometer', 'stationary bike', 'stationarybike', 'exercise bike', 'exercisebike',
+            'elliptique', 'elliptical', 'cross trainer', 'crosstrainer', 'stair', 'stairmaster', 'stepmill', 'step mill', 'stepper', 'escalier', 'ski erg', 'skierg',
+            'air bike', 'airbike', 'assault bike', 'assaultbike', 'jump rope', 'skip rope', 'battle rope', 'rope waves',
+            'cardio', 'natation', 'swimming', 'swim', 'ergometer'
+        ])
+            && !hasAnyWord(['walking lunge', 'walking high knees lunge', 'fente marchee', 'fentes marchees'])
             ? {
                 category: 'cardio',
                 equipment: 'cardio',
                 trackingMode: 'cardio',
+                cardioMetric: inferCardioMetric(),
                 sets: 1,
                 repsMin: 10,
                 repsMax: 30,
                 rest: 0,
                 rir: 3,
-                instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau, vitesse ou résistance si tu veux la conserver.',
+                instructions: 'Note la durée et le repère simple affiché par la machine : vitesse, résistance, puissance ou niveau.',
                 pool: [exerciseName],
                 aliases: []
             }
             : null;
+
+        if (timedTemplate) {
+            return {
+                name: exerciseName,
+                type: 'compound',
+                muscleGroup: '',
+                ...timedTemplate
+            };
+        }
 
         if (cardioTemplate) {
             return {
@@ -7676,7 +7899,11 @@ class App {
             exerciseStableId: this.getStableExerciseId(exercise),
             exerciseFamilyId: this.getExerciseFamilyId(exercise),
             pool,
-            trackingMode: exercise.trackingMode || 'strength'
+            trackingMode: exercise.trackingMode || 'strength',
+            trackingModeSource: exercise.trackingModeSource || 'definition',
+            durationUnit: exercise.durationUnit || null,
+            cardioMetric: exercise.cardioMetric || null,
+            timedLoad: exercise.timedLoad || null
         };
 
         if (exercise.progressionMode) {
@@ -7697,7 +7924,9 @@ class App {
 
         return {
             name: activeExercise,
-            category: this.isCardioSlot(slot) ? 'cardio' : 'fullbody',
+            category: this.isCardioSlot(slot)
+                ? 'cardio'
+                : this.getLibraryCategoryForMuscle(slot?.muscleGroup || ''),
             muscleGroup: slot?.muscleGroup || '',
             type: slot?.type || 'compound',
             equipment: this.isCardioSlot(slot) ? 'cardio' : '',
@@ -7707,7 +7936,9 @@ class App {
             rest: slot?.rest ?? 90,
             rir: slot?.rir ?? 2,
             instructions: slot?.instructions || '',
-            trackingMode: slot?.trackingMode || this.getTrackingMode(activeExercise),
+            trackingMode: this.getTrackingMode(slot || activeExercise),
+            cardioMetric: slot?.cardioMetric || null,
+            timedLoad: slot?.timedLoad || null,
             progressionMode: slot?.progressionMode || null,
             loadingProfile: slot?.loadingProfile || null,
             stableId: slot?.exerciseStableId || null,
@@ -7848,7 +8079,7 @@ class App {
     }
 
     async renderSlots() {
-        const slots = await db.getSlotsBySession(this.currentSession.id);
+        const slots = await this.normalizeStoredSlots(await db.getSlotsBySession(this.currentSession.id));
         const container = document.getElementById('slots-list');
         container.innerHTML = '';
         const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
@@ -7916,6 +8147,7 @@ class App {
     
     // ===== Performance Status (RPE-aware) =====
     async getExerciseStatus(slot, failureThreshold = null) {
+        if (this.isTimedSlot(slot)) return { class: '', title: 'Suivi chronométré' };
         const exerciseId = slot.activeExercise || slot.name;
         const resolvedFailureThreshold = failureThreshold ?? ((await db.getSetting('failureCount')) ?? 3);
         
@@ -8096,7 +8328,7 @@ class App {
             target: Math.max(1, this.getActiveTargetSets(slot, liveSlotData) || Number(slot.sets) || 1)
         };
         const progressPips = slotProgress.done > 0 && !isCompleted
-            ? `<div class="slot-progress-pips" aria-label="${slotProgress.done} séries sur ${slotProgress.target}">
+            ? `<div class="slot-progress-pips" aria-label="${slotProgress.done} ${this.isCardioSlot(slot) ? 'blocs' : 'séries'} sur ${slotProgress.target}">
                     ${Array.from({ length: slotProgress.target }, (_, index) => `<span class="${index < slotProgress.done ? 'is-done' : ''}"></span>`).join('')}
                </div>`
             : '';
@@ -8273,8 +8505,23 @@ class App {
         const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
         if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
         this.closeExerciseInsightsSheet();
-        this.currentSlot = await this.getSlotRecord(slotId);
-        this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
+        const directStoredSlot = await db.get('slots', slotId);
+        const numericStoredId = Number(slotId);
+        const storedSlot = directStoredSlot || (Number.isFinite(numericStoredId)
+            ? await db.get('slots', numericStoredId)
+            : null);
+        this.currentSlot = this.normalizeSlotProgressionConfig(storedSlot);
+        if (this.currentSlot && storedSlot && (
+            storedSlot.trackingMode !== this.currentSlot.trackingMode
+            || storedSlot.durationUnit !== this.currentSlot.durationUnit
+            || storedSlot.cardioMetric !== this.currentSlot.cardioMetric
+            || storedSlot.sets !== this.currentSlot.sets
+            || storedSlot.repsMin !== this.currentSlot.repsMin
+            || storedSlot.repsMax !== this.currentSlot.repsMax
+            || storedSlot.rest !== this.currentSlot.rest
+        )) {
+            await db.put('slots', this.currentSlot);
+        }
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
         this.isUnilateralMode = false; // Reset unilateral mode
@@ -8307,7 +8554,7 @@ class App {
         
         // Check if this is a unilateral exercise
         const exerciseName = this.currentSlot.activeExercise || this.currentSlot.name;
-        const isCardioExercise = this.isCardioSlot(this.currentSlot);
+        const isTimedExercise = this.isTimedSlot(this.currentSlot);
         this.isUnilateralMode = this.isUnilateralSlot(this.currentSlot);
 
         // Initialize slot data in current workout if needed
@@ -8334,8 +8581,16 @@ class App {
             this.getDisplayedSetCount(this.currentSlot, this.currentCoachingAdvice, slotData);
         
         document.getElementById('exercise-reps').textContent = this.formatSlotRepRange(this.currentSlot);
-        document.getElementById('exercise-rest').textContent = this.currentSlot.rest > 0 ? `${this.currentSlot.rest}s` : '--';
-        document.getElementById('exercise-rir').textContent = isCardioExercise ? '--' : this.currentSlot.rir;
+        document.getElementById('exercise-rest').textContent = this.isCardioSlot(this.currentSlot)
+            ? 'Continu'
+            : (this.currentSlot.rest > 0 ? `${this.currentSlot.rest}s` : '—');
+        document.getElementById('exercise-rir').textContent = isTimedExercise ? '--' : this.currentSlot.rir;
+        const setLabel = document.getElementById('exercise-sets-label');
+        const repsLabel = document.getElementById('exercise-reps-label');
+        const rirLabel = document.getElementById('exercise-rir-label');
+        if (setLabel) setLabel.textContent = this.isCardioSlot(this.currentSlot) ? 'Blocs' : 'Séries';
+        if (repsLabel) repsLabel.textContent = isTimedExercise ? 'Durée' : 'Reps';
+        if (rirLabel) rirLabel.closest('.info-item')?.classList.toggle('is-hidden', isTimedExercise);
         this.renderExerciseChallengeCard([this.currentSlot]);
         
         // Update instructions for unilateral exercises
@@ -8422,7 +8677,7 @@ class App {
             await this.loadLogbook();
             if (isStale()) return;
 
-            if (isCardioExercise) {
+            if (isTimedExercise) {
                 this.currentCoachingAdvice = null;
                 document.getElementById('coaching-advice').style.display = 'none';
                 document.getElementById('exercise-progress-card').style.display = 'none';
@@ -8707,6 +8962,10 @@ class App {
         this.supersetSlot = this.normalizeSlotProgressionConfig(this.supersetSlot);
         if (!this.supersetSlot) {
             // Fallback to regular exercise
+            return this.openExercise(slotId);
+        }
+        if (this.isTimedSlot(this.currentSlot) || this.isTimedSlot(this.supersetSlot)) {
+            this.showCoachToast('Les blocs cardio ou chronométrés doivent être lancés seuls pour conserver leur chrono.', 'cold', '⏱️');
             return this.openExercise(slotId);
         }
         
@@ -10327,7 +10586,7 @@ class App {
                 ...this.buildExerciseHistoryMetrics(workout.sets, this.supersetSlot)
             };
         });
-        
+
         // Reference for prefill/comparisons: never a deload session.
         this.lastSupersetHistory = this.pickReferenceHistory(
             workoutIds.map(wId => workoutGroups[wId]),
@@ -10940,9 +11199,9 @@ class App {
 
     buildExerciseHistoryMetrics(sets = [], slot = this.currentSlot) {
         const safeSets = Array.isArray(sets) ? sets : [];
-        const progressionSets = this.getProgressionEligibleSets(safeSets);
-        const isCardio = this.isCardioSlot(slot);
-        const bestE1RM = !isCardio
+        const isTimed = this.isTimedSlot(slot);
+        const progressionSets = isTimed ? [] : this.getProgressionEligibleSets(safeSets);
+        const bestE1RM = !isTimed
             ? Math.max(
                 ...progressionSets.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)),
                 0
@@ -10984,7 +11243,9 @@ class App {
     buildExerciseHistorySession(workout = {}, slot = this.currentSlot) {
         const sets = Array.isArray(workout?.sets) ? workout.sets : [];
         sets.sort((a, b) => Number(a?.setNumber || 0) - Number(b?.setNumber || 0));
-        const totalReps = sets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const totalReps = this.isTimedSlot(slot)
+            ? sets.reduce((sum, set) => sum + this.getSetDurationSeconds(set, slot), 0)
+            : sets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
         const maxWeight = Math.max(...sets.map(set => Number(set?.weight || 0)), 0);
 
         return {
@@ -11046,7 +11307,7 @@ class App {
         let html = '';
         
         const slot = this.currentSlot || {};
-        const isCardio = this.isCardioSlot(slot);
+        const isTimed = this.isTimedSlot(slot);
 
         histories.forEach((history, idx) => {
             const dateText = this.formatLogbookDate(history.date);
@@ -11087,7 +11348,21 @@ class App {
                     || previous?.sets?.[setIndex];
                 let deltaHtml = '';
                 // A deload is a planned lighter session, not a regression: no red deltas.
-                if (!isCardio && prevSet && !history.isDeload) {
+                if (isTimed && prevSet && !history.isDeload) {
+                    const secondsDiff = this.getSetDurationSeconds(set, slot) - this.getSetDurationSeconds(prevSet, slot);
+                    const metric = this.getCardioMetricConfig(slot);
+                    const metricDiff = Math.round((Number(set.cardioMetricValue ?? set.weight ?? 0) - Number(prevSet.cardioMetricValue ?? prevSet.weight ?? 0)) * 10) / 10;
+                    if (secondsDiff !== 0) {
+                        const tone = secondsDiff > 0 ? 'is-up' : 'is-down';
+                        const value = this.formatDurationLabel(Math.abs(secondsDiff));
+                        deltaHtml = `<span class="logbook-set-delta ${tone}">${secondsDiff > 0 ? '+' : '−'}${value}</span>`;
+                    } else if (metricDiff !== 0 && this.isCardioSlot(slot)) {
+                        const tone = metricDiff > 0 ? 'is-up' : 'is-down';
+                        deltaHtml = `<span class="logbook-set-delta ${tone}">${this.formatLogbookTrendDelta(metricDiff, metric.unit ? ` ${metric.unit}` : '')}</span>`;
+                    } else {
+                        deltaHtml = '<span class="logbook-set-delta is-same">=</span>';
+                    }
+                } else if (!isTimed && prevSet && !history.isDeload) {
                     const weightDiff = Math.round((Number(set.weight || 0) - Number(prevSet.weight || 0)) * 10) / 10;
                     const repsDiff = Number(set.reps || 0) - Number(prevSet.reps || 0);
                     if (weightDiff !== 0) {
@@ -11110,19 +11385,20 @@ class App {
             });
             html += '</div>';
 
-            const totalRepsLabel = isCardio ? 'Total min' : 'Reps';
-            const totalRepsValue = isCardio
-                ? (this.formatSetInputValue(history.totalReps, slot) || '0')
-                : history.totalReps;
-            const maxWeightLabel = isCardio ? 'Niveau max' : 'Max';
-            const maxWeightValue = isCardio
-                ? (history.maxWeight > 0 ? history.maxWeight : '—')
+            const totalRepsLabel = isTimed ? 'Temps total' : 'Reps';
+            const totalRepsValue = isTimed ? this.formatDurationLabel(history.totalReps) : history.totalReps;
+            const cardioMetric = this.getCardioMetricConfig(slot);
+            const maxWeightLabel = this.isCardioSlot(slot)
+                ? `${cardioMetric.label} max`
+                : (this.getTrackingMode(slot) === 'timed' ? 'Charge max' : 'Max');
+            const maxWeightValue = isTimed
+                ? (history.maxWeight > 0 ? this.formatSetWeight(history.maxWeight, slot) : '—')
                 : (this.isPureBodyweightSlot(slot) && history.maxWeight === 0 ? 'PDC' : `${history.maxWeight}<small>kg</small>`);
             const metrics = [
                 { label: totalRepsLabel, value: totalRepsValue },
                 { label: maxWeightLabel, value: maxWeightValue }
             ];
-            if (!isCardio && history.bestE1RM > 0) {
+            if (!isTimed && history.bestE1RM > 0) {
                 metrics.push({ label: 'e1RM', value: `${this.normalizeLoadPrecision(history.bestE1RM)}<small>kg</small>`, derived: true });
             }
             if (history.totalVolume > 0) {
@@ -12093,7 +12369,7 @@ class App {
     }
 
     getLivePerformanceAnalysis(slot = this.currentSlot, slotData = null) {
-        if (!slot || !slotData || this.isReviewMode || this.isSupersetMode || this.isCardioSlot(slot)) {
+        if (!slot || !slotData || this.isReviewMode || this.isSupersetMode || this.isTimedSlot(slot)) {
             return null;
         }
 
@@ -12307,7 +12583,7 @@ class App {
         if (!card) return;
 
         const isUnilateral = Boolean(slot && (this.isUnilateralMode || this.isUnilateralSlot(slot)));
-        if (!slot || !slotData || this.isReviewMode || this.isSupersetMode || this.isCardioSlot(slot)) {
+        if (!slot || !slotData || this.isReviewMode || this.isSupersetMode || this.isTimedSlot(slot)) {
             card.hidden = true;
             return;
         }
@@ -12763,7 +13039,7 @@ class App {
                     previousSet: lastSets[i] || null
                 }) : `
                 <div class="series-header">
-                    <span class="series-number">Série ${i + 1}</span>
+                    <span class="series-number">${this.isCardioSlot(this.currentSlot) ? 'Bloc' : 'Série'} ${i + 1}</span>
                 </div>
                 `}
                 ${seriesChallengeReminder ? `
@@ -12783,6 +13059,7 @@ class App {
                                 <input type="number" inputmode="decimal" class="input-weight" 
                                        value="${displayWeight}" 
                                        placeholder="${weightPlaceholder}"
+                                       step="${this.isCardioSlot(this.currentSlot) ? this.getCardioMetricConfig(this.currentSlot).step : '0.5'}"
                                        data-set-index="${i}">
                             `}
                         </div>
@@ -12802,7 +13079,7 @@ class App {
                         </div>
                     ` : ''}
                     <div class="series-actions">
-                        ${this.isCardioSlot(this.currentSlot) && !isEditing ? `
+                        ${this.isTimedSlot(this.currentSlot) && !isEditing ? `
                             <button class="btn btn-secondary btn-cardio-timer" data-set-index="${i}">
                                 ${displayReps ? 'Relancer le timer' : `Lancer ${this.formatRepTargetValue(targetReps, this.currentSlot)}`}
                             </button>
@@ -12811,7 +13088,7 @@ class App {
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <polyline points="20 6 9 17 4 12"/>
                             </svg>
-                            ${isEditing ? 'Sauvegarder' : (this.isCardioSlot(this.currentSlot) ? 'Valider le bloc' : 'Série terminée')}
+                            ${isEditing ? 'Sauvegarder' : (this.isCardioSlot(this.currentSlot) ? 'Valider le bloc' : (this.getTrackingMode(this.currentSlot) === 'timed' ? 'Valider la durée' : 'Série terminée'))}
                         </button>
                     </div>
                 ` : ''}
@@ -13367,6 +13644,8 @@ class App {
         
         const weight = parseFloat(weightInput.value) || 0;
         const reps = this.parseSetInputValue(repsInput.value, this.currentSlot);
+        const trackingMode = this.getTrackingMode(this.currentSlot);
+        const isTimed = this.isTimedSlot(this.currentSlot);
 
         if (reps === 0) {
             repsInput.focus();
@@ -13393,6 +13672,14 @@ class App {
         slotData.sets[setIndex] = {
             weight,
             reps,
+            trackingMode,
+            ...(isTimed ? {
+                durationSeconds: Math.round(this.isCardioSlot(this.currentSlot) ? reps * 60 : reps),
+                ...(this.isCardioSlot(this.currentSlot) ? {
+                    cardioMetric: this.getCardioMetricConfig(this.currentSlot).key,
+                    cardioMetricValue: weight
+                } : {})
+            } : {}),
             targetReps: advisedTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
             completed: true,
             exerciseName: this.currentSlot.activeExercise || this.currentSlot.name,
@@ -13421,7 +13708,7 @@ class App {
         await db.setSetting('xp', xp);
         
         // Hot/Cold detection after first set
-        if (setIndex === 0 && this.avgPerformance) {
+        if (!isTimed && setIndex === 0 && this.avgPerformance) {
             const currentSetData = { weight, reps };
             const dayStatus = this.getDayStatus(currentSetData, this.avgPerformance);
             this.currentDayStatus = dayStatus;
@@ -13434,7 +13721,7 @@ class App {
         let nextRestSeconds = Number(this.currentSlot.rest) || 0;
         let recommendedRestSeconds = null;
 
-        if (!isExerciseFinished) {
+        if (!isExerciseFinished && !isTimed) {
             await this.refreshWorkoutCoachingState();
             this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
             liveAnalysis = this.getLivePerformanceAnalysis(this.currentSlot, slotData);
@@ -13445,7 +13732,7 @@ class App {
 
         this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderSeries();
-        void this.flushJustCompletedFeedback([{
+        void this.flushJustCompletedFeedback(isTimed ? [] : [{
             set: slotData.sets[setIndex],
             exerciseId: this.getBaseExerciseHistoryName?.(this.currentSlot.activeExercise || this.currentSlot.name) || (this.currentSlot.activeExercise || this.currentSlot.name)
         }]);
@@ -13500,6 +13787,7 @@ class App {
     }
 
     async detectLivePersonalRecord(setData, exerciseId) {
+        if (this.isTimedSlot(setData)) return false;
         const weight = Number(setData?.weight || 0);
         const reps = Number(setData?.reps || 0);
         if (weight <= 0 || reps <= 0 || !exerciseId) return false;
@@ -13609,13 +13897,25 @@ class App {
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         slotData.sets[setIndex].weight = weight;
         slotData.sets[setIndex].reps = reps;
+        slotData.sets[setIndex].trackingMode = this.getTrackingMode(this.currentSlot);
+        if (this.isTimedSlot(this.currentSlot)) {
+            slotData.sets[setIndex].durationSeconds = Math.round(this.isCardioSlot(this.currentSlot) ? reps * 60 : reps);
+            if (this.isCardioSlot(this.currentSlot)) {
+                slotData.sets[setIndex].cardioMetric = this.getCardioMetricConfig(this.currentSlot).key;
+                slotData.sets[setIndex].cardioMetricValue = weight;
+            }
+        }
         
         await db.saveCurrentWorkout(this.currentWorkout);
         
         this.editingSetIndex = null;
-        await this.refreshWorkoutCoachingState();
-        this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
-        await this.showCoachingAdvice();
+        if (!this.isTimedSlot(this.currentSlot)) {
+            await this.refreshWorkoutCoachingState();
+            this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
+            await this.showCoachingAdvice();
+        } else {
+            this.currentCoachingAdvice = null;
+        }
         this.renderExerciseChallengeCard([this.currentSlot]);
         this.renderSeries();
     }
@@ -13927,7 +14227,7 @@ class App {
     }
 
     describeSetVersusHistory(set, previousSet, slot) {
-        if (!set || !previousSet || this.isCardioSlot(slot)) return null;
+        if (!set || !previousSet || this.isTimedSlot(slot)) return null;
         const weightDelta = Math.round(((Number(set.weight) || 0) - (Number(previousSet.weight) || 0)) * 10) / 10;
         const repsDelta = (Number(set.reps) || 0) - (Number(previousSet.reps) || 0);
         if (this.currentWorkout?.isDeload && (weightDelta < 0 || repsDelta < 0)) {
@@ -14125,7 +14425,7 @@ class App {
             title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice',
             metrics: [
                 { label: loadLabel, value: loadValue },
-                { label: this.isCardioSlot(this.currentSlot) ? 'Durée' : 'Rép', value: this.formatRepTargetValue(targetReps, this.currentSlot) }
+                { label: this.isTimedSlot(this.currentSlot) ? 'Durée' : 'Rép', value: this.formatRepTargetValue(targetReps, this.currentSlot) }
             ],
             note: this.restTimerReason || ''
         };
@@ -14208,15 +14508,20 @@ class App {
         const targetSets = this.getActiveTargetSets(this.currentSlot, slotData);
         const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
         const weightValue = parseFloat(weightInput?.value) || 0;
+        const targetDurationValue = this.isCardioSlot(this.currentSlot)
+            ? this.cardioTimerState.targetSeconds / 60
+            : this.cardioTimerState.targetSeconds;
 
         return {
             progress: `${Math.min(setIndex + 1, targetSets)}/${targetSets}`,
-            title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice cardio',
+            title: this.currentSlot.activeExercise || this.currentSlot.name || 'Exercice chronométré',
             metrics: [
-                { label: 'Cible', value: this.formatRepTargetValue(this.cardioTimerState.targetMinutes, this.currentSlot) },
-                { label: this.getLoadFieldLabel(this.currentSlot), value: this.formatSetWeight(weightValue, this.currentSlot) }
+                { label: 'Cible', value: this.formatRepTargetValue(targetDurationValue, this.currentSlot) },
+                ...(!this.isPureBodyweightSlot(this.currentSlot) || this.isCardioSlot(this.currentSlot)
+                    ? [{ label: this.getLoadFieldLabel(this.currentSlot), value: this.formatSetWeight(weightValue, this.currentSlot) }]
+                    : [])
             ],
-            note: 'Le chrono remplit la durée, puis tu valides manuellement le bloc.'
+            note: `Le chrono remplit la durée, puis tu valides manuellement ${this.isCardioSlot(this.currentSlot) ? 'le bloc' : 'la série'}.`
         };
     }
 
@@ -14706,25 +15011,33 @@ class App {
     }
 
     async prefillCardioTimerResult(setIndex, durationMinutes) {
-        const roundedMinutes = Math.max(0.1, Math.round(Number(durationMinutes || 0) * 10) / 10);
+        const durationSeconds = Math.max(1, Math.round(Number(durationMinutes || 0) * 60));
+        const durationValue = this.isCardioSlot(this.currentSlot)
+            ? Math.max(0.1, Math.round((durationSeconds / 60) * 10) / 10)
+            : durationSeconds;
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         if (!repsInput || !this.currentWorkout?.slots?.[this.currentSlot?.id]) return;
 
-        repsInput.value = this.formatSetInputValue(roundedMinutes, this.currentSlot);
+        repsInput.value = this.formatSetInputValue(durationValue, this.currentSlot);
 
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         if (!slotData.sets[setIndex]) {
             slotData.sets[setIndex] = {};
         }
-        slotData.sets[setIndex].reps = roundedMinutes;
+        slotData.sets[setIndex].reps = durationValue;
+        slotData.sets[setIndex].trackingMode = this.getTrackingMode(this.currentSlot);
+        slotData.sets[setIndex].durationSeconds = durationSeconds;
         await db.saveCurrentWorkout(this.currentWorkout);
     }
 
     startCardioSetTimer(setIndex) {
-        if (!this.currentSlot || !this.isCardioSlot(this.currentSlot)) return;
+        if (!this.currentSlot || !this.isTimedSlot(this.currentSlot)) return;
 
-        const targetMinutes = this.getCardioTimerTargetMinutes(setIndex);
-        if (!Number.isFinite(targetMinutes) || targetMinutes <= 0) return;
+        const targetDurationValue = this.getCardioTimerTargetMinutes(setIndex);
+        if (!Number.isFinite(targetDurationValue) || targetDurationValue <= 0) return;
+        const targetSeconds = Math.round(this.isCardioSlot(this.currentSlot)
+            ? targetDurationValue * 60
+            : targetDurationValue);
 
         if (this.restTimer) {
             clearInterval(this.restTimer);
@@ -14735,13 +15048,14 @@ class App {
         this.overlayTimerMode = 'work';
         this.cardioTimerState = {
             setIndex,
-            targetMinutes,
+            targetSeconds,
+            targetMinutes: targetSeconds / 60,
             startedAt: Date.now()
         };
         this.restOverlayReady = false;
         this.restFeedbackCaptured = false;
         this.restTimerReason = '';
-        this.restTimeTotal = Math.round(targetMinutes * 60);
+        this.restTimeTotal = targetSeconds;
         this.restTimeLeft = this.restTimeTotal;
         this.restTimerEndTime = Date.now() + (this.restTimeTotal * 1000);
         this.lastVibrateAt = null;
@@ -14778,14 +15092,13 @@ class App {
         }
 
         const elapsedSeconds = Math.max(0, (Date.now() - this.cardioTimerState.startedAt) / 1000);
-        const targetSeconds = this.restTimeTotal || Math.round(this.cardioTimerState.targetMinutes * 60);
+        const targetSeconds = this.restTimeTotal || this.cardioTimerState.targetSeconds;
         const appliedSeconds = useElapsed
             ? Math.min(elapsedSeconds, targetSeconds)
             : targetSeconds;
-        const appliedMinutes = appliedSeconds / 60;
         const targetSetIndex = this.cardioTimerState.setIndex;
 
-        await this.prefillCardioTimerResult(targetSetIndex, appliedMinutes);
+        await this.prefillCardioTimerResult(targetSetIndex, appliedSeconds / 60);
 
         this.dismissRestOverlay();
         this.renderSeries();
@@ -14793,7 +15106,7 @@ class App {
         const repsInput = document.querySelector(`.input-reps[data-set-index="${targetSetIndex}"]`);
         repsInput?.focus();
         this.showCoachToast(
-            `${this.formatRepTargetValue(appliedMinutes, this.currentSlot)} pré-remplies. Valide maintenant le bloc.`,
+            `${this.formatDurationLabel(appliedSeconds)} préremplies. Valide maintenant ${this.isCardioSlot(this.currentSlot) ? 'le bloc' : 'la série'}.`,
             'hot',
             '⏱️'
         );
@@ -15191,7 +15504,8 @@ class App {
         this.restTimeLeft = Math.max(0, this.restTimeLeft + seconds);
         this.restTimeTotal = Math.max(this.restTimeTotal, this.restTimeLeft);
         if (this.overlayTimerMode === 'work' && this.cardioTimerState) {
-            this.cardioTimerState.targetMinutes = Math.max(0.1, Math.round((this.restTimeTotal / 60) * 10) / 10);
+            this.cardioTimerState.targetSeconds = this.restTimeTotal;
+            this.cardioTimerState.targetMinutes = this.restTimeTotal / 60;
             this.updateRestOverlayContext();
         }
         if (this.overlayTimerMode === 'rest') {
@@ -15219,6 +15533,23 @@ class App {
 
         if (!Array.isArray(slotData.sets)) {
             slotData.sets = [];
+        }
+
+        if (this.isTimedSlot(slot)) {
+            const trackingMode = this.getTrackingMode(slot);
+            slotData.sets.forEach(set => {
+                if (!set || !Number(set.reps || 0)) return;
+                if (!(Number(set.durationSeconds) > 0)) {
+                    set.durationSeconds = Math.round(this.getSetDurationSeconds(set, slot));
+                }
+                set.trackingMode = trackingMode;
+                if (trackingMode === 'cardio') {
+                    set.cardioMetric ||= this.getCardioMetricConfig(slot).key;
+                    if (set.cardioMetricValue == null) set.cardioMetricValue = Number(set.weight || 0);
+                } else {
+                    set.reps = set.durationSeconds;
+                }
+            });
         }
 
         const isUnilateral = this.isUnilateralSlot(slot);
@@ -15286,6 +15617,8 @@ class App {
         const segment = {
             exerciseName: slot.activeExercise || slot.name || 'Exercice',
             trackingMode: this.getTrackingMode(slot),
+            cardioMetric: slot.cardioMetric || null,
+            timedLoad: slot.timedLoad || null,
             type: slot.type || 'compound',
             muscleGroup: descriptor.muscleGroup || slot.muscleGroup || '',
             primaryMuscles: [...(descriptor.primaryMuscles || [])],
@@ -15345,6 +15678,8 @@ class App {
                 activeExercise: segment.exerciseName || slot.activeExercise || slot.name,
                 name: segment.exerciseName || slot.name,
                 trackingMode: segment.trackingMode || slot.trackingMode,
+                cardioMetric: segment.cardioMetric || slot.cardioMetric,
+                timedLoad: segment.timedLoad || slot.timedLoad,
                 type: segment.type || slot.type,
                 muscleGroup: segment.muscleGroup || slot.muscleGroup,
                 secondaryMuscles: segment.secondaryMuscles || slot.secondaryMuscles,
@@ -15384,26 +15719,28 @@ class App {
     buildExerciseSummarySnapshot(slot, completedSets = [], historyWorkouts = []) {
         const safeSets = Array.isArray(completedSets) ? completedSets : [];
         const safeHistory = (Array.isArray(historyWorkouts) ? historyWorkouts : []).filter(workout => !workout?.isDeload);
-        const isCardioExercise = this.isCardioSlot(slot);
-        const totalReps = safeSets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
+        const isTimedExercise = this.isTimedSlot(slot);
+        const totalReps = isTimedExercise
+            ? safeSets.reduce((sum, set) => sum + this.getSetDurationSeconds(set, slot), 0)
+            : safeSets.reduce((sum, set) => sum + Number(set?.reps || 0), 0);
         const maxWeight = safeSets.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0);
         const totalVolume = safeSets.reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0);
-        const progressionSets = this.getProgressionEligibleSets(safeSets);
+        const progressionSets = isTimedExercise ? [] : this.getProgressionEligibleSets(safeSets);
         const bestSet = progressionSets.reduce((best, set) => {
-            if (isCardioExercise) return best;
+            if (isTimedExercise) return best;
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
             const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
             return currentScore > bestScore ? set : best;
         }, null);
         const bestE1RM = bestSet ? this.calculateE1RM(bestSet.weight || 0, bestSet.reps || 0, bestSet.rpe || 8) : 0;
         const previousWorkout = safeHistory[0] || null;
-        const previousBestSet = this.getProgressionEligibleSets(previousWorkout?.sets || []).reduce((best, set) => {
+        const previousBestSet = isTimedExercise ? null : this.getProgressionEligibleSets(previousWorkout?.sets || []).reduce((best, set) => {
             const currentScore = this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8);
             const bestScore = best ? this.calculateE1RM(best.weight || 0, best.reps || 0, best.rpe || 8) : -Infinity;
             return currentScore > bestScore ? set : best;
         }, null) || null;
         const previousBestE1RM = previousBestSet ? this.calculateE1RM(previousBestSet.weight || 0, previousBestSet.reps || 0, previousBestSet.rpe || 8) : 0;
-        const historicalPeakE1RM = Math.max(
+        const historicalPeakE1RM = isTimedExercise ? 0 : Math.max(
             0,
             ...safeHistory.map(workout => Math.max(...this.getProgressionEligibleSets(workout.sets || []).map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, set.rpe || 8)), 0))
         );
@@ -15469,7 +15806,7 @@ class App {
         const badges = [];
         const microWins = [];
 
-        if (!snapshot || this.isCardioSlot(snapshot.slot)) {
+        if (!snapshot || this.isTimedSlot(snapshot.slot)) {
             return { prs, badges, microWins };
         }
 
@@ -15603,23 +15940,27 @@ class App {
         const achievements = this.buildExerciseAchievements(snapshot);
         const totalReps = snapshot.totalReps;
         const maxWeight = snapshot.maxWeight;
-        const isCardioExercise = this.isCardioSlot(this.currentSlot);
+        const isTimedExercise = this.isTimedSlot(this.currentSlot);
         const currentBestSet = snapshot.bestSet;
         this.editingSetIndex = null;
 
         const summaryTotalLabel = document.querySelector('.summary-stats .stat:first-child .stat-label');
         const summaryLoadLabel = document.querySelector('.summary-stats .stat:last-child .stat-label');
         if (summaryTotalLabel) {
-            summaryTotalLabel.textContent = isCardioExercise ? 'Temps total' : 'Reps totales';
+            summaryTotalLabel.textContent = isTimedExercise ? 'Temps total' : 'Reps totales';
         }
         if (summaryLoadLabel) {
-            summaryLoadLabel.textContent = isCardioExercise ? 'Niveau max' : 'Charge max';
+            summaryLoadLabel.textContent = isTimedExercise
+                ? (this.isCardioSlot(this.currentSlot)
+                    ? `${this.getCardioMetricConfig(this.currentSlot).label} max`
+                    : (this.currentSlot.timedLoad === 'weight' ? 'Charge max' : 'Repère'))
+                : 'Charge max';
         }
 
-        document.getElementById('summary-total-reps').textContent = isCardioExercise
-            ? `${this.formatSetInputValue(totalReps, this.currentSlot)} min`
+        document.getElementById('summary-total-reps').textContent = isTimedExercise
+            ? this.formatDurationLabel(totalReps)
             : totalReps;
-        document.getElementById('summary-max-weight').textContent = isCardioExercise
+        document.getElementById('summary-max-weight').textContent = isTimedExercise
             ? this.formatSetWeight(maxWeight, this.currentSlot)
             : (this.isPureBodyweightSlot(this.currentSlot)
             ? 'PDC'
@@ -15630,7 +15971,7 @@ class App {
         const summaryIcon = document.getElementById('summary-icon');
         const summaryTitle = document.getElementById('summary-title');
         
-        if (this.currentWorkout?.isDeload && !isCardioExercise) {
+        if (this.currentWorkout?.isDeload && !isTimedExercise) {
             summaryIcon.textContent = '🔋';
             summaryTitle.textContent = 'Deload validé';
             comparison.innerHTML = `
@@ -15639,7 +15980,7 @@ class App {
                     <span class="comparison-text">Séance allégée volontairement: elle n’est pas comparée à tes séances normales et le coach ne s’en servira pas comme référence de charge.</span>
                 </div>
             `;
-        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isCardioExercise) {
+        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isTimedExercise) {
             const lastTotalReps = this.lastExerciseHistory.totalReps;
             const lastMaxWeight = this.lastExerciseHistory.maxWeight;
             const repsDiff = totalReps - lastTotalReps;
@@ -15690,13 +16031,13 @@ class App {
                     <span class="comparison-text">${text}</span>
                 </div>
             `;
-        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && isCardioExercise) {
+        } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && isTimedExercise) {
             summaryIcon.textContent = '✅';
-            summaryTitle.textContent = 'Bloc cardio terminé';
+            summaryTitle.textContent = this.isCardioSlot(this.currentSlot) ? 'Bloc cardio terminé' : 'Temps tenu !';
             comparison.innerHTML = `
                 <div class="comparison-card neutral">
                     <span class="comparison-icon">⏱️</span>
-                    <span class="comparison-text">Durée et niveau enregistrés. Tu peux comparer ton ressenti et ton allure sur les prochaines séances.</span>
+                    <span class="comparison-text">Durée enregistrée${this.isCardioSlot(this.currentSlot) ? ' avec ton repère cardio' : ''}. Tu pourras la comparer à ton prochain passage.</span>
                 </div>
             `;
         } else {
@@ -15710,7 +16051,7 @@ class App {
             `;
         }
 
-        if (!isCardioExercise) {
+        if (!isTimedExercise) {
             const panel = this.renderExerciseProgressPanel(this.currentSlot, completedSets, historyWorkouts);
             if (panel) comparison.innerHTML = panel;
         }
@@ -16143,6 +16484,10 @@ class App {
                         setNumber: entry.setNumber,
                         weight: setData.weight,
                         reps: setData.reps,
+                        trackingMode: setData.trackingMode || this.getTrackingMode(slot),
+                        durationSeconds: setData.durationSeconds ?? null,
+                        cardioMetric: setData.cardioMetric || slot.cardioMetric || null,
+                        cardioMetricValue: setData.cardioMetricValue ?? null,
                         rpe: setData.rpe ?? 8,
                         rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                         targetSetCount: entryTargetSetCount,
@@ -16718,7 +17063,8 @@ class App {
             { id: 'push', emoji: '🫸', name: 'Push', hint: 'Pecs, épaules, triceps', exercises: ['Développé couché barre', 'Développé incliné haltères', 'Développé militaire', 'Élévation latérale', 'Pushdown corde', 'Extension corde au-dessus de la tête'] },
             { id: 'pull', emoji: '🧲', name: 'Pull', hint: 'Dos, arrière d’épaule, biceps', exercises: ['Tractions assistées', 'Rowing barre', 'Tirage vertical prise neutre', 'Face pull', 'Curl barre EZ', 'Curl marteau'] },
             { id: 'legs', emoji: '🏋️', name: 'Legs', hint: 'Jambes complètes', exercises: ['Squat', 'Presse à cuisses', 'Soulevé de terre roumain', 'Leg curl allongé', 'Leg extension', 'Mollets debout machine'] },
-            { id: 'arms', emoji: '💥', name: 'Bras', hint: 'Biceps et triceps', exercises: ['Curl barre EZ', 'Barre au front', 'Curl incliné haltères', 'Pushdown corde', 'Curl marteau', 'Extension nuque haltère'] }
+            { id: 'arms', emoji: '💥', name: 'Bras', hint: 'Biceps et triceps', exercises: ['Curl barre EZ', 'Barre au front', 'Curl incliné haltères', 'Pushdown corde', 'Curl marteau', 'Extension nuque haltère'] },
+            { id: 'cardio', emoji: '🏃', name: 'Cardio', hint: 'Commence par le tapis, puis ajoute vélo ou rameur si tu veux', exercises: ['Tapis de course'] }
         ];
     }
 
@@ -16737,7 +17083,7 @@ class App {
             const rest = Number.isFinite(Number(slot.rest)) ? Number(slot.rest) : 90;
             const work = this.isCardioSlot(slot)
                 ? (Number(slot.repsMax) || Number(slot.repsMin) || 10) * 60
-                : 40;
+                : (this.getTrackingMode(slot) === 'timed' ? Number(slot.repsMax || slot.repsMin || 40) : 40);
             const restBetween = slot.supersetWith ? 15 : rest;
             return total + sets * (work + restBetween) + 60;
         }, 0);
@@ -16762,6 +17108,7 @@ class App {
         }
         const range = Number(slot.repsMin) === Number(slot.repsMax) ? `${slot.repsMin}` : `${slot.repsMin}-${slot.repsMax}`;
         const rest = Number(slot.rest) > 0 ? ` · repos ${this.formatRestShort(slot.rest)}` : '';
+        if (this.getTrackingMode(slot) === 'timed') return `${slot.sets} séries × ${range} s${rest}`;
         return `${slot.sets} séries × ${range} reps${rest}`;
     }
 
@@ -16792,11 +17139,18 @@ class App {
         const sessions = await db.getSessions();
         const sessionsWithStats = await Promise.all(
             sessions.map(async (session) => {
-                const slots = await db.getSlotsBySession(session.id);
+                const slots = await this.normalizeStoredSlots(await db.getSlotsBySession(session.id));
                 return {
                     ...session,
                     slotCount: slots.length,
-                    setCount: slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0),
+                    setCount: slots.reduce((sum, slot) => sum + (this.isCardioSlot(slot) ? 0 : (Number(slot.sets) || 0)), 0),
+                    cardioBlockCount: slots.reduce((sum, slot) => sum + (this.isCardioSlot(slot) ? (Number(slot.sets) || 0) : 0), 0),
+                    workSummary: [
+                        slots.reduce((sum, slot) => sum + (this.isCardioSlot(slot) ? 0 : (Number(slot.sets) || 0)), 0),
+                        slots.reduce((sum, slot) => sum + (this.isCardioSlot(slot) ? (Number(slot.sets) || 0) : 0), 0)
+                    ].map((count, index) => count
+                        ? `${count} ${index === 0 ? `série${count > 1 ? 's' : ''}` : `bloc${count > 1 ? 's' : ''} cardio`}`
+                        : '').filter(Boolean).join(' · '),
                     duration: this.estimateSessionDuration(slots) || session.estimatedDuration || 45,
                     muscles: this.getSessionTopMuscles(slots)
                 };
@@ -16818,7 +17172,7 @@ class App {
                                 <span class="se-session-index">${index + 1}</span>
                                 <span class="se-session-body">
                                     <span class="se-session-name">${this.escapeHtml(session.name)}</span>
-                                    <span class="se-session-meta">${session.slotCount ? `${session.slotCount} exercice${session.slotCount > 1 ? 's' : ''} · ${session.setCount} séries · ~${session.duration} min` : 'Vide · à compléter'}</span>
+                                    <span class="se-session-meta">${session.slotCount ? `${session.slotCount} exercice${session.slotCount > 1 ? 's' : ''}${session.workSummary ? ` · ${session.workSummary}` : ''} · ~${session.duration} min` : 'Vide · à compléter'}</span>
                                     ${session.muscles.length ? `<span class="se-session-muscles">${session.muscles.map(muscleId => this.renderMuscleBadge(muscleId)).join('')}</span>` : ''}
                                 </span>
                                 <span class="se-chevron">${this.renderEditorIcon('chevron', 18)}</span>
@@ -17201,9 +17555,11 @@ class App {
                 exercise.muscleGroup ? this.getMuscleGroupLabel(exercise.muscleGroup) : '',
                 exercise.trackingMode === 'cardio'
                     ? this.formatSlotRepRange(exercise)
-                    : `${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}`,
+                    : exercise.trackingMode === 'timed'
+                        ? `${exercise.sets}x${exercise.repsMin}-${exercise.repsMax} s`
+                        : `${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}`,
                 exercise.rest > 0 ? `${exercise.rest}s repos` : 'sans repos',
-                exercise.trackingMode === 'cardio' ? 'cardio' : `RIR ${exercise.rir}`,
+                exercise.trackingMode === 'cardio' ? 'cardio' : (exercise.trackingMode === 'timed' ? 'chronométré' : `RIR ${exercise.rir}`),
                 exercise.equipment || ''
             ].filter(Boolean);
             const variants = (exercise.pool || []).filter(name => name !== exercise.name).slice(0, 3);
@@ -17286,10 +17642,15 @@ class App {
         if (!entry) return;
 
         const libraryEntry = this.findExerciseLibraryEntry(entry.n);
-        const definition = libraryEntry || this.inferCustomExerciseTemplate(entry.n, {
+        const inferredDefinition = this.inferCustomExerciseTemplate(`${entry.n} ${entry.en}`, {
             preferLibraryMatch: false,
             allowCardioInference: true
         });
+        const definition = libraryEntry || {
+            ...inferredDefinition,
+            name: entry.n,
+            pool: [entry.n]
+        };
         if (!libraryEntry) {
             const muscleId = MUSCLE_GROUPS.some(group => group.id === entry.m) ? entry.m : definition.muscleGroup;
             definition.muscleGroup = muscleId;
@@ -17534,7 +17895,7 @@ class App {
                 <div class="se-row">
                     <div class="se-row-label">
                         <strong id="edit-slot-rest-label">Repos</strong>
-                        <small>Pause entre deux séries</small>
+                        <small id="edit-slot-rest-caption">Pause entre deux séries</small>
                     </div>
                     ${this.renderStepper({ id: 'edit-slot-rest', value: slot.rest ?? 90, step: 15, min: 0, max: 600, display: this.formatRestShort(slot.rest ?? 90), label: 'le repos' })}
                 </div>
@@ -17588,7 +17949,14 @@ class App {
                         <label for="edit-slot-tracking-mode">Ce que tu notes</label>
                         <select id="edit-slot-tracking-mode" class="form-input form-select">
                             <option value="strength" ${trackingMode === 'strength' ? 'selected' : ''}>Charge + répétitions</option>
-                            <option value="cardio" ${trackingMode === 'cardio' ? 'selected' : ''}>Durée + niveau / vitesse (cardio)</option>
+                            <option value="cardio" ${trackingMode === 'cardio' ? 'selected' : ''}>Cardio · durée + repère</option>
+                            <option value="timed" ${trackingMode === 'timed' ? 'selected' : ''}>Exercice chronométré · gainage, maintien, marche</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="edit-slot-cardio-metric-group">
+                        <label for="edit-slot-cardio-metric">Repère cardio</label>
+                        <select id="edit-slot-cardio-metric" class="form-input form-select">
+                            ${this.getCardioMetricOptions().map(([value, label]) => `<option value="${value}" ${(slot.cardioMetric || this.getCardioMetricConfig(slot).key) === value ? 'selected' : ''}>${label}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
@@ -17885,15 +18253,17 @@ class App {
 
         const meta = document.getElementById('edit-slot-hero-meta');
         if (!meta) return;
-        const isCardio = document.getElementById('edit-slot-tracking-mode')?.value === 'cardio';
+        const trackingMode = document.getElementById('edit-slot-tracking-mode')?.value || 'strength';
+        const isCardio = trackingMode === 'cardio';
+        const isTimed = trackingMode === 'timed';
         const sets = document.getElementById('edit-slot-sets')?.value || '3';
         const repsMin = document.getElementById('edit-slot-reps-min')?.value || '';
         const repsMax = document.getElementById('edit-slot-reps-max')?.value || '';
         const range = repsMin === repsMax ? repsMin : `${repsMin}-${repsMax}`;
         const rest = Number(document.getElementById('edit-slot-rest')?.value) || 0;
         meta.textContent = isCardio
-            ? `${sets} bloc${Number(sets) > 1 ? 's' : ''} · ${range} min · repos ${this.formatRestShort(rest).toLowerCase()}`
-            : `${sets} séries · ${range} reps · repos ${this.formatRestShort(rest).toLowerCase()}`;
+            ? `${sets} bloc${Number(sets) > 1 ? 's' : ''} · ${range} min · ${this.formatRestShort(rest).toLowerCase()}`
+            : `${sets} série${Number(sets) > 1 ? 's' : ''} · ${range} ${isTimed ? 's' : 'reps'} · ${this.formatRestShort(rest).toLowerCase()}`;
     }
 
     replaceEditedSlotExercise(definition, { dbId = null } = {}) {
@@ -17940,18 +18310,29 @@ class App {
             const mode = trackingModeInput.value || 'strength';
             const config = this.getTrackingModeFieldConfig(mode);
             const isCardio = mode === 'cardio';
+            const isTimed = mode === 'timed';
             const form = document.getElementById('edit-slot-form');
             const setsTitle = document.getElementById('edit-slot-sets-title');
             const repsTitle = document.getElementById('edit-slot-reps-title');
             const repsCaption = document.getElementById('edit-slot-reps-caption');
+            const restLabel = document.getElementById('edit-slot-rest-label');
+            const restCaption = document.getElementById('edit-slot-rest-caption');
             const trackingHelper = document.getElementById('edit-slot-tracking-helper');
             const repsMinInput = document.getElementById('edit-slot-reps-min');
             const repsMaxInput = document.getElementById('edit-slot-reps-max');
+            const cardioMetricGroup = document.getElementById('edit-slot-cardio-metric-group');
 
             if (form) form.dataset.tracking = mode;
             if (setsTitle) setsTitle.textContent = isCardio ? 'Blocs' : 'Séries';
-            if (repsTitle) repsTitle.textContent = isCardio ? 'Durée (min)' : 'Répétitions';
-            if (repsCaption) repsCaption.textContent = isCardio ? 'Durée visée pour chaque bloc' : 'Fourchette visée à chaque série';
+            if (repsTitle) repsTitle.textContent = isCardio ? 'Durée (min)' : (isTimed ? 'Durée (secondes)' : 'Répétitions');
+            if (repsCaption) repsCaption.textContent = isCardio
+                ? 'Durée visée pour chaque bloc'
+                : (isTimed ? 'Temps visé pour chaque série' : 'Fourchette visée à chaque série');
+            if (restLabel) restLabel.textContent = isCardio ? 'Repos entre les blocs' : 'Repos';
+            if (restCaption) restCaption.textContent = isCardio
+                ? 'Pause avant le prochain bloc'
+                : 'Pause entre deux séries';
+            if (cardioMetricGroup) cardioMetricGroup.hidden = !isCardio;
             if (trackingHelper) {
                 trackingHelper.hidden = !config.helperText;
                 trackingHelper.textContent = config.helperText || '';
@@ -17960,18 +18341,45 @@ class App {
                 repsMinInput.step = config.repsStep;
                 repsMinInput.inputMode = config.repsInputMode;
                 repsMinInput.min = config.repsMinValue;
+                repsMinInput.max = config.repsMaxValue;
+                const stepper = repsMinInput.closest('.se-stepper');
+                if (stepper) stepper.dataset.max = config.repsMaxValue;
             }
             if (repsMaxInput) {
                 repsMaxInput.step = config.repsStep;
                 repsMaxInput.inputMode = config.repsInputMode;
                 repsMaxInput.min = config.repsMinValue;
+                repsMaxInput.max = config.repsMaxValue;
+                const stepper = repsMaxInput.closest('.se-stepper');
+                if (stepper) stepper.dataset.max = config.repsMaxValue;
             }
         };
 
         trackingModeInput.onchange = () => {
+            const mode = trackingModeInput.value || 'strength';
+            const previousMode = trackingModeInput.dataset.previousMode || 'strength';
+            if (mode !== previousMode) {
+                const defaults = mode === 'cardio'
+                    ? { sets: 1, min: 10, max: 30, rest: 0 }
+                    : mode === 'timed'
+                        ? { sets: 3, min: 30, max: 60, rest: 45 }
+                        : { sets: 3, min: 8, max: 12, rest: 90 };
+                const values = [
+                    ['edit-slot-sets', defaults.sets],
+                    ['edit-slot-reps-min', defaults.min],
+                    ['edit-slot-reps-max', defaults.max],
+                    ['edit-slot-rest', defaults.rest]
+                ];
+                values.forEach(([id, value]) => {
+                    const input = document.getElementById(id);
+                    if (input) input.value = value;
+                });
+                trackingModeInput.dataset.previousMode = mode;
+            }
             syncTrackingUi();
             this.refreshEditSlotHero();
         };
+        trackingModeInput.dataset.previousMode = trackingModeInput.value || 'strength';
         syncTrackingUi();
     }
 
@@ -18022,7 +18430,9 @@ class App {
                     this.getMuscleGroupLabel(definition.muscleGroup) || definition.equipment || 'général',
                     definition.trackingMode === 'cardio'
                         ? `${definition.repsMin}-${definition.repsMax} min`
-                        : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
+                        : definition.trackingMode === 'timed'
+                            ? `${definition.sets} × ${definition.repsMin}-${definition.repsMax} s`
+                            : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
                 ].filter(Boolean).join(' · ');
             }
         };
@@ -18098,6 +18508,7 @@ class App {
         setValue('edit-slot-active', definition.name);
         if (updateName) setValue('edit-slot-name', definition.name);
         setValue('edit-slot-tracking-mode', normalizedDefinition.trackingMode || 'strength');
+        setValue('edit-slot-cardio-metric', definition.cardioMetric || this.getCardioMetricConfig(definition.name).key);
         setValue('edit-slot-sets', definition.sets ?? 3);
         setValue('edit-slot-reps-min', definition.repsMin ?? 8);
         setValue('edit-slot-reps-max', definition.repsMax ?? 12);
@@ -18139,7 +18550,9 @@ class App {
                 this.getMuscleGroupLabel(resolvedMuscleGroup) || definition.equipment || 'général',
                 definition.trackingMode === 'cardio'
                     ? `${definition.repsMin}-${definition.repsMax} min`
-                    : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
+                    : definition.trackingMode === 'timed'
+                        ? `${definition.sets} × ${definition.repsMin}-${definition.repsMax} s`
+                        : `${definition.sets}x${definition.repsMin}-${definition.repsMax}`
             ].filter(Boolean).join(' · ');
         }
 
@@ -18355,6 +18768,16 @@ class App {
         };
         slot.instructions = document.getElementById('edit-slot-instructions').value.trim();
         slot.trackingMode = trackingMode;
+        slot.trackingModeSource = 'user';
+        slot.durationUnit = trackingMode === 'timed' ? 'seconds' : (trackingMode === 'cardio' ? 'minutes' : null);
+        slot.cardioMetric = trackingMode === 'cardio'
+            ? (document.getElementById('edit-slot-cardio-metric')?.value || this.getCardioMetricConfig(activeExercise).key)
+            : null;
+        const trackingDefinition = this.findExerciseLibraryEntry(activeExercise) || this.inferCustomExerciseTemplate(activeExercise, {
+            preferLibraryMatch: false,
+            allowCardioInference: true
+        });
+        slot.timedLoad = trackingMode === 'timed' ? (trackingDefinition?.timedLoad || null) : null;
 
         if (previousTrackingMode !== slot.trackingMode && slot.trackingMode === 'cardio' && slot.rest === 90) {
             slot.rest = 0;
@@ -18420,7 +18843,7 @@ class App {
         const session = await db.get('sessions', sessionId);
         if (!session) return;
         const sessions = await db.getSessions();
-        const slots = await db.getSlotsBySession(sessionId);
+        const slots = await this.normalizeStoredSlots(await db.getSlotsBySession(sessionId));
 
         const sheet = document.getElementById('sheet-edit-session-detail');
         const content = document.getElementById('edit-session-detail-content');
@@ -18440,7 +18863,8 @@ class App {
             const next = slots[index + 1];
             if (!next) return '';
             const isLinked = slot.supersetWith === next.id;
-            const canLink = !slot.supersetWith && !linkedTargets.has(slot.id) && !next.supersetWith && !linkedTargets.has(next.id);
+            const hasTimedSlot = this.isTimedSlot(slot) || this.isTimedSlot(next);
+            const canLink = !hasTimedSlot && !slot.supersetWith && !linkedTargets.has(slot.id) && !next.supersetWith && !linkedTargets.has(next.id);
             if (isLinked) {
                 return `
                     <button type="button" class="se-link is-linked btn-link-superset" data-slot-id="${slot.id}" data-next-slot-id="${next.id}">
@@ -18452,6 +18876,9 @@ class App {
                 return `
                     <button type="button" class="se-link se-link-add btn-link-superset" data-slot-id="${slot.id}" data-next-slot-id="${next.id}" aria-label="Lier ces deux exercices en superset" title="Lier en superset">⚡</button>
                 `;
+            }
+            if (hasTimedSlot && !isLinked) {
+                return '<div class="se-link-spacer" aria-label="Les exercices chronométrés se font séparément"></div>';
             }
             return '<div class="se-link-spacer"></div>';
         };
@@ -18643,6 +19070,11 @@ class App {
             delete slot.supersetWith;
             await db.put('slots', slot);
         } else if (nextSlotId) {
+            const nextSlot = await db.get('slots', nextSlotId);
+            if (nextSlot && (this.isTimedSlot(slot) || this.isTimedSlot(nextSlot))) {
+                this.showCoachToast('Un bloc cardio ou chronométré se lance séparément pour que son timer reste simple.', 'cold', '⏱️');
+                return;
+            }
             // Link superset
             slot.supersetWith = nextSlotId;
             await db.put('slots', slot);
@@ -19261,8 +19693,18 @@ class App {
                 
                 if (e.target.matches('.input-weight')) {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
+                    if (this.isCardioSlot(this.currentSlot)) {
+                        slotData.sets[setIndex].cardioMetricValue = slotData.sets[setIndex].weight;
+                        slotData.sets[setIndex].cardioMetric = this.getCardioMetricConfig(this.currentSlot).key;
+                    }
                 } else {
                     slotData.sets[setIndex].reps = this.parseSetInputValue(e.target.value, this.currentSlot);
+                    if (this.isTimedSlot(this.currentSlot)) {
+                        slotData.sets[setIndex].trackingMode = this.getTrackingMode(this.currentSlot);
+                        slotData.sets[setIndex].durationSeconds = Math.round(this.isCardioSlot(this.currentSlot)
+                            ? slotData.sets[setIndex].reps * 60
+                            : slotData.sets[setIndex].reps);
+                    }
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -19736,7 +20178,9 @@ class App {
                 variantMuscleName,
                 this.getExerciseTypeLabel(descriptor.type),
                 descriptor.equipment || '',
-                descriptor.trackingMode === 'cardio' ? 'durée' : 'charge + reps',
+                descriptor.trackingMode === 'cardio'
+                    ? 'durée + repère'
+                    : (descriptor.trackingMode === 'timed' ? 'durée tenue' : 'charge + reps'),
                 equivalence.details?.[0] || ''
             ].filter(Boolean);
             html += `
@@ -21071,6 +21515,8 @@ class App {
             sets: normalizedSlot.sets || 0,
             rest: normalizedSlot.rest || 0,
             trackingMode: normalizedSlot.trackingMode || 'strength',
+            cardioMetric: normalizedSlot.cardioMetric || null,
+            timedLoad: normalizedSlot.timedLoad || null,
             progressionMode: normalizedSlot.progressionMode,
             loadingProfile: normalizedSlot.loadingProfile,
             incrementKg: normalizedSlot.incrementKg,
@@ -21122,7 +21568,51 @@ class App {
     normalizeSlotProgressionConfig(slot) {
         if (!slot) return slot;
 
+        const previousTrackingMode = slot.trackingMode;
         slot.trackingMode = this.getTrackingMode(slot);
+        if (
+            slot.trackingMode === 'cardio'
+            && previousTrackingMode !== 'cardio'
+            && previousTrackingMode !== 'timed'
+            && slot.trackingModeSource !== 'user'
+        ) {
+            const strengthPreset = [
+                { sets: 4, repsMin: 4, repsMax: 6, rest: 180 },
+                { sets: 3, repsMin: 8, repsMax: 12, rest: 90 },
+                { sets: 3, repsMin: 15, repsMax: 20, rest: 60 }
+            ].some(preset => (
+                Number(slot.sets) === preset.sets
+                && Number(slot.repsMin) === preset.repsMin
+                && Number(slot.repsMax) === preset.repsMax
+                && Number(slot.rest) === preset.rest
+            ));
+            if (strengthPreset) {
+                const definition = this.findExerciseLibraryEntry(this.getSlotExerciseName(slot))
+                    || this.inferCustomExerciseTemplate(this.getSlotExerciseName(slot), {
+                        preferLibraryMatch: false,
+                        allowCardioInference: true
+                    });
+                if (definition?.trackingMode === 'cardio') {
+                    slot.sets = definition.sets ?? 1;
+                    slot.repsMin = definition.repsMin ?? 10;
+                    slot.repsMax = definition.repsMax ?? 30;
+                    slot.rest = definition.rest ?? 0;
+                    slot.cardioMetric ||= definition.cardioMetric || null;
+                }
+            }
+        }
+        if (slot.trackingMode === 'timed') {
+            // The first timer format stored targets as decimal minutes. Convert
+            // those old values once, so timed sets now have explicit seconds.
+            if (!slot.durationUnit && Number(slot.repsMin) > 0 && Number(slot.repsMax) <= 5) {
+                slot.repsMin = Math.round(Number(slot.repsMin) * 60);
+                slot.repsMax = Math.round(Number(slot.repsMax) * 60);
+            }
+            slot.durationUnit = 'seconds';
+        } else if (slot.trackingMode === 'cardio') {
+            slot.durationUnit = 'minutes';
+            slot.cardioMetric ||= this.getCardioMetricConfig(slot).key;
+        }
 
         const bodyweightConfig = this.getBodyweightAutoConfig(slot);
         const bodyweightDetected = slot.bodyweightMode === true ||
@@ -21479,6 +21969,7 @@ class App {
         let totalReps = 0;
         let totalSets = 0;
         let totalCardioMinutes = 0;
+        let totalTimedMinutes = 0;
         const explicitRpeValues = [];
         const estimatedRpeValues = [];
         const exercisedSlots = new Set();
@@ -21492,8 +21983,10 @@ class App {
             totalSets += 1;
             exercisedSlots.add(String(set.slotId));
 
-            if (slot && this.isCardioSlot(slot)) {
-                totalCardioMinutes += Math.max(0, reps);
+            if (this.isTimedSlot(slot || set)) {
+                const durationMinutes = this.getSetDurationSeconds(set, slot || set) / 60;
+                totalTimedMinutes += Math.max(0, durationMinutes);
+                if (this.isCardioSlot(slot || set)) totalCardioMinutes += Math.max(0, durationMinutes);
                 continue;
             }
 
@@ -21522,6 +22015,7 @@ class App {
             totalReps,
             totalSets,
             totalCardioMinutes,
+            totalTimedMinutes,
             exerciseCount: exercisedSlots.size,
             avgRpe,
             avgRpeSource: explicitRpeValues.length ? 'RPE saisis' : (estimatedRpeValues.length ? 'RPE estimé' : 'sans RPE')
@@ -21535,7 +22029,7 @@ class App {
         } = options;
         const drafts = [];
 
-        const appendSets = (slotId, sets = [], variant = null, exerciseName = '') => {
+        const appendSets = (slotId, sets = [], variant = null, exerciseName = '', metadata = {}) => {
             sets.forEach((set, index) => {
                 if (!set?.completed || Number(set.reps || 0) <= 0) return;
                 const resolvedExerciseName = set.exerciseName || exerciseName || '';
@@ -21549,6 +22043,10 @@ class App {
                         : this.getBaseExerciseHistoryName(resolvedExerciseName),
                     weight: Number(set.weight || 0),
                     reps: Number(set.reps || 0),
+                    trackingMode: set.trackingMode || metadata.trackingMode || 'strength',
+                    durationSeconds: set.durationSeconds ?? null,
+                    cardioMetric: set.cardioMetric || metadata.cardioMetric || null,
+                    cardioMetricValue: set.cardioMetricValue ?? null,
                     rpe: set.rpe ?? null,
                     rpeSource: set.rpeSource || null,
                     variant,
@@ -21562,13 +22060,18 @@ class App {
 
             (Array.isArray(slotData.exerciseSegments) ? slotData.exerciseSegments : []).forEach(segment => {
                 if (!segment) return;
-                appendSets(slotId, segment.sets || [], null, segment.exerciseName || '');
-                appendSets(slotId, segment.setsLeft || [], 'left', segment.exerciseName || '');
-                appendSets(slotId, segment.setsRight || [], 'right', segment.exerciseName || '');
+                const metadata = {
+                    trackingMode: segment.trackingMode,
+                    cardioMetric: segment.cardioMetric
+                };
+                appendSets(slotId, segment.sets || [], null, segment.exerciseName || '', metadata);
+                appendSets(slotId, segment.setsLeft || [], 'left', segment.exerciseName || '', metadata);
+                appendSets(slotId, segment.setsRight || [], 'right', segment.exerciseName || '', metadata);
             });
-            appendSets(slotId, slotData.sets || [], null, slotData.meta?.exerciseName || '');
-            appendSets(slotId, slotData.setsLeft || [], 'left', slotData.meta?.exerciseName || '');
-            appendSets(slotId, slotData.setsRight || [], 'right', slotData.meta?.exerciseName || '');
+            const metadata = { trackingMode: slotData.meta?.trackingMode, cardioMetric: slotData.meta?.cardioMetric };
+            appendSets(slotId, slotData.sets || [], null, slotData.meta?.exerciseName || '', metadata);
+            appendSets(slotId, slotData.setsLeft || [], 'left', slotData.meta?.exerciseName || '', metadata);
+            appendSets(slotId, slotData.setsRight || [], 'right', slotData.meta?.exerciseName || '', metadata);
         });
 
         return drafts;
@@ -21704,7 +22207,7 @@ class App {
 
         for (const set of recapSets) {
             const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
-            if (!slot || this.isCardioSlot(slot)) continue;
+            if (!slot || this.isTimedSlot(slot)) continue;
 
             const rpe = this.getStatsRpe(set, slot) ?? 8;
             const effectiveScore = this.calculateEffectiveVolumeScore(set.reps, rpe, set.weight, null);
@@ -21723,7 +22226,7 @@ class App {
         }
 
         for (const slot of sessionSlots) {
-            if (!completedSlots.has(String(slot.id)) || this.isCardioSlot(slot)) continue;
+            if (!completedSlots.has(String(slot.id)) || this.isTimedSlot(slot)) continue;
 
             const slotHistorySets = await db.getByIndex('setHistory', 'slotId', slot.id);
             const currentSlotFallbackSets = workoutSets.length > 0
@@ -21823,17 +22326,17 @@ class App {
                 note: `${completedExercises}/${totalExercises || completedExercises} exercices terminés${skippedExercises > 0 ? ` · ${skippedExercises} passé${skippedExercises > 1 ? 's' : ''}` : ''}`
             },
             {
-                label: 'Séries',
+                label: 'Séquences',
                 theme: 'sets',
                 value: `${totalSets}`,
-                note: `${currentStats.totalReps} reps totales`
+                note: `${currentStats.totalReps} reps · ${this.formatOneDecimal(currentStats.totalTimedMinutes)} min chronométrées`
             },
             {
-                label: currentStats.totalVolume > 0 ? 'Volume' : 'Cardio',
+                label: currentStats.totalVolume > 0 ? 'Volume' : (currentStats.totalCardioMinutes > 0 ? 'Cardio' : 'Temps'),
                 theme: currentStats.totalVolume > 0 ? 'volume' : 'cardio',
                 value: currentStats.totalVolume > 0
                     ? `${this.formatVolume(currentStats.totalVolume)} kg`
-                    : `${this.formatOneDecimal(currentStats.totalCardioMinutes)} min`,
+                    : `${this.formatOneDecimal(currentStats.totalTimedMinutes)} min`,
                 note: currentStats.totalVolume > 0 ? 'charge totale déplacée' : 'durée cumulée'
             },
             {
@@ -21898,7 +22401,7 @@ class App {
         };
         const strengthSets = sets => sets.filter(set => {
             const slot = getSlot(set.slotId);
-            return slot && !this.isCardioSlot(slot);
+            return slot && !this.isTimedSlot(slot);
         });
         const sumBySlot = sets => sets.reduce((map, set) => {
             const key = String(set.slotId);
@@ -22681,7 +23184,7 @@ class App {
     }
 
     async refreshLiveCoachingAfterSet() {
-        if (!this.currentSlot || this.isSupersetMode || this.isUnilateralMode || this.isCardioSlot(this.currentSlot)) return;
+        if (!this.currentSlot || this.isSupersetMode || this.isUnilateralMode || this.isTimedSlot(this.currentSlot)) return;
 
         await this.refreshWorkoutCoachingState();
         this.currentCoachingAdvice = await this.getEnhancedCoachingAdvice(this.currentSlot);
@@ -22704,7 +23207,7 @@ class App {
             return;
         }
 
-        if (this.isCardioSlot(this.currentSlot)) {
+        if (this.isTimedSlot(this.currentSlot)) {
             adviceCard.style.display = 'none';
             if (metaRow) metaRow.style.display = 'none';
             if (decisionCard) decisionCard.style.display = 'none';
@@ -23414,6 +23917,7 @@ class App {
     getProgressionEligibleSets(sets = []) {
         return (Array.isArray(sets) ? sets : []).filter(set =>
             set
+            && !['cardio', 'timed'].includes(set.trackingMode)
             && set.completed !== false
             && Number(set.reps || 0) > 0
             && !this.isSetExcludedFromProgression(set)
@@ -23477,7 +23981,7 @@ class App {
 
     // ===== Optional intelligent warm-up =====
     buildOptionalWarmupPlan(slot = this.currentSlot, targetWeight = null) {
-        if (!slot || this.isCardioSlot(slot)) return [];
+        if (!slot || this.isTimedSlot(slot)) return [];
         const descriptor = this.getExerciseDescriptor(slot);
         const reference = Number(targetWeight)
             || Number(this.currentCoachingAdvice?.suggestedWeight || 0)
@@ -23505,7 +24009,7 @@ class App {
         const recoveryCard = document.getElementById('recovery-map-card');
         const hasAvailableInsight = Boolean(
             slot
-            && !this.isCardioSlot(slot)
+            && !this.isTimedSlot(slot)
             && ((warmupCard && !warmupCard.hidden) || (recoveryCard && !recoveryCard.hidden))
         );
 
@@ -23530,7 +24034,7 @@ class App {
         const body = document.getElementById('warmup-body');
         const list = document.getElementById('warmup-list');
         if (!card || !body || !list) return;
-        if (!slot || this.isCardioSlot(slot)) {
+        if (!slot || this.isTimedSlot(slot)) {
             card.hidden = true;
             this.updateExerciseInsightsTrigger(slot);
             return;
@@ -23703,7 +24207,7 @@ class App {
         const body = document.getElementById('recovery-map-body');
         const list = document.getElementById('recovery-map-list');
         if (!card || !body || !list) return;
-        if (!this.currentSlot || this.isCardioSlot(this.currentSlot)) {
+        if (!this.currentSlot || this.isTimedSlot(this.currentSlot)) {
             card.hidden = true;
             this.updateExerciseInsightsTrigger(this.currentSlot);
             return;

@@ -15,11 +15,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=5.5.17" as="script">
-    <link rel="stylesheet" href="styles.css?v=5.5.17">
-    <link rel="stylesheet" href="streak-score.css?v=5.5.17">
-    <link rel="stylesheet" href="theme.css?v=5.5.17">
-    <link rel="stylesheet" href="ai-coach.css?v=5.5.17">
+    <link rel="preload" href="app.js?v=5.5.22" as="script">
+    <link rel="stylesheet" href="styles.css?v=5.5.22">
+    <link rel="stylesheet" href="streak-score.css?v=5.5.22">
+    <link rel="stylesheet" href="theme.css?v=5.5.22">
+    <link rel="stylesheet" href="ai-coach.css?v=5.5.22">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -212,7 +212,7 @@
 
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v5.4.1</span>
+                    <span class="app-version">v5.5.22</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -348,11 +348,11 @@
                 <div class="exercise-info-card">
                     <div class="info-grid">
                         <div class="info-item">
-                            <span class="info-label">Séries</span>
+                            <span class="info-label" id="exercise-sets-label">Séries</span>
                             <span class="info-value" id="exercise-sets">3</span>
                         </div>
                         <div class="info-item">
-                            <span class="info-label">Reps</span>
+                            <span class="info-label" id="exercise-reps-label">Reps</span>
                             <span class="info-value" id="exercise-reps">8-12</span>
                         </div>
                         <div class="info-item">
@@ -360,7 +360,7 @@
                             <span class="info-value" id="exercise-rest">90s</span>
                         </div>
                         <div class="info-item">
-                            <span class="info-label">RIR</span>
+                            <span class="info-label" id="exercise-rir-label">RIR</span>
                             <span class="info-value" id="exercise-rir">2</span>
                         </div>
                     </div>
@@ -1690,12 +1690,12 @@
         </div>
     </div>
 
-    <script defer src="db.js?v=5.5.17"></script>
-    <script defer src="data.js?v=5.5.17"></script>
-    <script defer src="exercise-db.js?v=5.5.17"></script>
-    <script defer src="app.js?v=5.5.17"></script>
-    <script defer src="ai-coach.js?v=5.5.17"></script>
-    <script defer src="ai-coach-ui.js?v=5.5.17"></script>
+    <script defer src="db.js?v=5.5.22"></script>
+    <script defer src="data.js?v=5.5.22"></script>
+    <script defer src="exercise-db.js?v=5.5.22"></script>
+    <script defer src="app.js?v=5.5.22"></script>
+    <script defer src="ai-coach.js?v=5.5.22"></script>
+    <script defer src="ai-coach-ui.js?v=5.5.22"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
@@ -1705,7 +1705,7 @@
             navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
         }
         if ('serviceWorker' in navigator && !isLocalDevHost) {
-            const APP_VERSION = '5.4.1';
+            const APP_VERSION = '5.5.22';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

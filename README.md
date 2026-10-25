@@ -27,7 +27,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - ↔️ Unilatéral repensé : une ligne compacte par côté (G indigo, D violet), le côté le plus faible passe en premier, RPE enregistré sur la paire, réglage « Auto / G-D / Bilatéral » par exercice.
 - 🧠 Coach : charges toujours sur la grille réelle de l'équipement, cibles de reps calculées à partir du RIR, double palier si la séance était nettement trop facile, montée anticipée si le haut de fourchette est proche avec beaucoup de marge, RIR du programme enfin utilisé, historiques gauche/droite strictement séparés, séance interrompue ignorée comme référence.
 - 🏆 Détection de record en direct (e1RM) avec bonus XP et vibration.
-- 🧪 Tests exécutables sans Node : servir le dossier puis ouvrir `tests/browser-runner.html?test=coach-engine` (ou `adaptive-session`).
+- 🧪 Tests navigateur : servir le dossier puis ouvrir `tests/browser-runner.html?test=coach-engine`, `adaptive-session` ou `exercise-tracking`.
 
 ### Nouveautés v5.1
 - 🔥 Accueil refondu : carte « hero » sombre mauve avec streak géant + flamme qui grandit selon le niveau, paliers segmentés, semaine jour par jour (L→D), boucliers et statut de la semaine intégrés.
@@ -53,10 +53,16 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧪 `tests/demo-seed.js` : génère 8 semaines de données factices (à utiliser sur une origine jetable, ex. `127.0.0.1`).
 
 ### Nouveautés v5.4
-- 🗂️ **Mes séances** repensé pour les débutants : liste en cartes (ordre du cycle, durée estimée, muscles travaillés), création guidée avec **7 modèles prêts à l'emploi** (Full body, Haut/Bas du corps, Push, Pull, Legs, Bras) ou séance vide.
+- 🗂️ **Mes séances** repensé pour les débutants : liste en cartes (ordre du cycle, durée estimée, muscles travaillés), création guidée avec **8 modèles prêts à l'emploi** (Full body, Haut/Bas du corps, Push, Pull, Legs, Bras, Cardio) ou séance vide.
 - ✏️ Édition de séance : nom modifiable directement (sauvegarde auto), stats (exercices / séries / durée estimée), bouton ⚡ entre deux exercices pour faire un superset, réordonnancement par la poignée uniquement (le scroll ne déplace plus les cartes).
 - 🎛️ Réglages d'exercice : objectifs en un tap (Force / Muscle / Endurance), boutons +/− pour séries, reps et repos, intensité expliquée en mots (Échec → Facile), « Changer d'exercice » via la bibliothèque. Tout le reste est rangé dans « Réglages avancés ».
 - 🧹 Confirmations dans la DA de l'app (plus de `confirm()` natif), l'accueil se met à jour après une modification.
+
+### Suivi cardio et chronométré
+- 🏃 Le tapis de course et les autres appareils cardio sont enregistrés comme des blocs avec une durée et un repère adapté (vitesse en km/h, watts, résistance, niveau ou distance).
+- ⏱️ Le chrono peut mesurer un bloc cardio en minutes ou une série tenue en secondes (gainage, maintien, farmer carry, poussée de traîneau). L’historique conserve la durée exacte et affiche la bonne unité.
+- 🛠️ Les anciennes séances reconnues comme cardio sont réparées à leur prochaine ouverture, même si un ancien profil de progression les avait transformées en séries classiques.
+- 🧩 Les blocs cardio et les séries chronométrées ne sont pas proposés en superset, pour garder un lancement et un chrono prévisibles.
 
 ### Coach IA
 - ✨ Bouton **Coach IA** (accueil + carte dans Parcours) : on choisit une demande (analyser, optimiser, nouveau programme, question libre) et une IA (ChatGPT, Claude, Gemini, Le Chat ou autre).

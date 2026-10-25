@@ -191,7 +191,10 @@
                             rir: slot.rir,
                             type: slot.type || 'compound',
                             muscleGroup: slot.muscleGroup || '',
-                            trackingMode: slot.trackingMode || 'strength'
+                            trackingMode: slot.trackingMode || 'strength',
+                            ...(slot.trackingModeSource === 'user' ? { trackingModeSource: 'user' } : {}),
+                            ...(slot.cardioMetric ? { cardioMetric: slot.cardioMetric } : {}),
+                            ...(slot.timedLoad ? { timedLoad: slot.timedLoad } : {})
                         };
                         const pool = (slot.pool || []).filter(item => item && item !== name);
                         if (pool.length) entry.pool = [name, ...pool];
@@ -417,7 +420,7 @@
             : new Map(slots.map(slot => [String(slot.id), slot]));
         const slotFor = set => lookup.get(String(set.slotId)) || null;
         const muscleName = id => muscleGroups.find(group => group.id === id)?.name || id;
-        const isCardio = set => slotFor(set)?.trackingMode === 'cardio';
+        const isTimed = set => ['cardio', 'timed'].includes(slotFor(set)?.trackingMode || set.trackingMode);
 
         const datedHistory = history
             .map(workout => ({ ...workout, dateObj: safeDate(workout.date) }))
@@ -445,7 +448,7 @@
         });
         recentSets.forEach(set => {
             const week = weeks[weekIndexOf(set.dateObj)];
-            if (week && !isCardio(set)) week.tonnage += toNumber(set.weight) * toNumber(set.reps);
+            if (week && !isTimed(set)) week.tonnage += toNumber(set.weight) * toNumber(set.reps);
         });
 
         const firstWorkout = datedHistory[0]?.dateObj || null;
@@ -472,7 +475,7 @@
         // Per exercise (and side) trends.
         const byExercise = new Map();
         recentSets.forEach(set => {
-            if (isCardio(set)) return;
+            if (isTimed(set)) return;
             const name = String(set.exerciseName || slotFor(set)?.activeExercise || set.exerciseId || '').trim();
             if (!name) return;
             const side = set.side === 'left' || set.side === 'right' ? set.side : null;
@@ -578,7 +581,7 @@
         const muscleSets = {};
         const currentWeekSets = {};
         recentSets.forEach(set => {
-            if (isCardio(set)) return;
+            if (isTimed(set)) return;
             const slot = slotFor(set);
             let contributions = typeof muscleContributions === 'function' ? (muscleContributions(set, slot) || []) : [];
             if (!contributions.length && slot?.muscleGroup) contributions = [{ muscleId: slot.muscleGroup, weight: 1 }];
@@ -767,7 +770,10 @@
         `Quand (et seulement quand) l’utilisateur valide un programme, renvoie-le en ENTIER (toutes les séances, pas seulement les changements) dans UN SEUL bloc \`\`\`json, au même format que « Programme actuel » ci-dessus :`,
         `- "format": "${PROGRAM_FORMAT}" ; "profile": { "objective", "weeklyGoal" (entier 1 à 7) } ; "sessions": séances dans l’ordre de rotation.`,
         '- Chaque séance : "name", "estimatedDuration" (minutes), "slots".',
-        '- Chaque slot : "name", "sets", "repsMin", "repsMax", "rest" (secondes), "rir", "type" ("compound" ou "isolation"), "muscleGroup", "trackingMode" ("strength", ou "cardio" pour du vrai cardio), "pool" (nom principal puis 1 à 3 variantes proches).',
+        '- Chaque slot : "name", "sets", "repsMin", "repsMax", "rest" (secondes), "rir", "type" ("compound" ou "isolation"), "muscleGroup", "trackingMode" ("strength", "cardio" pour durée + repère machine, "timed" pour un temps tenu ou une poussée courte comme un gainage ou un sled push), "pool" (nom principal puis 1 à 3 variantes proches).',
+        '- Pour un slot cardio, conserve aussi "cardioMetric" si présent (ex. "speed", "power", "resistance", "level", "distance-m", "load").',
+        '- Si "trackingModeSource": "user" est fourni, garde-le avec le mode choisi par la personne.',
+        '- Les cibles "repsMin"/"repsMax" sont des répétitions pour "strength", des minutes pour "cardio" et des secondes pour "timed".',
         `- "muscleGroup" parmi : ${muscleIds}.`,
         '- Optionnel : "superset": même lettre ("A", "B"…) sur DEUX exercices consécutifs à enchaîner ; "unilateralMode": "on" pour suivre gauche/droite séparément ; "instructions": une phrase de consigne pour un exercice NOUVEAU.',
         '- RÈGLE CLÉ : pour un exercice que tu gardes, recopie son nom EXACTEMENT comme dans le programme actuel. Sinon son historique est perdu.',

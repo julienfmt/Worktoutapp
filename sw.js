@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const SW_VERSION = '5.5.20';
+const SW_VERSION = '5.5.22';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
 // Exercise thumbnails/GIFs are fetched on demand from the dataset repo and
@@ -11,17 +11,17 @@ const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=5.5.17',
-    './streak-score.css?v=5.5.17',
-    './theme.css?v=5.5.17',
-    './ai-coach.css?v=5.5.17',
-    './db.js?v=5.5.17',
+    './styles.css?v=5.5.22',
+    './streak-score.css?v=5.5.22',
+    './theme.css?v=5.5.22',
+    './ai-coach.css?v=5.5.22',
+    './db.js?v=5.5.22',
     './exercises-db.json?v=2',
-    './data.js?v=5.5.17',
-    './exercise-db.js?v=5.5.17',
-    './app.js?v=5.5.17',
-    './ai-coach.js?v=5.5.17',
-    './ai-coach-ui.js?v=5.5.17',
+    './data.js?v=5.5.22',
+    './exercise-db.js?v=5.5.22',
+    './app.js?v=5.5.22',
+    './ai-coach.js?v=5.5.22',
+    './ai-coach-ui.js?v=5.5.22',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png',

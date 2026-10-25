@@ -254,6 +254,8 @@ function createExerciseLibraryEntry(config) {
         rir: config.rir ?? 2,
         instructions: config.instructions || '',
         trackingMode: config.trackingMode || 'strength',
+        cardioMetric: config.cardioMetric || null,
+        timedLoad: config.timedLoad || null,
         progressionMode: config.progressionMode || null,
         loadingProfile: config.loadingProfile || null,
         aliases,
@@ -1034,8 +1036,9 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Note la vitesse ou l’inclinaison dans la charge si tu veux la suivre.',
-        aliases: ['treadmill', 'course', 'marche inclinée']
+        cardioMetric: 'speed',
+        instructions: 'Note la durée et la vitesse moyenne affichée sur le tapis. Tu peux ajouter la pente dans tes notes.',
+        aliases: ['treadmill', 'tapis roulant', 'course', 'marche inclinée']
     }),
     createExerciseLibraryEntry({
         name: 'Rameur',
@@ -1047,7 +1050,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Tu peux mettre un niveau, une allure ou des watts dans la charge.',
+        cardioMetric: 'power',
+        instructions: 'Note la durée et les watts moyens affichés par le rameur.',
         aliases: ['rower', 'rowing erg', 'erg']
     }),
     createExerciseLibraryEntry({
@@ -1060,7 +1064,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau ou résistance si tu veux la conserver.',
+        cardioMetric: 'resistance',
+        instructions: 'Note la durée et le niveau de résistance du vélo.',
         aliases: ['bike', 'stationary bike', 'vélo']
     }),
     createExerciseLibraryEntry({
@@ -1073,7 +1078,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut servir de résistance.',
+        cardioMetric: 'resistance',
+        instructions: 'Note la durée et le niveau de résistance du vélo.',
         aliases: ['spin bike']
     }),
     createExerciseLibraryEntry({
@@ -1086,7 +1092,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau si tu veux le suivre.',
+        cardioMetric: 'resistance',
+        instructions: 'Note la durée et le niveau de résistance si tu veux le comparer.',
         aliases: ['elliptique', 'elliptical']
     }),
     createExerciseLibraryEntry({
@@ -1099,7 +1106,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau ou vitesse.',
+        cardioMetric: 'level',
+        instructions: 'Note la durée et le niveau affiché par la machine.',
         aliases: ['stairmaster', 'escalier']
     }),
     createExerciseLibraryEntry({
@@ -1112,7 +1120,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Charge = intensité / niveau si tu la suis.',
+        cardioMetric: 'power',
+        instructions: 'Note la durée et les watts moyens si la machine les affiche.',
         aliases: ['assault bike']
     }),
     createExerciseLibraryEntry({
@@ -1125,7 +1134,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. Charge = niveau, allure ou watts.',
+        cardioMetric: 'power',
+        instructions: 'Note la durée et les watts moyens affichés par la machine.',
         aliases: ['skierg']
     }),
     createExerciseLibraryEntry({
@@ -1540,14 +1550,14 @@ const EXERCISE_LIBRARY = [
         type: 'isolation',
         equipment: 'poids du corps',
         sets: 3,
-        repsMin: 0.5,
-        repsMax: 1,
+        repsMin: 30,
+        repsMax: 60,
         rest: 45,
         rir: 2,
-        trackingMode: 'cardio',
+        trackingMode: 'timed',
         progressionMode: 'bodyweight',
         loadingProfile: 'bodyweight',
-        instructions: 'Utilise le champ reps comme durée en minutes, bassin en rétroversion et respiration contrôlée.',
+        instructions: 'Tiens la position le temps prévu, bassin en rétroversion et respiration contrôlée.',
         variants: ['Cable crunch', 'Relevé de jambes suspendu'],
         aliases: ['plank']
     }),
@@ -2119,12 +2129,13 @@ const EXERCISE_LIBRARY = [
         type: 'compound',
         equipment: 'haltères',
         sets: 3,
-        repsMin: 0.5,
-        repsMax: 1.5,
+        repsMin: 30,
+        repsMax: 90,
         rest: 60,
         rir: 2,
-        trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes, marche droit, grip fort et épaules basses.',
+        trackingMode: 'timed',
+        timedLoad: 'weight',
+        instructions: 'Marche pendant le temps prévu, avec une posture droite, une prise ferme et les épaules basses.',
         variants: ['Shrugs haltères', 'Wrist curl barre', 'Reverse wrist curl'],
         aliases: ['farmer walk']
     }),
@@ -2458,14 +2469,14 @@ const EXERCISE_LIBRARY = [
         type: 'isolation',
         equipment: 'poids du corps',
         sets: 3,
-        repsMin: 0.3,
-        repsMax: 1,
+        repsMin: 20,
+        repsMax: 60,
         rest: 45,
         rir: 2,
-        trackingMode: 'cardio',
+        trackingMode: 'timed',
         progressionMode: 'bodyweight',
         loadingProfile: 'bodyweight',
-        instructions: 'Utilise le champ reps comme durée en minutes, corps aligné et bassin haut tout du long.',
+        instructions: 'Garde le corps aligné et le bassin haut pendant toute la durée.',
         variants: ['Gainage', 'Pallof press', 'Dead bug'],
         aliases: ['side plank']
     }),
@@ -2527,7 +2538,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut servir d’allure, de vitesse moyenne ou de distance.',
+        cardioMetric: 'speed',
+        instructions: 'Note la durée et la vitesse moyenne. Pour une sortie en extérieur, tu peux saisir l’allure moyenne dans les notes.',
         aliases: ['running', 'outdoor run', 'jogging']
     }),
     createExerciseLibraryEntry({
@@ -2540,20 +2552,22 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut suivre le rythme ou le nombre de tours.',
+        cardioMetric: 'cadence',
+        instructions: 'Note la durée et, si tu le souhaites, la cadence en tours par minute.',
         aliases: ['jump rope', 'skipping rope']
     }),
     createExerciseLibraryEntry({
         name: 'Prowler push',
         category: 'cardio',
         equipment: 'cardio',
-        sets: 1,
-        repsMin: 5,
-        repsMax: 15,
-        rest: 0,
+        sets: 6,
+        repsMin: 15,
+        repsMax: 30,
+        rest: 60,
         rir: 4,
-        trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge sert à noter le poids du traîneau ou l’intensité.',
+        trackingMode: 'timed',
+        timedLoad: 'weight',
+        instructions: 'Pousse le traîneau sur une courte distance pendant 15 à 30 secondes, puis récupère.',
         aliases: ['sled push', 'prowler sled']
     }),
     createExerciseLibraryEntry({
@@ -2566,7 +2580,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 3,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut servir à noter distance, allure ou type de nage.',
+        cardioMetric: 'distance-m',
+        instructions: 'Note la durée et la distance nagée en mètres.',
         aliases: ['swimming', 'swim']
     }),
     createExerciseLibraryEntry({
@@ -2579,7 +2594,8 @@ const EXERCISE_LIBRARY = [
         rest: 0,
         rir: 2,
         trackingMode: 'cardio',
-        instructions: 'Utilise le champ reps comme durée en minutes. La charge peut noter allure, pente ou distance.',
+        cardioMetric: 'speed',
+        instructions: 'Note la durée et la vitesse moyenne. Tu peux ajouter la pente dans tes notes.',
         aliases: ['brisk walk', 'walking']
     })
 ];

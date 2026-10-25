@@ -73,12 +73,17 @@
                 db.getSetting('xp')
             ]);
             const player = this.getPlayerLevel(xp || 0);
+            const normalizedSlots = snapshot.slots.map(slot => this.normalizeSlotProgressionConfig({ ...slot }));
+            const normalizedSlotLookup = new Map(Array.from(slotLookup.entries()).map(([id, slot]) => [
+                id,
+                slot ? this.normalizeSlotProgressionConfig({ ...slot }) : slot
+            ]));
             return AiCoach.buildDigest({
                 sessions: snapshot.sessions,
-                slots: snapshot.slots,
+                slots: normalizedSlots,
                 history: snapshot.history,
                 setHistory: snapshot.setHistory,
-                slotLookup,
+                slotLookup: normalizedSlotLookup,
                 profile: {
                     objective: objective || '',
                     weeklyGoal: weeklyGoal || 3,
@@ -598,7 +603,8 @@
                 db.getSetting('trainingObjective'),
                 db.getSetting('weeklyGoal')
             ]);
-            const current = AiCoach.programFromStore(sessions, slots, { objective, weeklyGoal });
+            const normalizedSlots = slots.map(slot => this.normalizeSlotProgressionConfig({ ...slot }));
+            const current = AiCoach.programFromStore(sessions, normalizedSlots, { objective, weeklyGoal });
             state.review = { program, diff: AiCoach.diffPrograms(current, program) };
             this.setAiView('review');
         },
