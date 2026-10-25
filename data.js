@@ -82,6 +82,31 @@ function renderAppIcon(iconKey, options = {}) {
     return `<span class="${classes}" style="--icon-size:${size}px" ${aria}>${svg}</span>`;
 }
 
+// Couleur + pictogramme par muscle : badges des cartes de séance, de l'écran
+// exercice et de la carte « physique » de l'accueil.
+const MUSCLE_THEME = {
+    'pectoraux':       { color: '#f43f5e', icon: 'M4 7c2-2 5-2 8 0 3-2 6-2 8 0v5c0 3-3 5-8 5s-8-2-8-5z M12 7v10' },
+    'dos':             { color: '#0ea5e9', icon: 'M5 5l7 3 7-3-2 14H7z M12 8v11' },
+    'epaules':         { color: '#f59e0b', icon: 'M3 16c0-5 4-9 9-9s9 4 9 9 M8 16v-3 M16 16v-3' },
+    'biceps':          { color: '#8b5cf6', icon: 'M5 19c0-6 2-10 5-13l3 3-2 2c2 0 5 1 6 4 1 2 0 4-2 4z' },
+    'triceps':         { color: '#6366f1', icon: 'M19 19c0-6-2-10-5-13l-3 3 2 2c-2 0-5 1-6 4-1 2 0 4 2 4z' },
+    'avant-bras':      { color: '#a855f7', icon: 'M6 18 18 6 M15 4l5 5 M4 15l5 5' },
+    'quadriceps':      { color: '#22c55e', icon: 'M9 3h6l-1 9 1 9h-4l-1-9z' },
+    'ischio-jambiers': { color: '#14b8a6', icon: 'M10 3h5l-1 8 1 10h-4l-1-10z M12 6v4' },
+    'fessiers':        { color: '#ec4899', icon: 'M4 9c2-3 14-3 16 0 M4 9c0 6 3 9 8 9s8-3 8-9 M12 9v9' },
+    'mollets':         { color: '#84cc16', icon: 'M10 3h4l1 7-2 7v4h-3v-4l-1-7z' },
+    'abdominaux':      { color: '#f97316', icon: 'M8 4h8v16H8z M8 9.3h8 M8 14.6h8 M12 4v16' },
+    'lombaires':       { color: '#eab308', icon: 'M12 3v18 M8 7h8 M8 12h8 M8 17h8' },
+    'trapèzes':        { color: '#06b6d4', icon: 'M4 17 9 6h6l5 11z' },
+    'coiffe':          { color: '#64748b', icon: 'M20 12a8 8 0 1 1-3-6.2 M20 4v4h-4' },
+    'cardio':          { color: '#ef4444', icon: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' },
+    'default':         { color: '#8b5cf6', icon: 'M6 12h12 M4 9v6 M20 9v6 M7 7v10 M17 7v10' }
+};
+
+function getMuscleTheme(muscleId) {
+    return MUSCLE_THEME[muscleId] || MUSCLE_THEME.default;
+}
+
 function getMuscleGroupMeta(muscleId) {
     return MUSCLE_GROUPS.find(group => group.id === muscleId) || {
         id: muscleId,

@@ -2661,16 +2661,702 @@ class App {
         const { history, setHistory, slots } = snapshotData;
         this.homeChartData = snapshotData;
 
-        const snapshot = await this.buildStatsSnapshot(history, setHistory, slots);
+        const [snapshot, volumeByMuscle, streakData, xp, storedBestStreak] = await Promise.all([
+            this.buildStatsSnapshot(history, setHistory, slots),
+            this.getWeeklyVolumeByMuscle(snapshotData),
+            streakEngine.getStreakData(),
+            db.getSetting('xp'),
+            db.getSetting('bestStreak')
+        ]);
+        const bestStreak = Math.max(storedBestStreak || 0, streakData.displayStreakCount || 0);
+        if (bestStreak !== (storedBestStreak || 0)) await db.setSetting('bestStreak', bestStreak);
 
-        document.getElementById('stat-total-workouts').textContent = snapshot.totalWorkouts;
-        document.getElementById('stat-this-month').textContent = snapshot.thisMonthWorkouts;
-        document.getElementById('stat-total-volume').textContent = this.formatVolume(snapshot.totalLoadedVolume);
+        const weekly = this.buildWeeklyTonnage(setHistory, slots, history, 8);
+        const muscles = this.buildPhysiqueRows(volumeByMuscle, slots);
+        const player = this.getPlayerLevel(xp || 0);
+        this.progressContext = { snapshot, weekly, muscles, player, bestStreak, streakData };
 
-        this.renderMotivationMessage(history, snapshot.thisMonthWorkouts, snapshot.totalLoadedVolume);
-        this.renderAdvancedStats(snapshot);
-        this.scheduleHomeChartsRender();
-        await this.renderMuscleStats(snapshotData);
+        this.renderPlayerCard();
+        await this.renderQuestBoard();
+        await this.renderTrophyCase();
+        this.renderLiftsCard();
+        this.renderActivityCard();
+        this.renderPhysiqueCard();
+    }
+
+    setHomeTab(tab = 'session') {
+        const content = document.querySelector('#screen-home .home-content');
+        if (!content) return;
+        const nextTab = tab === 'progress' ? 'progress' : 'session';
+        content.dataset.tab = nextTab;
+        content.scrollTop = 0;
+        document.querySelectorAll('[data-home-tab]').forEach(button => {
+            const active = button.dataset.homeTab === nextTab;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+        // Bars and gauges replay their fill animation when the tab opens.
+        if (nextTab === 'progress' && this.progressContext) {
+            this.renderPlayerCard();
+            this.renderActivityCard();
+            this.renderPhysiqueCard();
+        }
+    }
+
+    updateProgressTabDot(hasNews) {
+        const dot = document.getElementById('home-tab-progress-dot');
+        if (dot) dot.hidden = !hasNews;
+    }
+
+    // ===== Progression (home): level, quests, trophies, lifts, physique =====
+    getPlayerLevel(xp = 0) {
+        const total = Math.max(0, Math.round(Number(xp) || 0));
+        const xpForLevel = level => 50 * (level - 1) * (level + 2);
+        let level = 1;
+        while (xpForLevel(level + 1) <= total) level += 1;
+        const floor = xpForLevel(level);
+        const ceil = xpForLevel(level + 1);
+        const titles = [
+            { min: 1, name: 'Recrue', emoji: '🐣' },
+            { min: 3, name: 'Apprenti', emoji: '🌱' },
+            { min: 5, name: 'Costaud', emoji: '💪' },
+            { min: 8, name: 'Bâtisseur', emoji: '🧱' },
+            { min: 12, name: 'Colosse', emoji: '🦍' },
+            { min: 16, name: 'Titan', emoji: '🗿' },
+            { min: 20, name: 'Hercule', emoji: '🦁' },
+            { min: 25, name: 'Olympien', emoji: '⚡' },
+            { min: 30, name: 'Légende', emoji: '👑' },
+            { min: 40, name: 'Mythe vivant', emoji: '🐉' }
+        ];
+        const title = [...titles].reverse().find(item => level >= item.min);
+        const nextTitle = titles.find(item => item.min > level) || null;
+        return {
+            level,
+            xp: total,
+            floor,
+            ceil,
+            progress: Math.min(1, (total - floor) / Math.max(1, ceil - floor)),
+            toNext: ceil - total,
+            title,
+            nextTitle
+        };
+    }
+
+    getTonnageEquivalent(kg) {
+        const objects = [
+            { kg: 1200, one: 'voiture', many: 'voitures', emoji: '🚗' },
+            { kg: 6000, one: 'éléphant', many: 'éléphants', emoji: '🐘' },
+            { kg: 12000, one: 'bus', many: 'bus', emoji: '🚌' },
+            { kg: 42000, one: 'Airbus A320', many: 'Airbus A320', emoji: '✈️' },
+            { kg: 150000, one: 'baleine bleue', many: 'baleines bleues', emoji: '🐋' },
+            { kg: 7300000, one: 'tour Eiffel', many: 'tours Eiffel', emoji: '🗼' }
+        ];
+        const fitting = [...objects].reverse().find(item => kg >= item.kg) || null;
+        if (!fitting) {
+            return { emoji: '🪨', text: 'Chaque série remplit la jauge' };
+        }
+        const count = kg / fitting.kg;
+        const rounded = count >= 10 ? Math.round(count) : Math.round(count * 10) / 10;
+        return {
+            emoji: fitting.emoji,
+            text: `≈ ${String(rounded).replace('.', ',')} ${rounded >= 2 ? fitting.many : fitting.one} soulevé${rounded >= 2 ? 's' : ''}`
+        };
+    }
+
+    formatTonnage(kg) {
+        if (kg >= 1000) {
+            const tons = kg / 1000;
+            return `${(tons >= 100 ? Math.round(tons) : Math.round(tons * 10) / 10).toString().replace('.', ',')} t`;
+        }
+        return `${Math.round(kg)} kg`;
+    }
+
+    buildWeeklyTonnage(setHistory = [], slots = [], history = [], totalWeeks = 8) {
+        const slotMap = new Map((slots || []).map(slot => [String(slot.id), slot]));
+        return this.getRecentWeeklyBuckets(totalWeeks, (weekStart, weekEnd) => {
+            let volume = 0;
+            for (const set of setHistory || []) {
+                const date = new Date(set.date);
+                if (date >= weekStart && date < weekEnd) {
+                    volume += this.getSetLoadedVolume(set, slotMap.get(String(set.slotId)));
+                }
+            }
+            const sessions = (history || []).filter(workout => {
+                const date = new Date(workout.date);
+                return date >= weekStart && date < weekEnd;
+            }).length;
+            return { volume, sessions };
+        });
+    }
+
+    getMuscleZone(volume, landmarks) {
+        if (volume <= 0) return { id: 'idle', label: 'Pas touché' };
+        if (volume < landmarks.MV) return { id: 'wake', label: 'À réveiller' };
+        if (volume < landmarks.MEV) return { id: 'maintain', label: 'Entretien' };
+        if (volume <= landmarks.MAV) return { id: 'grow', label: 'Croissance' };
+        if (volume <= landmarks.MRV) return { id: 'intense', label: 'Intense' };
+        return { id: 'overload', label: 'Surcharge' };
+    }
+
+    buildPhysiqueRows(volumeByMuscle = {}, slots = []) {
+        const used = new Set(Object.keys(volumeByMuscle));
+        for (const slot of slots || []) {
+            if (slot.muscleGroup) used.add(slot.muscleGroup);
+        }
+        return Array.from(used)
+            .filter(muscleId => MUSCLE_GROUPS.some(group => group.id === muscleId))
+            .map(muscleId => {
+                const volume = Math.round((volumeByMuscle[muscleId]?.effectiveSets || 0) * 10) / 10;
+                const landmarks = VOLUME_LANDMARKS[muscleId] || VOLUME_LANDMARKS.default;
+                return {
+                    muscleId,
+                    name: this.getMuscleGroupLabel(muscleId),
+                    volume,
+                    landmarks,
+                    ratio: volume / Math.max(1, landmarks.MEV),
+                    zone: this.getMuscleZone(volume, landmarks)
+                };
+            })
+            .sort((a, b) => b.volume - a.volume || a.name.localeCompare(b.name));
+    }
+
+    renderMuscleBadge(muscleId, { label = null, size = 'sm', className = '' } = {}) {
+        if (!muscleId) return '';
+        const theme = getMuscleTheme(muscleId);
+        const name = label ?? this.getMuscleGroupLabel(muscleId);
+        return `
+            <span class="muscle-badge muscle-badge-${size} ${className}" style="--muscle: ${theme.color}">
+                <span class="muscle-badge-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${theme.icon}"/></svg>
+                </span>
+                ${name ? `<span class="muscle-badge-label">${this.escapeHtml(name)}</span>` : ''}
+            </span>
+        `;
+    }
+
+    renderPlayerCard() {
+        const container = document.getElementById('player-card');
+        const ctx = this.progressContext;
+        if (!container || !ctx) return;
+        const { player, snapshot } = ctx;
+        const equivalent = this.getTonnageEquivalent(snapshot.totalLoadedVolume);
+        const nextTitleNote = player.nextTitle
+            ? `Titre « ${player.nextTitle.name} » au niveau ${player.nextTitle.min}`
+            : 'Titre ultime atteint';
+
+        container.innerHTML = `
+            <div class="hero-bg" aria-hidden="true">
+                <span class="hero-blob blob-a"></span>
+                <span class="hero-blob blob-b"></span>
+                <span class="hero-grid"></span>
+            </div>
+            <div class="player-top">
+                <div class="player-avatar" aria-hidden="true">
+                    <span class="player-avatar-emoji">${player.title.emoji}</span>
+                    <span class="player-avatar-level">${player.level}</span>
+                </div>
+                <div class="player-identity">
+                    <span class="player-kicker">Niveau ${player.level}</span>
+                    <strong class="player-title">${this.escapeHtml(player.title.name)}</strong>
+                    <span class="player-next">${this.escapeHtml(nextTitleNote)}</span>
+                </div>
+            </div>
+            <div class="player-xp">
+                <div class="player-xp-row">
+                    <span>${player.xp.toLocaleString('fr-FR')} XP</span>
+                    <span>encore <strong>${player.toNext.toLocaleString('fr-FR')}</strong> pour le niv. ${player.level + 1}</span>
+                </div>
+                <div class="player-xp-track"><span style="width: ${Math.round(player.progress * 100)}%"></span></div>
+            </div>
+            <div class="player-tiles">
+                <div class="player-tile">
+                    <strong>${snapshot.totalWorkouts}</strong>
+                    <span>Séances</span>
+                </div>
+                <div class="player-tile">
+                    <strong>${this.formatTonnage(snapshot.totalLoadedVolume)}</strong>
+                    <span>Soulevés</span>
+                </div>
+                <div class="player-tile is-gold">
+                    <strong>${snapshot.prCountTotal || 0}</strong>
+                    <span>Records</span>
+                </div>
+            </div>
+            <div class="player-equivalent"><span aria-hidden="true">${equivalent.emoji}</span>${this.escapeHtml(equivalent.text)}</div>
+        `;
+    }
+
+    getWeekKey(date = new Date()) {
+        return this.getLocalDateKey(streakEngine.getWeekBounds(date).start);
+    }
+
+    buildWeeklyQuests() {
+        const { snapshot, weekly, muscles } = this.progressContext;
+        const thisWeek = weekly[weekly.length - 1]?.value || { volume: 0, sessions: 0 };
+        const lastWeek = weekly[weekly.length - 2]?.value || { volume: 0, sessions: 0 };
+        const quests = [
+            {
+                id: 'goal',
+                icon: '🎯',
+                title: 'Valide ta semaine',
+                current: snapshot.thisWeekWorkouts,
+                target: snapshot.weeklyGoal,
+                unit: 'séances',
+                xp: 150
+            },
+            {
+                id: 'record',
+                icon: '🏆',
+                title: 'Bats un record',
+                current: snapshot.prCountWeek || 0,
+                target: 1,
+                unit: 'record',
+                xp: 80
+            }
+        ];
+
+        const volumeTarget = lastWeek.volume > 0 ? Math.round(lastWeek.volume * 1.02) : 5000;
+        quests.push({
+            id: 'volume',
+            icon: '📈',
+            title: lastWeek.volume > 0 ? 'Dépasse ta semaine dernière' : 'Soulève 5 tonnes',
+            current: Math.round(thisWeek.volume),
+            target: volumeTarget,
+            format: value => this.formatTonnage(value),
+            xp: 100
+        });
+
+        const lagging = muscles
+            .filter(row => row.volume < row.landmarks.MEV)
+            .sort((a, b) => a.ratio - b.ratio)[0];
+        if (lagging) {
+            quests.push({
+                id: `muscle:${lagging.muscleId}`,
+                icon: '🎯',
+                muscleId: lagging.muscleId,
+                title: `Réveille tes ${lagging.name.toLowerCase()}`,
+                current: lagging.volume,
+                target: lagging.landmarks.MEV,
+                unit: 'séries eff.',
+                xp: 100
+            });
+        }
+
+        return quests.map(quest => ({
+            ...quest,
+            done: quest.current >= quest.target,
+            progress: Math.min(1, quest.current / Math.max(1, quest.target))
+        }));
+    }
+
+    async getQuestClaims() {
+        const stored = (await db.getSetting('questClaims')) || {};
+        const week = this.getWeekKey();
+        return stored.week === week ? stored : { week, ids: [] };
+    }
+
+    async renderQuestBoard() {
+        const container = document.getElementById('quest-board');
+        if (!container || !this.progressContext) return;
+        const quests = this.buildWeeklyQuests();
+        const claims = await this.getQuestClaims();
+        const { end } = streakEngine.getWeekBounds();
+        const daysLeft = Math.max(0, Math.ceil((end - new Date()) / 86400000));
+        const doneCount = quests.filter(quest => quest.done).length;
+        this.updateProgressTabDot(quests.some(quest => quest.done && !claims.ids.includes(quest.id)));
+
+        const formatValue = (quest, value) => quest.format
+            ? quest.format(value)
+            : `${String(Math.round(value * 10) / 10).replace('.', ',')}`;
+
+        container.innerHTML = `
+            <div class="pz-card-head">
+                <div>
+                    <span class="pz-kicker">Quêtes de la semaine</span>
+                    <h4>${doneCount}/${quests.length} accomplies</h4>
+                </div>
+                <span class="pz-chip">${daysLeft <= 1 ? 'Dernier jour' : `${daysLeft} j restants`}</span>
+            </div>
+            <div class="quest-list">
+                ${quests.map(quest => {
+                    const claimed = claims.ids.includes(quest.id);
+                    const state = claimed ? 'claimed' : quest.done ? 'ready' : 'open';
+                    const icon = quest.muscleId
+                        ? this.renderMuscleBadge(quest.muscleId, { label: '', size: 'lg' })
+                        : `<span class="quest-icon" aria-hidden="true">${quest.icon}</span>`;
+                    let valueText = quest.format
+                        ? `${formatValue(quest, quest.current)} / ${formatValue(quest, quest.target)}`
+                        : `${formatValue(quest, quest.current)}/${formatValue(quest, quest.target)} ${quest.unit || ''}`;
+                    if (quest.id === 'record' && quest.done) {
+                        valueText = `${quest.current} record${quest.current > 1 ? 's' : ''} battu${quest.current > 1 ? 's' : ''} cette semaine`;
+                    }
+                    return `
+                        <div class="quest-item is-${state}">
+                            ${icon}
+                            <div class="quest-main">
+                                <strong>${this.escapeHtml(quest.title)}</strong>
+                                <div class="quest-track"><span style="width: ${Math.round(quest.progress * 100)}%"></span></div>
+                                <small>${this.escapeHtml(valueText.trim())}</small>
+                            </div>
+                            ${state === 'ready'
+                                ? `<button type="button" class="btn quest-claim" data-quest-claim="${this.escapeHtml(quest.id)}" data-quest-xp="${quest.xp}">+${quest.xp} XP</button>`
+                                : `<span class="quest-reward">${state === 'claimed' ? '✓' : `+${quest.xp}`}</span>`}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    async claimQuest(questId, xpAmount) {
+        const claims = await this.getQuestClaims();
+        if (claims.ids.includes(questId)) return;
+        const quest = this.buildWeeklyQuests().find(item => item.id === questId);
+        if (!quest?.done) return;
+        claims.ids.push(questId);
+        await db.setSetting('questClaims', claims);
+        const xp = ((await db.getSetting('xp')) || 0) + xpAmount;
+        await db.setSetting('xp', xp);
+        const previousLevel = this.progressContext.player.level;
+        this.progressContext.player = this.getPlayerLevel(xp);
+        this.hapticTap([12, 40, 18]);
+        gamification.triggerConfetti(this.progressContext.player.level > previousLevel ? 'heavy' : 'medium');
+        if (this.progressContext.player.level > previousLevel) {
+            gamification.showAchievement('⬆️', `Niveau ${this.progressContext.player.level} !`, `Tu passes ${this.progressContext.player.title.name}.`, xpAmount);
+        }
+        this.renderPlayerCard();
+        await this.renderQuestBoard();
+        await this.renderTrophyCase();
+    }
+
+    getTrophyDefinitions() {
+        const workouts = [
+            [1, '🎬', 'Premier pas', 'Termine ta première séance'],
+            [10, '🔟', 'Habitué', '10 séances terminées'],
+            [25, '🏅', 'Assidu', '25 séances terminées'],
+            [50, '🎖️', 'Vétéran', '50 séances terminées'],
+            [100, '💯', 'Centurion', '100 séances terminées'],
+            [250, '🏛️', 'Pilier de la salle', '250 séances terminées']
+        ].map(([target, icon, name, desc]) => ({ id: `workouts-${target}`, metric: 'workouts', target, icon, name, desc, unit: 'séances' }));
+        const tonnage = [
+            [10, '🧱', '10 tonnes', '10 tonnes soulevées au total'],
+            [50, '🚌', '50 tonnes', '50 tonnes soulevées au total'],
+            [150, '🐋', 'Baleine bleue', '150 tonnes soulevées au total'],
+            [500, '🏗️', 'Grue humaine', '500 tonnes soulevées au total'],
+            [1000, '🗼', 'Mille tonnes', '1 000 tonnes soulevées au total']
+        ].map(([target, icon, name, desc]) => ({ id: `tonnage-${target}`, metric: 'tonnage', target, icon, name, desc, unit: 't' }));
+        const records = [
+            [1, '⚡', 'Premier record', 'Bats ton premier record'],
+            [10, '🔥', 'Chasseur', '10 records battus'],
+            [50, '🏆', 'Collectionneur', '50 records battus']
+        ].map(([target, icon, name, desc]) => ({ id: `records-${target}`, metric: 'records', target, icon, name, desc, unit: 'records' }));
+        const streak = [
+            [2, '📅', 'Lancé', '2 semaines validées d’affilée'],
+            [4, '🗓️', 'Un mois carré', '4 semaines validées d’affilée'],
+            [8, '♨️', 'Inarrêtable', '8 semaines validées d’affilée'],
+            [12, '🛡️', 'Trimestre parfait', '12 semaines validées d’affilée'],
+            [26, '☀️', 'Semestre de feu', '26 semaines validées d’affilée'],
+            [52, '👑', 'Une année', '52 semaines validées d’affilée']
+        ].map(([target, icon, name, desc]) => ({ id: `streak-${target}`, metric: 'streak', target, icon, name, desc, unit: 'sem.' }));
+        const heavy = [
+            [60, '🏋️', 'Club 60 kg', 'Une série à 60 kg ou plus'],
+            [100, '💥', 'Club 100 kg', 'Une série à 100 kg ou plus'],
+            [140, '🦍', 'Club 140 kg', 'Une série à 140 kg ou plus'],
+            [180, '🐻', 'Club 180 kg', 'Une série à 180 kg ou plus']
+        ].map(([target, icon, name, desc]) => ({ id: `heavy-${target}`, metric: 'heavy', target, icon, name, desc, unit: 'kg' }));
+        const sets = [
+            [500, '🔁', '500 séries', '500 séries validées'],
+            [2000, '♾️', '2 000 séries', '2 000 séries validées']
+        ].map(([target, icon, name, desc]) => ({ id: `sets-${target}`, metric: 'sets', target, icon, name, desc, unit: 'séries' }));
+        const levels = [
+            [10, '⭐', 'Niveau 10', 'Atteins le niveau 10'],
+            [20, '🌟', 'Niveau 20', 'Atteins le niveau 20'],
+            [30, '💫', 'Niveau 30', 'Atteins le niveau 30']
+        ].map(([target, icon, name, desc]) => ({ id: `level-${target}`, metric: 'level', target, icon, name, desc, unit: 'niv.' }));
+        return [...workouts, ...tonnage, ...records, ...streak, ...heavy, ...sets, ...levels];
+    }
+
+    buildTrophies() {
+        const { snapshot, player, bestStreak } = this.progressContext;
+        const metrics = {
+            workouts: snapshot.totalWorkouts,
+            tonnage: snapshot.totalLoadedVolume / 1000,
+            records: snapshot.prCountTotal || 0,
+            streak: bestStreak,
+            heavy: snapshot.heaviestSet?.weight || 0,
+            sets: snapshot.totalSetsAll,
+            level: player.level
+        };
+        return this.getTrophyDefinitions().map(trophy => {
+            const current = metrics[trophy.metric] || 0;
+            return {
+                ...trophy,
+                current,
+                unlocked: current >= trophy.target,
+                progress: Math.min(1, current / trophy.target)
+            };
+        });
+    }
+
+    async renderTrophyCase() {
+        const container = document.getElementById('trophy-case');
+        if (!container || !this.progressContext) return;
+        const trophies = this.buildTrophies();
+        const unlocked = trophies.filter(trophy => trophy.unlocked);
+        const nextTrophy = trophies
+            .filter(trophy => !trophy.unlocked)
+            .sort((a, b) => b.progress - a.progress)[0] || null;
+
+        // New unlocks are celebrated once; the very first render only records them.
+        const seen = await db.getSetting('trophiesSeen');
+        const fresh = Array.isArray(seen) ? unlocked.filter(trophy => !seen.includes(trophy.id)) : [];
+        if (!Array.isArray(seen) || fresh.length) {
+            await db.setSetting('trophiesSeen', unlocked.map(trophy => trophy.id));
+        }
+        if (fresh.length) {
+            const best = fresh[fresh.length - 1];
+            setTimeout(() => {
+                gamification.triggerConfetti('heavy');
+                gamification.showAchievement(best.icon, 'Trophée débloqué !', fresh.length > 1 ? `${best.name} + ${fresh.length - 1} autre${fresh.length > 2 ? 's' : ''}` : best.name);
+            }, 900);
+        }
+
+        const expanded = Boolean(this.trophyCaseExpanded);
+        const ordered = [
+            ...unlocked.slice().reverse(),
+            ...trophies.filter(trophy => !trophy.unlocked).sort((a, b) => b.progress - a.progress)
+        ];
+        const visible = expanded ? ordered : ordered.slice(0, 8);
+        const formatCurrent = trophy => trophy.metric === 'tonnage'
+            ? String(Math.round(trophy.current * 10) / 10).replace('.', ',')
+            : Math.floor(trophy.current);
+
+        container.innerHTML = `
+            <div class="pz-card-head">
+                <div>
+                    <span class="pz-kicker">Salle des trophées</span>
+                    <h4>${unlocked.length}/${trophies.length} débloqués</h4>
+                </div>
+                <span class="pz-chip is-gold">🏆 ${unlocked.length}</span>
+            </div>
+            ${nextTrophy ? `
+                <div class="trophy-next">
+                    <span class="trophy-next-icon" aria-hidden="true">${nextTrophy.icon}</span>
+                    <div class="trophy-next-main">
+                        <span>Prochain : <strong>${this.escapeHtml(nextTrophy.name)}</strong></span>
+                        <div class="quest-track"><span style="width: ${Math.round(nextTrophy.progress * 100)}%"></span></div>
+                        <small>${formatCurrent(nextTrophy)} / ${nextTrophy.target} ${this.escapeHtml(nextTrophy.unit)} · ${this.escapeHtml(nextTrophy.desc)}</small>
+                    </div>
+                </div>
+            ` : ''}
+            <div class="trophy-grid">
+                ${visible.map(trophy => `
+                    <button type="button" class="trophy ${trophy.unlocked ? 'is-unlocked' : ''}" data-trophy-id="${trophy.id}" aria-label="${this.escapeHtml(`${trophy.name} : ${trophy.desc}`)}">
+                        <span class="trophy-medal" aria-hidden="true">${trophy.icon}</span>
+                        <span class="trophy-name">${this.escapeHtml(trophy.name)}</span>
+                        ${trophy.unlocked ? '' : `<span class="trophy-ring" style="--p: ${Math.round(trophy.progress * 100)}"></span>`}
+                    </button>
+                `).join('')}
+            </div>
+            ${ordered.length > 8 ? `
+                <button type="button" class="pz-more" data-trophy-toggle>${expanded ? 'Réduire' : `Voir les ${trophies.length} trophées`}</button>
+            ` : ''}
+        `;
+    }
+
+    renderSparklineSVG(values = [], { width = 64, height = 22, color = 'currentColor' } = {}) {
+        if (values.length < 2) return '';
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const span = Math.max(0.0001, max - min);
+        const points = values.map((value, index) => {
+            const x = (index / (values.length - 1)) * (width - 4) + 2;
+            const y = height - 3 - ((value - min) / span) * (height - 6);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        const last = points[points.length - 1].split(',');
+        return `
+            <svg class="spark" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true">
+                <polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="${last[0]}" cy="${last[1]}" r="2.6" fill="${color}"/>
+            </svg>
+        `;
+    }
+
+    renderLiftsCard() {
+        const container = document.getElementById('lifts-card');
+        if (!container || !this.progressContext) return;
+        const { snapshot } = this.progressContext;
+        const best = snapshot.bestLift;
+        const formatKg = value => `${this.formatOneDecimal(value)} kg`;
+
+        if (!best) {
+            container.innerHTML = `
+                <div class="pz-card-head">
+                    <div>
+                        <span class="pz-kicker">Tes lifts</span>
+                        <h4>Force & records</h4>
+                    </div>
+                </div>
+                <div class="pz-empty">Tes records et progressions apparaîtront après tes premières séries chargées.</div>
+            `;
+            return;
+        }
+
+        const progressRows = snapshot.progressRows.slice(0, 4);
+        const watchRows = snapshot.watchRows.slice(0, 2);
+        container.innerHTML = `
+            <div class="pz-card-head">
+                <div>
+                    <span class="pz-kicker">Tes lifts</span>
+                    <h4>Force & records</h4>
+                </div>
+                <span class="pz-chip">${snapshot.prCount30} record${snapshot.prCount30 > 1 ? 's' : ''} / 30 j</span>
+            </div>
+            <div class="lift-crown">
+                <span class="lift-crown-medal" aria-hidden="true">👑</span>
+                <div class="lift-crown-main">
+                    <span>Ton lift le plus fort</span>
+                    <strong>${this.escapeHtml(best.exerciseId)}</strong>
+                    <small>${formatKg(best.weight)} × ${best.reps} reps</small>
+                </div>
+                <div class="lift-crown-value">
+                    <strong>${Math.round(best.e1rm)}</strong>
+                    <span>kg e1RM</span>
+                </div>
+            </div>
+            ${progressRows.length ? `
+                <div class="lift-section-label">En progression</div>
+                <div class="lift-list">
+                    ${progressRows.map(row => `
+                        <div class="lift-row">
+                            <div class="lift-row-main">
+                                <strong>${this.escapeHtml(row.exerciseId)}</strong>
+                                <small>e1RM ${formatKg(row.latest.bestE1RM)} · ${row.sessions} séances</small>
+                            </div>
+                            ${this.renderSparklineSVG(row.trend, { color: '#22c55e' })}
+                            <span class="lift-delta is-up">+${this.formatOneDecimal(Math.max(row.deltaKg, row.peakDeltaKg))} kg</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+            ${watchRows.length ? `
+                <div class="lift-section-label">À surveiller</div>
+                <div class="lift-list">
+                    ${watchRows.map(row => `
+                        <div class="lift-row">
+                            <div class="lift-row-main">
+                                <strong>${this.escapeHtml(row.exerciseId)}</strong>
+                                <small>Sous ton meilleur niveau · ${row.sessions} séances</small>
+                            </div>
+                            ${this.renderSparklineSVG(row.trend, { color: '#f59e0b' })}
+                            <span class="lift-delta is-down">${this.formatPercentDelta(row.deltaPct)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        `;
+    }
+
+    renderActivityCard() {
+        const container = document.getElementById('activity-card');
+        if (!container || !this.progressContext) return;
+        const { weekly, snapshot } = this.progressContext;
+        const maxVolume = Math.max(...weekly.map(week => week.value.volume), 1);
+        const weeksWithData = weekly.filter(week => week.value.sessions > 0).length;
+        const avgSessions = weekly.reduce((sum, week) => sum + week.value.sessions, 0) / weekly.length;
+        const goal = snapshot.weeklyGoal;
+        const currentWeek = weekly[weekly.length - 1].value;
+        const previousWeek = weekly[weekly.length - 2]?.value || { volume: 0 };
+        const delta = this.percentChange(currentWeek.volume, previousWeek.volume);
+        const rpeText = snapshot.avgRpe30 == null ? '--' : this.formatOneDecimal(snapshot.avgRpe30);
+
+        container.innerHTML = `
+            <div class="pz-card-head">
+                <div>
+                    <span class="pz-kicker">Activité · 8 semaines</span>
+                    <h4>${weeksWithData ? `${this.formatOneDecimal(avgSessions)} séances / sem.` : 'En attente de séances'}</h4>
+                </div>
+                ${previousWeek.volume > 0 ? `<span class="pz-chip ${delta >= 0 ? 'is-up' : 'is-down'}">${this.formatPercentDelta(delta)} vs S-1</span>` : ''}
+            </div>
+            <div class="activity-chart" role="img" aria-label="Tonnage et séances des 8 dernières semaines">
+                ${weekly.map((week, index) => {
+                    const isCurrent = index === weekly.length - 1;
+                    const height = week.value.volume > 0 ? Math.max(8, Math.round((week.value.volume / maxVolume) * 100)) : 0;
+                    const goalMet = week.value.sessions >= goal;
+                    const dots = Array.from({ length: Math.max(goal, week.value.sessions) }, (_, dotIndex) =>
+                        `<i class="${dotIndex < week.value.sessions ? 'on' : ''}"></i>`).join('');
+                    return `
+                        <div class="activity-col ${isCurrent ? 'is-current' : ''} ${goalMet ? 'is-goal' : ''}">
+                            <span class="activity-value">${week.value.volume > 0 ? this.formatVolume(week.value.volume) : ''}</span>
+                            <div class="activity-bar"><span style="height: ${height}%"></span></div>
+                            <div class="activity-dots">${dots}</div>
+                            <span class="activity-label">${isCurrent ? 'Actu.' : `${week.start.getDate()}/${week.start.getMonth() + 1}`}</span>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="activity-legend">
+                <span><i class="legend-bar"></i>Tonnage</span>
+                <span><i class="legend-dot"></i>Séances (objectif ${goal})</span>
+            </div>
+            <div class="kpi-grid">
+                <div class="kpi"><strong>${snapshot.uniqueTrainingDays30}</strong><span>jours actifs / 30</span></div>
+                <div class="kpi"><strong>${this.formatOneDecimal(snapshot.effectiveSets30)}</strong><span>séries efficaces / 30 j</span></div>
+                <div class="kpi"><strong>${rpeText}</strong><span>RPE moyen</span></div>
+                <div class="kpi"><strong>${this.formatOneDecimal(snapshot.setsPerSession30)}</strong><span>séries / séance</span></div>
+            </div>
+        `;
+    }
+
+    renderPhysiqueCard() {
+        const container = document.getElementById('physique-card');
+        if (!container || !this.progressContext) return;
+        const { muscles } = this.progressContext;
+
+        if (!muscles.length) {
+            container.innerHTML = `
+                <div class="pz-card-head">
+                    <div>
+                        <span class="pz-kicker">Physique · cette semaine</span>
+                        <h4>Croissance musculaire</h4>
+                    </div>
+                </div>
+                <div class="pz-empty">Ajoute des exercices avec un groupe musculaire pour suivre ta croissance.</div>
+            `;
+            return;
+        }
+
+        const growing = muscles.filter(row => ['grow', 'intense'].includes(row.zone.id)).length;
+        container.innerHTML = `
+            <div class="pz-card-head">
+                <div>
+                    <span class="pz-kicker">Physique · cette semaine</span>
+                    <h4>${growing}/${muscles.length} muscles en croissance</h4>
+                </div>
+                <span class="pz-chip">séries efficaces</span>
+            </div>
+            <div class="physique-list">
+                ${muscles.map(row => {
+                    const scale = row.landmarks.MRV * 1.1;
+                    const pct = value => Math.min(100, (value / scale) * 100);
+                    return `
+                        <div class="physique-row zone-${row.zone.id}" style="--muscle: ${getMuscleTheme(row.muscleId).color}">
+                            ${this.renderMuscleBadge(row.muscleId, { size: 'md' })}
+                            <div class="physique-meter" aria-label="${this.escapeHtml(`${row.name} : ${row.volume} séries, zone ${row.zone.label}`)}">
+                                <span class="physique-zone" style="left: ${pct(row.landmarks.MEV)}%; width: ${pct(row.landmarks.MAV) - pct(row.landmarks.MEV)}%"></span>
+                                <span class="physique-fill" style="width: ${pct(row.volume)}%"></span>
+                            </div>
+                            <div class="physique-value">
+                                <strong>${String(row.volume).replace('.', ',')}</strong>
+                                <span>${row.zone.label}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="physique-legend"><i></i>Zone de croissance (MEV → MAV)</div>
+        `;
     }
 
     getStatsRangeStart(days, now = new Date()) {
@@ -2750,6 +3436,10 @@ class App {
         const exerciseWorkouts = new Map();
         const bestByExercise = new Map();
         let prCount30 = 0;
+        let prCountTotal = 0;
+        let prCountWeek = 0;
+        let heaviestSet = null;
+        const weekStart = streakEngine.getWeekBounds(now).start;
         let bestLift = null;
 
         const sortedSets = [...setHistory]
@@ -2797,8 +3487,13 @@ class App {
 
             if (progressionEligible) {
                 const previousBest = bestByExercise.get(exerciseId) || 0;
-                if (previousBest > 0 && e1rm > previousBest * 1.002 && setDate && setDate >= start30) {
-                    prCount30 += 1;
+                if (previousBest > 0 && e1rm > previousBest * 1.002) {
+                    prCountTotal += 1;
+                    if (setDate && setDate >= start30) prCount30 += 1;
+                    if (setDate && setDate >= weekStart) prCountWeek += 1;
+                }
+                if (!heaviestSet || weight > heaviestSet.weight) {
+                    heaviestSet = { exerciseId, weight, reps, date: set.date };
                 }
                 bestByExercise.set(exerciseId, Math.max(previousBest, e1rm));
 
@@ -2837,7 +3532,8 @@ class App {
                 deltaKg,
                 deltaPct,
                 peakDeltaKg,
-                sessions: workouts.length
+                sessions: workouts.length,
+                trend: workouts.slice(-8).map(workout => workout.bestE1RM)
             };
 
             if (deltaKg > 0.25 || peakDeltaKg > 0.25) {
@@ -2852,6 +3548,9 @@ class App {
 
         return {
             prCount30,
+            prCountTotal,
+            prCountWeek,
+            heaviestSet,
             bestLift,
             progressRows: progressRows.slice(0, 8),
             watchRows: watchRows.slice(0, 6)
@@ -2971,261 +3670,15 @@ class App {
             avgRpe30Source: rpeValues30.length ? 'RPE saisis' : (estimatedRpeValues30.length ? 'estimé' : 'aucun RPE'),
             setsPerSession30,
             prCount30: exerciseStats.prCount30,
+            prCountTotal: exerciseStats.prCountTotal,
+            prCountWeek: exerciseStats.prCountWeek,
+            heaviestSet: exerciseStats.heaviestSet,
             bestLift: exerciseStats.bestLift,
             progressRows: exerciseStats.progressRows,
             watchRows: exerciseStats.watchRows
         };
     }
 
-    renderAdvancedStats(snapshot) {
-        const insightGrid = document.getElementById('stats-insight-grid');
-        const detailPanel = document.getElementById('stats-detail-panel');
-        if (!insightGrid || !detailPanel) return;
-
-        const sessionsTone = snapshot.sessionsPerWeek30 >= snapshot.weeklyGoal
-            ? 'positive'
-            : snapshot.sessionsPerWeek30 >= Math.max(1, snapshot.weeklyGoal * 0.7)
-                ? 'warning'
-                : '';
-        const volumeTone = snapshot.volume7Delta > 8 ? 'positive' : snapshot.volume7Delta < -12 ? 'warning' : '';
-        const hardSetTone = snapshot.hardSets30 >= snapshot.workouts30 * 6 ? 'positive' : snapshot.hardSets30 > 0 ? '' : 'warning';
-        const rpeTone = snapshot.avgRpe30 == null
-            ? ''
-            : snapshot.avgRpe30 > 9.2
-                ? 'danger'
-                : snapshot.avgRpe30 >= 7.5
-                    ? 'positive'
-                    : 'warning';
-
-        insightGrid.innerHTML = [
-            {
-                tone: sessionsTone,
-                label: 'Rythme 30 jours',
-                value: `${this.formatOneDecimal(snapshot.sessionsPerWeek30)}/sem`,
-                note: `${snapshot.workouts30} séance${snapshot.workouts30 > 1 ? 's' : ''} sur 30j, objectif ${snapshot.weeklyGoal}/sem`
-            },
-            {
-                tone: volumeTone,
-                label: 'Volume chargé 7j',
-                value: `${this.formatVolume(snapshot.volume7)} kg`,
-                note: `${this.formatPercentDelta(snapshot.volume7Delta)} vs les 7 jours précédents`
-            },
-            {
-                tone: hardSetTone,
-                label: 'Séries effectives 30j',
-                value: this.formatOneDecimal(snapshot.effectiveSets30),
-                note: `${snapshot.hardSets30} hard sets, ${this.formatOneDecimal(snapshot.setsPerSession30)} séries/séance`
-            },
-            {
-                tone: rpeTone,
-                label: 'Intensité moyenne',
-                value: snapshot.avgRpe30 == null ? '--' : `RPE ${this.formatOneDecimal(snapshot.avgRpe30)}`,
-                note: snapshot.avgRpe30Source === 'aucun RPE'
-                    ? 'Ajoute des RPE pour une lecture plus fiable'
-                    : `${snapshot.avgRpe30Source} sur les 30 derniers jours`
-            }
-        ].map(card => `
-            <div class="stats-insight-card ${card.tone}">
-                <div class="stats-insight-label">${card.label}</div>
-                <div class="stats-insight-value">${card.value}</div>
-                <div class="stats-insight-note">${card.note}</div>
-            </div>
-        `).join('');
-
-        const bestLiftText = snapshot.bestLift
-            ? `${this.escapeHtml(snapshot.bestLift.exerciseId)}`
-            : 'Pas encore de charge de référence';
-        const bestLiftValue = snapshot.bestLift
-            ? `${this.formatOneDecimal(snapshot.bestLift.e1rm)} kg e1RM`
-            : '--';
-        const getWatchReason = (row) => {
-            if (row.deltaPct <= -6) {
-                return `e1RM en baisse nette vs dernier passage (${this.formatPercentDelta(row.deltaPct)})`;
-            }
-            if (row.peakDeltaKg < -1) {
-                return `dernier e1RM sous ton meilleur niveau de ${this.formatOneDecimal(Math.abs(row.peakDeltaKg))} kg`;
-            }
-            return `tendance récente sous la référence (${this.formatPercentDelta(row.deltaPct)})`;
-        };
-
-        const progressRowsHtml = snapshot.progressRows.length
-            ? snapshot.progressRows.map(row => `
-                <div class="stats-detail-row">
-                    <div class="stats-detail-main">
-                        <span class="stats-detail-name">${this.escapeHtml(row.exerciseId)}</span>
-                        <span class="stats-detail-meta">${row.sessions} séances suivies · dernier e1RM ${this.formatOneDecimal(row.latest.bestE1RM)} kg</span>
-                    </div>
-                    <span class="stats-detail-value positive">+${this.formatOneDecimal(row.deltaKg)} kg</span>
-                </div>
-            `).join('')
-            : `<div class="stats-detail-empty">Les progressions par exercice apparaîtront dès que tu as au moins deux passages sur le même mouvement.</div>`;
-
-        const watchRowsHtml = snapshot.watchRows.length
-            ? snapshot.watchRows.map(row => `
-                <div class="stats-detail-row">
-                    <div class="stats-detail-main">
-                        <span class="stats-detail-name">${this.escapeHtml(row.exerciseId)}</span>
-                        <span class="stats-detail-meta">${row.sessions} séances suivies · ${getWatchReason(row)}</span>
-                    </div>
-                    <span class="stats-detail-value warning">${this.formatPercentDelta(row.deltaPct)}</span>
-                </div>
-            `).join('')
-            : `<div class="stats-detail-empty">Aucun exercice prioritaire à surveiller sur les données récentes.</div>`;
-
-        detailPanel.innerHTML = `
-            <div class="stats-detail-card">
-                <div class="stats-detail-title-row">
-                    <div class="stats-detail-title">Lecture rapide</div>
-                    <div class="stats-detail-chip">30 jours</div>
-                </div>
-                <div class="stats-detail-list">
-                    <div class="stats-detail-row">
-                        <div class="stats-detail-main">
-                            <span class="stats-detail-name">Jours actifs</span>
-                            <span class="stats-detail-meta">Régularité réelle, pas seulement nombre de séances</span>
-                        </div>
-                        <span class="stats-detail-value">${snapshot.uniqueTrainingDays30}/30</span>
-                    </div>
-                    <div class="stats-detail-row">
-                        <div class="stats-detail-main">
-                            <span class="stats-detail-name">Records récents</span>
-                            <span class="stats-detail-meta">Nouveaux meilleurs e1RM détectés sur les séries</span>
-                        </div>
-                        <span class="stats-detail-value positive">${snapshot.prCount30}</span>
-                    </div>
-                    <div class="stats-detail-row">
-                        <div class="stats-detail-main">
-                            <span class="stats-detail-name">${bestLiftText}</span>
-                            <span class="stats-detail-meta">Meilleure force estimée enregistrée</span>
-                        </div>
-                        <span class="stats-detail-value">${bestLiftValue}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="stats-detail-card">
-                <div class="stats-detail-title-row">
-                    <div class="stats-detail-title">Exercices en progression</div>
-                    <div class="stats-detail-chip">e1RM</div>
-                </div>
-                <div class="stats-detail-list">${progressRowsHtml}</div>
-            </div>
-            <div class="stats-detail-card">
-                <div class="stats-detail-title-row">
-                    <div class="stats-detail-title">À surveiller</div>
-                    <div class="stats-detail-chip">tendance</div>
-                </div>
-                <div class="stats-detail-list">${watchRowsHtml}</div>
-            </div>
-        `;
-    }
-    
-    async renderMuscleStats(homeData = null) {
-        const container = document.getElementById('muscle-stats-grid');
-        if (!container) return;
-        
-        const snapshotData = await this.resolveHomeDataSnapshot(homeData);
-        const volumeByMuscle = await this.getWeeklyVolumeByMuscle(snapshotData);
-        const slots = snapshotData.slots || [];
-        
-        // Get unique muscle groups from slots that have been used
-        const usedMuscleGroups = new Set();
-        for (const slot of slots) {
-            if (slot.muscleGroup) {
-                usedMuscleGroups.add(slot.muscleGroup);
-            }
-            this.getExerciseMuscleContributions(slot.activeExercise || slot.name, slot)
-                .forEach(contribution => {
-                    if (contribution?.muscleId) usedMuscleGroups.add(contribution.muscleId);
-                });
-        }
-        Object.keys(volumeByMuscle).forEach(muscleId => {
-            usedMuscleGroups.add(muscleId);
-        });
-        
-        // If no muscle groups configured, show empty state
-        if (usedMuscleGroups.size === 0) {
-            container.innerHTML = `
-                <div class="muscle-stats-empty" style="grid-column: 1 / -1;">
-                    <svg class="muscle-stats-empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>
-                        <line x1="16" y1="8" x2="2" y2="22"/>
-                        <line x1="17.5" y1="15" x2="9" y2="15"/>
-                    </svg>
-                    <div>Configure les groupes musculaires dans tes exercices pour voir les stats</div>
-                </div>
-            `;
-            return;
-        }
-        
-        // Build muscle stats HTML
-        let html = '';
-        // Sort muscle groups: those with volume first, then alphabetically
-        const sortedGroups = Array.from(usedMuscleGroups).sort((a, b) => {
-            const volA = volumeByMuscle[a]?.effectiveSets || 0;
-            const volB = volumeByMuscle[b]?.effectiveSets || 0;
-            if (volB !== volA) return volB - volA;
-            return a.localeCompare(b);
-        });
-        
-        for (const muscleId of sortedGroups) {
-            const muscleInfo = MUSCLE_GROUPS.find(m => m.id === muscleId);
-            if (!muscleInfo) continue;
-            
-            const volume = volumeByMuscle[muscleId]?.effectiveSets || 0;
-            const formattedVolume = this.formatVolume(
-                Number.isFinite(volume) ? Math.round(volume * 10) / 10 : 0
-            );
-            const hasVolume = volume > 0;
-            const landmarks = VOLUME_LANDMARKS[muscleId] || VOLUME_LANDMARKS.default;
-            const isUnderMaintenance = hasVolume && volume < landmarks.MV;
-            const isMaintenance = hasVolume && volume >= landmarks.MV && volume < landmarks.MEV;
-            const isOptimal = volume >= landmarks.MEV && volume <= landmarks.MAV;
-            const isHigh = volume > landmarks.MAV && volume <= landmarks.MRV;
-            const isExcessive = volume > landmarks.MRV;
-            const progressPercent = Math.min((volume / Math.max(landmarks.MRV, 1)) * 100, 100);
-            
-            let statusClass = '';
-            let statusLabel = '';
-            if (isExcessive) {
-                statusClass = 'excessive';
-                statusLabel = 'MRV+';
-            } else if (isOptimal) {
-                statusClass = 'optimal';
-                statusLabel = 'MAV';
-            } else if (isHigh) {
-                statusClass = 'has-volume';
-                statusLabel = 'Haut';
-            } else if (isUnderMaintenance || isMaintenance) {
-                statusClass = 'has-volume low';
-                statusLabel = isUnderMaintenance ? 'Sous MV' : 'MEV-';
-            } else if (hasVolume) {
-                statusClass = 'has-volume';
-                statusLabel = '';
-            }
-            
-            html += `
-                <div class="muscle-stat-item ${statusClass}">
-                    <div class="muscle-stat-header">
-                        <span class="muscle-stat-name">
-                            <span>${muscleInfo.name}</span>
-                        </span>
-                        ${statusLabel ? `<span class="muscle-stat-status">${statusLabel}</span>` : ''}
-                    </div>
-                    <div class="muscle-stat-value">
-                        <span class="muscle-stat-sets">${formattedVolume}</span>
-                        <span class="muscle-stat-unit">séries</span>
-                    </div>
-                    <div class="muscle-stat-thresholds">MEV ${landmarks.MEV} · MAV ${landmarks.MAV} · MRV ${landmarks.MRV}</div>
-                    <div class="muscle-stat-bar">
-                        <div class="muscle-stat-fill" style="width: ${progressPercent}%"></div>
-                    </div>
-                </div>
-            `;
-        }
-        
-        container.innerHTML = html;
-    }
-    
     formatVolume(vol) {
         if (vol >= 1000000) return (vol / 1000000).toFixed(1) + 'M';
         if (vol >= 1000) return (vol / 1000).toFixed(1) + 'k';
@@ -3233,54 +3686,6 @@ class App {
         return vol.toFixed(1).replace(/\.0$/, '');
     }
     
-    drawRoundRect(ctx, x, y, width, height, radius) {
-        if (typeof ctx.roundRect === 'function') {
-            ctx.roundRect(x, y, width, height, radius);
-        } else {
-            ctx.moveTo(x + radius, y);
-            ctx.lineTo(x + width - radius, y);
-            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-            ctx.lineTo(x + width, y + height - radius);
-            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-            ctx.lineTo(x + radius, y + height);
-            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-            ctx.lineTo(x, y + radius);
-            ctx.quadraticCurveTo(x, y, x + radius, y);
-            ctx.closePath();
-        }
-    }
-
-    scheduleHomeChartsRender() {
-        if (this.homeChartsFrame) {
-            cancelAnimationFrame(this.homeChartsFrame);
-        }
-
-        this.homeChartsFrame = requestAnimationFrame(() => {
-            this.homeChartsFrame = null;
-            this.renderVolumeChart(this.homeChartData.setHistory || []);
-            this.renderFrequencyChart(this.homeChartData.history || []);
-        });
-    }
-
-    getChartContext(canvas) {
-        if (!canvas) return null;
-
-        const ctx = canvas.getContext('2d');
-        const rect = canvas.getBoundingClientRect();
-        const width = Math.round(rect.width || canvas.clientWidth || 0);
-        const height = Math.round(rect.height || canvas.clientHeight || 0);
-
-        if (!ctx || width <= 0 || height <= 0) return null;
-
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-
-        return { ctx, width, height };
-    }
-
     getWeekStart(dateValue) {
         const date = new Date(dateValue);
         const day = date.getDay();
@@ -3317,278 +3722,6 @@ class App {
         }
 
         return buckets;
-    }
-
-    drawChartEmptyState(ctx, width, height, message) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
-        ctx.beginPath();
-        this.drawRoundRect(ctx, 0, 0, width, height, 16);
-        ctx.fill();
-
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '600 13px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(message, width / 2, height / 2);
-        ctx.restore();
-    }
-
-    drawChartGrid(ctx, width, top, bottom, left, right, lines = 4) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
-        ctx.lineWidth = 1;
-
-        for (let i = 0; i < lines; i++) {
-            const y = top + ((bottom - top) / Math.max(lines - 1, 1)) * i;
-            ctx.beginPath();
-            ctx.moveTo(left, y);
-            ctx.lineTo(width - right, y);
-            ctx.stroke();
-        }
-
-        ctx.restore();
-    }
-    
-    renderMotivationMessage(history, thisMonth, totalVolume) {
-        const container = document.getElementById('stats-motivation');
-        if (!container) return;
-        
-        if (history.length === 0) {
-            container.innerHTML = `
-                <span class="stats-motivation-icon">🎯</span>
-                <span class="stats-motivation-text">C'est le moment de commencer ! Ta première séance t'attend.</span>
-            `;
-            return;
-        }
-        
-        // Check recent activity
-        const lastWorkout = [...history].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-        const daysSinceLast = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
-        
-        let icon, message;
-        
-        if (daysSinceLast === 0) {
-            icon = '🔥';
-            message = 'Tu as trainé aujourd\'hui ! Continue sur cette lancée !';
-        } else if (daysSinceLast === 1) {
-            icon = '💪';
-            message = 'Bonne récup ! Prêt pour ta prochaine séance ?';
-        } else if (daysSinceLast <= 3) {
-            icon = '✅';
-            message = `${daysSinceLast} jours de repos. Parfait pour la récupération !`;
-        } else if (daysSinceLast <= 7) {
-            icon = '⏰';
-            message = `${daysSinceLast} jours sans training. Il est temps d'y retourner !`;
-        } else {
-            icon = '🚀';
-            message = 'Ca fait un moment ! Reviens en force, on y croit !';
-        }
-        
-        // Override with achievements
-        if (thisMonth >= 12) {
-            icon = '🏆';
-            message = `${thisMonth} séances ce mois ! Tu es une machine !`;
-        } else if (thisMonth >= 8) {
-            icon = '⭐';
-            message = `${thisMonth} séances ce mois ! Excellent rythme !`;
-        } else if (history.length === 10) {
-            icon = '🎉';
-            message = '10 séances au total ! Belle étape !';
-        } else if (history.length === 50) {
-            icon = '🌟';
-            message = '50 séances ! Tu es un vétéran !';
-        } else if (history.length === 100) {
-            icon = '👑';
-            message = '100 séances ! Légende absolue !';
-        }
-        
-        container.innerHTML = `
-            <span class="stats-motivation-icon">${icon}</span>
-            <span class="stats-motivation-text">${message}</span>
-        `;
-    }
-    
-    renderVolumeChart(setHistory) {
-        const canvas = document.getElementById('volume-chart');
-        const chart = this.getChartContext(canvas);
-        if (!chart) return;
-
-        const subtitle = document.getElementById('volume-chart-subtitle');
-        const { ctx, width, height } = chart;
-        const slotMap = new Map((this.homeChartData.slots || []).map(slot => [slot.id, slot]));
-        const weeks = this.getRecentWeeklyBuckets(4, (weekStart, weekEnd) => {
-            let volume = 0;
-
-            for (const set of setHistory) {
-                const setDate = new Date(set.date);
-                if (setDate >= weekStart && setDate < weekEnd) {
-                    volume += this.getSetLoadedVolume(set, slotMap.get(String(set.slotId)) || slotMap.get(set.slotId));
-                }
-            }
-
-            return volume;
-        });
-
-        const values = weeks.map(week => week.value);
-        const hasData = values.some(value => value > 0);
-
-        if (subtitle) {
-            subtitle.textContent = hasData
-                ? `Pic: ${this.formatVolume(Math.max(...values))} sur les 4 dernières semaines`
-                : 'Les volumes hebdo apparaîtront ici après tes prochaines séances';
-        }
-
-        if (!hasData) {
-            this.drawChartEmptyState(ctx, width, height, 'Aucune charge enregistrée sur cette période');
-            return;
-        }
-
-        const top = 18;
-        const bottom = height - 28;
-        const left = 10;
-        const right = 10;
-        const availableWidth = width - left - right;
-        const slotWidth = availableWidth / weeks.length;
-        const barWidth = Math.min(36, slotWidth * 0.56);
-        const chartHeight = bottom - top;
-        const maxValue = Math.max(...values, 1);
-
-        this.drawChartGrid(ctx, width, top, bottom, left, right, 4);
-
-        weeks.forEach((week, index) => {
-            const x = left + (slotWidth * index) + ((slotWidth - barWidth) / 2);
-            const ratio = week.value / maxValue;
-            const barHeight = Math.max(10, chartHeight * ratio);
-            const y = bottom - barHeight;
-
-            ctx.save();
-            ctx.fillStyle = 'rgba(99, 102, 241, 0.09)';
-            ctx.beginPath();
-            this.drawRoundRect(ctx, x, top, barWidth, chartHeight, 12);
-            ctx.fill();
-
-            const gradient = ctx.createLinearGradient(x, y, x, bottom);
-            gradient.addColorStop(0, '#818cf8');
-            gradient.addColorStop(1, '#4f46e5');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            this.drawRoundRect(ctx, x, y, barWidth, barHeight, 12);
-            ctx.fill();
-
-            ctx.fillStyle = '#0f172a';
-            ctx.font = '700 11px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(this.formatVolume(week.value), x + (barWidth / 2), Math.max(12, y - 8));
-
-            ctx.fillStyle = '#64748b';
-            ctx.font = '600 11px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
-            ctx.fillText(week.shortLabel, x + (barWidth / 2), height - 10);
-            ctx.restore();
-        });
-    }
-    
-    renderFrequencyChart(history) {
-        const canvas = document.getElementById('frequency-chart');
-        const chart = this.getChartContext(canvas);
-        if (!chart) return;
-
-        const subtitle = document.getElementById('frequency-chart-subtitle');
-        const { ctx, width, height } = chart;
-        const weeks = this.getRecentWeeklyBuckets(6, (weekStart, weekEnd) => {
-            let count = 0;
-
-            for (const workout of history) {
-                const workoutDate = new Date(workout.date);
-                if (workoutDate >= weekStart && workoutDate < weekEnd) {
-                    count++;
-                }
-            }
-
-            return count;
-        });
-
-        const values = weeks.map(week => week.value);
-        const totalSessions = values.reduce((sum, value) => sum + value, 0);
-        const average = totalSessions > 0 ? totalSessions / values.length : 0;
-        const hasData = totalSessions > 0;
-
-        if (subtitle) {
-            subtitle.textContent = hasData
-                ? `${Math.round(average * 10) / 10} séance${average >= 2 ? 's' : ''}/semaine en moyenne`
-                : 'Ton rythme hebdo apparaîtra ici dès les premières séances';
-        }
-
-        if (!hasData) {
-            this.drawChartEmptyState(ctx, width, height, 'Aucune séance sur les 6 dernières semaines');
-            return;
-        }
-
-        const top = 18;
-        const bottom = height - 28;
-        const left = 14;
-        const right = 14;
-        const chartHeight = bottom - top;
-        const chartWidth = width - left - right;
-        const maxValue = Math.max(...values, 1);
-        const stepX = weeks.length > 1 ? chartWidth / (weeks.length - 1) : 0;
-        const points = weeks.map((week, index) => ({
-            x: left + (stepX * index),
-            y: bottom - ((week.value / maxValue) * chartHeight),
-            label: week.shortLabel,
-            value: week.value
-        }));
-
-        this.drawChartGrid(ctx, width, top, bottom, left, right, 4);
-
-        ctx.beginPath();
-        points.forEach((point, index) => {
-            if (index === 0) ctx.moveTo(point.x, point.y);
-            else ctx.lineTo(point.x, point.y);
-        });
-        ctx.lineTo(points[points.length - 1].x, bottom);
-        ctx.lineTo(points[0].x, bottom);
-        ctx.closePath();
-
-        const areaGradient = ctx.createLinearGradient(0, top, 0, bottom);
-        areaGradient.addColorStop(0, 'rgba(34, 197, 94, 0.22)');
-        areaGradient.addColorStop(1, 'rgba(34, 197, 94, 0.03)');
-        ctx.fillStyle = areaGradient;
-        ctx.fill();
-
-        ctx.beginPath();
-        points.forEach((point, index) => {
-            if (index === 0) ctx.moveTo(point.x, point.y);
-            else ctx.lineTo(point.x, point.y);
-        });
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.stroke();
-
-        points.forEach((point, index) => {
-            ctx.beginPath();
-            ctx.fillStyle = index === points.length - 1 ? '#16a34a' : '#22c55e';
-            ctx.arc(point.x, point.y, index === points.length - 1 ? 5 : 4, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.fillStyle = '#ffffff';
-            ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#64748b';
-            ctx.font = '600 10px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(point.label, point.x, height - 10);
-
-            if (point.value > 0) {
-                ctx.fillStyle = '#0f172a';
-                ctx.font = '700 11px Inter, -apple-system, BlinkMacSystemFont, sans-serif';
-                ctx.fillText(point.value, point.x, Math.max(12, point.y - 10));
-            }
-        });
     }
 
     // ===== Deload System =====
@@ -5946,27 +6079,264 @@ class App {
         }
 
         const descriptor = this.getExerciseDescriptor(slot);
-        const primaryMuscle = descriptor.primaryMuscles[0]
-            ? getMuscleGroupMeta(descriptor.primaryMuscles[0])
-            : null;
-        const secondaryNames = descriptor.secondaryMuscles
-            .slice(0, 2)
-            .map(muscleId => this.getMuscleGroupLabel(muscleId))
-            .filter(Boolean);
+        const primaryMuscleId = descriptor.primaryMuscles[0] || slot.muscleGroup || '';
         const tags = [];
-        if (primaryMuscle) {
-            tags.push(`<span class="exercise-header-tag exercise-header-tag-muscle">${this.escapeHtml(primaryMuscle.name)}</span>`);
+        if (primaryMuscleId) {
+            tags.push(this.renderMuscleBadge(primaryMuscleId));
         }
-        if (secondaryNames.length > 0) {
-            tags.push(`<span class="exercise-header-tag">avec ${this.escapeHtml(secondaryNames.join(' · '))}</span>`);
-        }
+        tags.push('<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>');
         if (this.isUnilateralSlot(slot)) {
-            tags.push('<span class="exercise-header-tag exercise-header-tag-format">G/D indépendant</span>');
+            tags.push('<span class="exercise-header-tag exercise-header-tag-format">G/D</span>');
         } else if (this.isCardioSlot(slot)) {
             tags.push('<span class="exercise-header-tag exercise-header-tag-format">Cardio</span>');
         }
 
         container.innerHTML = tags.join('');
+        this.syncExerciseTargetsChip();
+        this.updateTechniqueButton(slot);
+    }
+
+    renderSupersetHeaderMeta() {
+        const container = document.getElementById('exercise-header-meta');
+        if (!container || !this.currentSlot || !this.supersetSlot) return;
+        const badges = [this.currentSlot, this.supersetSlot]
+            .map(slot => this.getExerciseDescriptor(slot).primaryMuscles[0] || slot.muscleGroup || '')
+            .filter((muscleId, index, list) => muscleId && list.indexOf(muscleId) === index)
+            .map(muscleId => this.renderMuscleBadge(muscleId));
+        container.innerHTML = `${badges.join('')}<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>`;
+        this.syncExerciseTargetsChip();
+        this.updateTechniqueButton(this.currentSlot);
+    }
+
+    // ===== Technique sheet (exercise database) =====
+    async getExerciseDbLinks() {
+        if (!this.exerciseDbLinks) {
+            this.exerciseDbLinks = (await db.getSetting('exerciseDbLinks')) || {};
+        }
+        return this.exerciseDbLinks;
+    }
+
+    async resolveExerciseDbEntry(slot) {
+        if (!slot) return null;
+        try {
+            await exerciseDb.load();
+        } catch (error) {
+            console.warn('[ExerciseDB] indisponible', error);
+            return null;
+        }
+        const name = this.getSlotExerciseName(slot);
+        const links = await this.getExerciseDbLinks();
+        return exerciseDb.resolve({
+            name,
+            libraryName: this.findExerciseLibraryEntry(name)?.name || '',
+            muscle: this.getExerciseDescriptor(slot).primaryMuscles[0] || slot.muscleGroup || '',
+            dbId: links[this.normalizeExerciseText(name)] || slot.exerciseDbId || null
+        });
+    }
+
+    async updateTechniqueButton(slot = this.currentSlot) {
+        const button = document.getElementById('btn-open-technique');
+        const teaser = document.getElementById('technique-teaser');
+        const token = Symbol('technique');
+        this.techniqueButtonToken = token;
+        const entry = await this.resolveExerciseDbEntry(slot);
+        if (this.techniqueButtonToken !== token) return;
+
+        const hasEntry = Boolean(entry);
+        if (button) button.hidden = false;
+        if (!teaser) return;
+        teaser.hidden = false;
+        const thumb = document.getElementById('technique-teaser-thumb');
+        const meta = document.getElementById('technique-teaser-meta');
+        if (thumb) {
+            thumb.hidden = !hasEntry;
+            if (hasEntry) {
+                thumb.onerror = () => { thumb.hidden = true; };
+                thumb.src = exerciseDb.imageUrl(entry);
+            }
+        }
+        if (meta) {
+            meta.textContent = hasEntry
+                ? `Animation + ${entry.st.length} étapes · ${entry.n}`
+                : 'Trouve le mouvement dans la base de 1 300 exercices';
+        }
+    }
+
+    async openTechniqueSheet() {
+        const sheet = document.getElementById('sheet-technique');
+        if (!sheet || !this.currentSlot) return;
+        const slots = this.isSupersetMode && this.supersetSlot
+            ? [this.currentSlot, this.supersetSlot]
+            : [this.currentSlot];
+        this.techniqueState = { slots, index: 0, searching: false, query: '' };
+        sheet.classList.add('active');
+        await this.renderTechniqueSheet();
+    }
+
+    closeTechniqueSheet() {
+        document.getElementById('sheet-technique')?.classList.remove('active');
+        this.techniqueState = null;
+    }
+
+    async renderTechniqueSheet() {
+        const state = this.techniqueState;
+        const body = document.getElementById('technique-body');
+        const title = document.getElementById('technique-sheet-title');
+        const switcher = document.getElementById('technique-switch');
+        if (!state || !body) return;
+
+        const slot = state.slots[state.index];
+        const exerciseName = this.getSlotExerciseName(slot);
+        if (title) title.textContent = exerciseName;
+        if (switcher) {
+            switcher.hidden = state.slots.length < 2;
+            switcher.innerHTML = state.slots.map((item, index) => `
+                <button type="button" class="segmented-btn ${index === state.index ? 'active' : ''}" data-technique-index="${index}">
+                    ${index === 0 ? 'A' : 'B'} · ${this.escapeHtml(this.getSlotExerciseName(item))}
+                </button>
+            `).join('');
+        }
+
+        body.innerHTML = '<div class="technique-loading"><span></span><span></span><span></span></div>';
+        const entry = await this.resolveExerciseDbEntry(slot);
+        if (this.techniqueState !== state) return;
+
+        const coachCue = (slot.instructions || '').trim();
+        const searchBlock = `
+            <div class="technique-search ${state.searching || !entry ? 'is-open' : ''}">
+                ${entry && !state.searching ? `
+                    <button type="button" class="technique-change" data-technique-change>Ce n’est pas le bon mouvement ?</button>
+                ` : `
+                    <label class="technique-search-label" for="technique-search">${entry ? 'Choisis le bon mouvement' : 'Pas de fiche trouvée automatiquement — cherche le mouvement'}</label>
+                    <input type="search" id="technique-search" class="technique-search-input" placeholder="ex. développé incliné, curl marteau…" value="${this.escapeHtml(state.query || '')}" autocomplete="off">
+                    <div class="technique-results" id="technique-results"></div>
+                `}
+            </div>
+        `;
+
+        if (!entry) {
+            body.innerHTML = `
+                ${coachCue ? `<div class="technique-coach"><span aria-hidden="true">🧠</span><p>${this.escapeHtml(coachCue)}</p></div>` : ''}
+                ${searchBlock}
+            `;
+            this.renderTechniqueResults();
+            return;
+        }
+
+        const muscleId = MUSCLE_GROUPS.some(group => group.id === entry.m) ? entry.m : (slot.muscleGroup || '');
+        body.innerHTML = `
+            <div class="technique-hero">
+                <div class="technique-media">
+                    <img src="${exerciseDb.gifUrl(entry)}" alt="Animation : ${this.escapeHtml(entry.n)}" decoding="async" onerror="this.closest('.technique-media').classList.add('is-missing')">
+                    <span class="technique-media-fallback" aria-hidden="true">🏋️</span>
+                </div>
+                <div class="technique-identity">
+                    ${this.normalizeExerciseText(entry.n) === this.normalizeExerciseText(exerciseName) ? '' : `<strong>${this.escapeHtml(entry.n)}</strong>`}
+                    <small>${this.escapeHtml(entry.en)}</small>
+                    <div class="technique-chips">
+                        ${muscleId ? this.renderMuscleBadge(muscleId) : ''}
+                        ${entry.eq ? `<span class="technique-chip">${this.escapeHtml(entry.eq)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            ${entry.s2.length ? `
+                <div class="technique-secondary">
+                    <span>Travaille aussi</span>
+                    ${entry.s2.map(name => `<span class="technique-chip is-soft">${this.escapeHtml(name)}</span>`).join('')}
+                </div>
+            ` : ''}
+            ${coachCue ? `<div class="technique-coach"><span aria-hidden="true">🧠</span><p>${this.escapeHtml(coachCue)}</p></div>` : ''}
+            <ol class="technique-steps">
+                ${entry.st.map(step => `<li>${this.escapeHtml(step)}</li>`).join('')}
+            </ol>
+            ${searchBlock}
+            <p class="technique-credit">Animation ${this.escapeHtml(exerciseDb.attribution)} · Données : exercises-dataset (MIT)</p>
+        `;
+        this.renderTechniqueResults();
+    }
+
+    renderTechniqueResults() {
+        const container = document.getElementById('technique-results');
+        if (!container || !this.techniqueState) return;
+        const query = this.techniqueState.query || this.getSlotExerciseName(this.techniqueState.slots[this.techniqueState.index]);
+        const results = exerciseDb.search(query, { limit: 12 });
+        container.innerHTML = results.length
+            ? results.map(entry => `
+                <button type="button" class="technique-result" data-technique-link="${entry.id}">
+                    <img src="${exerciseDb.imageUrl(entry)}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'">
+                    <span>
+                        <strong>${this.escapeHtml(entry.n)}</strong>
+                        <small>${this.escapeHtml(entry.en)} · ${this.escapeHtml(entry.eq)}</small>
+                    </span>
+                </button>
+            `).join('')
+            : '<div class="technique-results-empty">Aucun résultat — essaie un autre mot (ex. « rowing », « press »).</div>';
+    }
+
+    async linkTechniqueEntry(entryId) {
+        const state = this.techniqueState;
+        if (!state) return;
+        const slot = state.slots[state.index];
+        const links = await this.getExerciseDbLinks();
+        links[this.normalizeExerciseText(this.getSlotExerciseName(slot))] = entryId;
+        await db.setSetting('exerciseDbLinks', links);
+        state.searching = false;
+        state.query = '';
+        await this.renderTechniqueSheet();
+        this.updateTechniqueButton(this.currentSlot);
+    }
+
+    bindTechniqueSheetEvents() {
+        const sheet = document.getElementById('sheet-technique');
+        if (!sheet) return;
+        document.getElementById('btn-open-technique')?.addEventListener('click', () => this.openTechniqueSheet());
+        document.getElementById('technique-teaser')?.addEventListener('click', () => this.openTechniqueSheet());
+        sheet.addEventListener('click', (event) => {
+            if (event.target.classList.contains('sheet-backdrop') || event.target.closest('#btn-close-technique')) {
+                this.closeTechniqueSheet();
+                return;
+            }
+            const switchButton = event.target.closest('[data-technique-index]');
+            if (switchButton && this.techniqueState) {
+                this.techniqueState.index = Number(switchButton.dataset.techniqueIndex) || 0;
+                this.techniqueState.searching = false;
+                this.techniqueState.query = '';
+                this.renderTechniqueSheet();
+                return;
+            }
+            if (event.target.closest('[data-technique-change]') && this.techniqueState) {
+                this.techniqueState.searching = true;
+                this.renderTechniqueSheet().then(() => document.getElementById('technique-search')?.focus());
+                return;
+            }
+            const linkButton = event.target.closest('[data-technique-link]');
+            if (linkButton) this.linkTechniqueEntry(linkButton.dataset.techniqueLink);
+        });
+        sheet.addEventListener('input', (event) => {
+            if (event.target.id !== 'technique-search' || !this.techniqueState) return;
+            this.techniqueState.query = event.target.value;
+            clearTimeout(this.techniqueSearchTimer);
+            this.techniqueSearchTimer = setTimeout(() => this.renderTechniqueResults(), 120);
+        });
+    }
+
+    // Programme targets live in the (visually hidden) info grid, which several
+    // flows rewrite (deload, LMS, superset). The header chip mirrors it.
+    syncExerciseTargetsChip() {
+        const chip = document.getElementById('exercise-targets-chip');
+        if (!chip) return;
+        const read = id => (document.getElementById(id)?.textContent || '').trim();
+        const sets = read('exercise-sets');
+        const reps = read('exercise-reps');
+        const rest = read('exercise-rest');
+        const rir = read('exercise-rir');
+        const parts = [];
+        if (sets && reps && reps !== 'Voir ci-dessous') parts.push(`${sets} × ${reps}`);
+        else if (sets) parts.push(`${sets} séries`);
+        if (rest && rest !== '--') parts.push(rest);
+        if (rir && rir !== '--') parts.push(`RIR ${rir}`);
+        chip.textContent = parts.join(' · ');
+        chip.hidden = parts.length === 0;
     }
 
     findExerciseLibraryEntry(exerciseName) {
@@ -7344,7 +7714,7 @@ class App {
         const safeSlotId = this.escapeHtml(slot.slotId || '');
         const safeExerciseName = this.escapeHtml(exerciseName);
         const muscleBadge = primaryMuscle
-            ? `<span class="slot-muscle-tag">${this.escapeHtml(primaryMuscle.name)}</span>`
+            ? this.renderMuscleBadge(primaryMuscleId, { label: primaryMuscle.name, className: 'slot-muscle-badge' })
             : '';
         const formatBadge = this.isUnilateralSlot(slot)
             ? '<span class="slot-format-tag">Unilatéral</span>'
@@ -7518,9 +7888,11 @@ class App {
         
         this.sessionTimer = setInterval(() => {
             const elapsed = Date.now() - this.sessionStartTime;
-            const minutes = Math.floor(elapsed / 60000);
+            const hours = Math.floor(elapsed / 3600000);
+            const minutes = Math.floor((elapsed % 3600000) / 60000);
             const seconds = Math.floor((elapsed % 60000) / 1000);
-            timerEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const clock = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            timerEl.textContent = hours > 0 ? `${hours}h${clock}` : clock;
         }, 1000);
     }
 
@@ -8062,6 +8434,7 @@ class App {
         document.getElementById('exercise-reps').textContent = 'Voir ci-dessous';
         document.getElementById('exercise-rest').textContent = `${this.currentSlot.rest}s`;
         document.getElementById('exercise-rir').textContent = `${this.currentSlot.rir}-${this.supersetSlot.rir}`;
+        this.renderSupersetHeaderMeta();
         document.getElementById('exercise-instructions').textContent = 'Enchaîne les deux exercices sans pause entre eux. Repos uniquement après avoir fait les deux.';
         this.renderExerciseChallengeCard([this.currentSlot, this.supersetSlot]);
 
@@ -9697,8 +10070,8 @@ class App {
                     referenceWeight: adviceB?.referenceWeight ?? null
                 }
             );
-            const challengeReminderA = this.getSeriesChallengeReminder(this.currentSlot, i, slotAData);
-            const challengeReminderB = this.getSeriesChallengeReminder(this.supersetSlot, i, slotBData);
+            const challengeReminderA = isNextIncompleteA ? this.getSeriesChallengeReminder(this.currentSlot, i, slotAData) : '';
+            const challengeReminderB = isNextIncompleteB ? this.getSeriesChallengeReminder(this.supersetSlot, i, slotBData) : '';
             
             const isEditingSuperset = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
@@ -11869,31 +12242,24 @@ class App {
             
             const isEditing = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
-            const seriesChallengeReminder = this.getSeriesChallengeReminder(this.currentSlot, i, slotData);
+            // The challenge reminder only rides on the set you are about to do.
+            const seriesChallengeReminder = isNextIncompleteSet
+                ? this.getSeriesChallengeReminder(this.currentSlot, i, slotData)
+                : '';
             
             const card = document.createElement('div');
             card.className = `series-card ${isCompleted && !isEditing ? 'completed' : ''} ${isEditing ? 'editing' : ''} ${isNextIncompleteSet && !isEditing ? 'next-up' : ''} ${seriesChallengeReminder ? 'challenge-series' : ''}`;
             card.dataset.setIndex = i;
             
             card.innerHTML = `
+                ${isCompleted && !isEditing ? this.renderCompletedSetRow(setData, i, {
+                    canEdit: canEditValidatedSet,
+                    previousSet: lastSets[i] || null
+                }) : `
                 <div class="series-header">
                     <span class="series-number">Série ${i + 1}</span>
-                    ${isCompleted && !isEditing ? `
-                        <div class="series-check-container">
-                            <span class="series-result">${this.formatSetResult(setData, this.currentSlot)}</span>
-                            ${this.renderSetQualityControls(setData, i)}
-                            ${canEditValidatedSet ? `
-                            <button class="btn-edit-set" data-set-index="${i}" title="Modifier">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                </svg>
-                            </button>
-                            ` : ''}
-                            <span class="series-check">✓</span>
-                        </div>
-                    ` : ''}
                 </div>
+                `}
                 ${seriesChallengeReminder ? `
                     <div class="series-challenge-inline">
                         <span class="series-challenge-inline-badge">${this.getChallengeCrownSVG()} Défi</span>
@@ -11986,6 +12352,42 @@ class App {
         }
     }
     
+    renderCompletedSetRow(setData, setIndex, { canEdit = true, previousSet = null } = {}) {
+        const versus = this.describeSetVersusHistory(setData, previousSet, this.currentSlot);
+        const chips = [];
+        if (setData.livePr) chips.push('<span class="series-done-chip is-pr">🏆 Record</span>');
+        if (versus) {
+            const shortText = versus.tone === 'same' ? '= dernière fois' : versus.text.replace(' vs la dernière fois', '');
+            chips.push(`<span class="series-done-chip is-${versus.tone}">${this.escapeHtml(shortText)}</span>`);
+        }
+        if (setData.rpe != null && this.hasExplicitRpe(setData)) {
+            chips.push(`<span class="series-done-chip">RPE ${this.escapeHtml(String(setData.rpe))}</span>`);
+        }
+        return `
+            <div class="series-header series-done-row">
+                <span class="series-done-badge" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+                <div class="series-done-main">
+                    <span class="series-number">Série ${setIndex + 1}</span>
+                    <strong class="series-result">${this.escapeHtml(this.formatSetResult(setData, this.currentSlot))}</strong>
+                    ${chips.length ? `<div class="series-done-chips">${chips.join('')}</div>` : ''}
+                </div>
+                <div class="series-done-actions">
+                    ${this.renderSetQualityControls(setData, setIndex)}
+                    ${canEdit ? `
+                        <button class="btn-edit-set" data-set-index="${setIndex}" title="Modifier" aria-label="Modifier la série ${setIndex + 1}">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9"/>
+                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
     async continueSetsOverride() {
         if (!this.currentSlot || !this.currentWorkout) return;
         const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
@@ -12079,10 +12481,12 @@ class App {
             
             const isEditingUni = isCompleted && this.editingSetIndex === i;
             const canEditValidatedSet = isCompleted;
-            const seriesChallengeReminder = this.getSeriesChallengeReminder(this.currentSlot, i, slotData);
+            const isNextPair = i === nextPairIndex && !isCompleted && !isEditingUni;
+            const seriesChallengeReminder = isNextPair
+                ? this.getSeriesChallengeReminder(this.currentSlot, i, slotData)
+                : '';
             
             const card = document.createElement('div');
-            const isNextPair = i === nextPairIndex && !isCompleted && !isEditingUni;
             card.className = `unilateral-series-card ${isCompleted && !isEditingUni ? 'completed' : ''} ${isPartial ? 'partial' : ''} ${isEditingUni ? 'editing' : ''} ${isNextPair ? 'next-up' : ''} ${seriesChallengeReminder ? 'challenge-series' : ''}`;
             card.dataset.setIndex = i;
             const slotRef = this.currentSlot;
@@ -12624,11 +13028,25 @@ class App {
             this.spawnXpFloat(card, isPr ? `🏆 Record ! +${pending.xp + 15} XP` : `+${pending.xp} XP`, { isPr });
         }
         if (isPr) {
+            this.markRestDonePr(pending.xp + 15);
+            prExerciseCandidates.forEach(candidate => {
+                if (candidate.set) candidate.set.livePr = true;
+            });
+            if (this.currentWorkout) await db.saveCurrentWorkout(this.currentWorkout);
             const xp = ((await db.getSetting('xp')) ?? 0) + 15;
             await db.setSetting('xp', xp);
             this.hapticTap([20, 60, 20, 60, 40]);
             const header = card?.querySelector('.series-header, .unilateral-series-header, .superset-series-header');
-            if (header && !header.querySelector('.series-pr-badge')) {
+            const doneMain = header?.classList.contains('series-done-row') ? header.querySelector('.series-done-main') : null;
+            if (doneMain && !doneMain.querySelector('.is-pr')) {
+                let chips = doneMain.querySelector('.series-done-chips');
+                if (!chips) {
+                    chips = document.createElement('div');
+                    chips.className = 'series-done-chips';
+                    doneMain.appendChild(chips);
+                }
+                chips.insertAdjacentHTML('afterbegin', '<span class="series-done-chip is-pr">🏆 Record</span>');
+            } else if (header && !doneMain && !header.querySelector('.series-pr-badge')) {
                 header.querySelector('.series-number, .unilateral-series-number, .superset-series-number')
                     ?.insertAdjacentHTML('afterend', ' <span class="series-pr-badge">🏆 Record</span>');
             }
@@ -12964,6 +13382,132 @@ class App {
         }
     }
 
+    // ===== Rest overlay: recap of the set that was just validated =====
+    getLatestCompletedIndex(sets = []) {
+        let latestIndex = -1;
+        let latestTime = -Infinity;
+        sets.forEach((set, index) => {
+            if (!set?.completed) return;
+            const time = Number(set.timestamp || 0) || index;
+            if (time >= latestTime) {
+                latestTime = time;
+                latestIndex = index;
+            }
+        });
+        return latestIndex;
+    }
+
+    describeSetVersusHistory(set, previousSet, slot) {
+        if (!set || !previousSet || this.isCardioSlot(slot)) return null;
+        const weightDelta = Math.round(((Number(set.weight) || 0) - (Number(previousSet.weight) || 0)) * 10) / 10;
+        const repsDelta = (Number(set.reps) || 0) - (Number(previousSet.reps) || 0);
+        if (weightDelta > 0) return { tone: 'up', text: `+${String(weightDelta).replace('.', ',')} kg vs la dernière fois` };
+        if (weightDelta < 0) return { tone: 'down', text: `${String(weightDelta).replace('.', ',')} kg vs la dernière fois` };
+        if (repsDelta > 0) return { tone: 'up', text: `+${repsDelta} rep${repsDelta > 1 ? 's' : ''} vs la dernière fois` };
+        if (repsDelta < 0) return { tone: 'down', text: `${repsDelta} rep${repsDelta < -1 ? 's' : ''} vs la dernière fois` };
+        return { tone: 'same', text: 'Comme la dernière fois' };
+    }
+
+    buildRestDoneData() {
+        if (!this.currentSlot || !this.currentWorkout) return null;
+        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
+        if (!slotData) return null;
+
+        if (this.isSupersetMode && this.supersetSlot) {
+            const slotBData = this.currentWorkout.slots?.[this.supersetSlot.id] || { sets: [] };
+            const index = Math.min(
+                (slotData.sets || []).filter(set => set?.completed).length,
+                (slotBData.sets || []).filter(set => set?.completed).length
+            ) - 1;
+            if (index < 0) return null;
+            return {
+                index,
+                xp: 20,
+                lines: [
+                    { tag: 'A', value: this.formatSetResult(slotData.sets[index], this.currentSlot) },
+                    { tag: 'B', value: this.formatSetResult(slotBData.sets[index], this.supersetSlot) }
+                ],
+                versus: this.describeSetVersusHistory(slotData.sets[index], this.lastExerciseHistory?.sets?.[index], this.currentSlot)
+            };
+        }
+
+        if (this.isUnilateralMode) {
+            const left = slotData.setsLeft || [];
+            const right = slotData.setsRight || [];
+            const index = Math.min(left.filter(set => set?.completed).length, right.filter(set => set?.completed).length) - 1;
+            if (index < 0) return null;
+            return {
+                index,
+                xp: 10,
+                lines: [
+                    { tag: 'G', value: this.formatSetResult(left[index], this.currentSlot) },
+                    { tag: 'D', value: this.formatSetResult(right[index], this.currentSlot) }
+                ],
+                versus: this.describeSetVersusHistory(left[index], this.lastUnilateralHistoryLeft?.sets?.[index], this.currentSlot)
+            };
+        }
+
+        const index = this.getLatestCompletedIndex(slotData.sets || []);
+        if (index < 0) return null;
+        const set = slotData.sets[index];
+        return {
+            index,
+            xp: 10,
+            lines: [{ tag: '', value: this.formatSetResult(set, this.currentSlot) }],
+            versus: this.describeSetVersusHistory(set, this.lastExerciseHistory?.sets?.[index], this.currentSlot)
+        };
+    }
+
+    renderRestDoneCard(data = this.buildRestDoneData()) {
+        const card = document.getElementById('timer-done-card');
+        if (!card) return;
+        card.classList.remove('is-pr');
+        if (!data) {
+            card.hidden = true;
+            card.innerHTML = '';
+            return;
+        }
+        card.hidden = false;
+        card.innerHTML = `
+            <span class="timer-done-check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <div class="timer-done-main">
+                <span class="timer-done-kicker">Série ${data.index + 1} validée</span>
+                <div class="timer-done-values">
+                    ${data.lines.map(line => `
+                        <strong>${line.tag ? `<em>${line.tag}</em>` : ''}${this.escapeHtml(line.value)}</strong>
+                    `).join('')}
+                </div>
+                ${data.versus ? `<span class="timer-done-versus is-${data.versus.tone}">${this.escapeHtml(data.versus.text)}</span>` : ''}
+            </div>
+            <span class="timer-done-xp" id="timer-done-xp">+${data.xp} XP</span>
+        `;
+    }
+
+    markRestDonePr(totalXp) {
+        const card = document.getElementById('timer-done-card');
+        if (!card || card.hidden) return;
+        card.classList.add('is-pr');
+        const xp = document.getElementById('timer-done-xp');
+        if (xp) xp.textContent = `🏆 +${totalXp} XP`;
+        const kicker = card.querySelector('.timer-done-kicker');
+        if (kicker) kicker.textContent = kicker.textContent.replace(' validée', ' · Record\u00a0!');
+    }
+
+    renderRestSetTrack(progress = '') {
+        const track = document.getElementById('timer-set-track');
+        if (!track) return;
+        const [current, total] = String(progress).split('/').map(Number);
+        if (!total || this.overlayTimerMode !== 'rest') {
+            track.innerHTML = '';
+            return;
+        }
+        const done = Math.max(0, current - 1);
+        track.innerHTML = Array.from({ length: total }, (_, index) =>
+            `<span class="${index < done ? 'is-done' : index === done ? 'is-next' : ''}"></span>`).join('');
+    }
+
     renderRestOverlayMetrics(metrics = []) {
         const metricsEl = document.getElementById('timer-context-metrics');
         if (!metricsEl) return;
@@ -13137,6 +13681,7 @@ class App {
         if (!overlayData) return;
 
         if (progressEl) progressEl.textContent = overlayData.progress;
+        this.renderRestSetTrack(overlayData.progress);
         if (titleEl) titleEl.textContent = overlayData.title;
         if (noteEl) {
             noteEl.textContent = overlayData.note || '';
@@ -13268,6 +13813,7 @@ class App {
         overlay.classList.remove('ready');
         this.setRestOverlayReadyState(false);
         this.updateRestOverlayContext();
+        this.renderRestDoneCard();
         countdown.classList.remove('timer-done', 'go-ready');
         timerRing?.classList.remove('go-ready');
         
@@ -13441,6 +13987,11 @@ class App {
         this.restTimeLeft = remaining;
         
         countdown.textContent = this.formatRestCountdownDisplay(remaining);
+        const totalEl = document.getElementById('timer-total');
+        if (totalEl && totalEl.dataset.total !== String(this.restTimeTotal)) {
+            totalEl.dataset.total = String(this.restTimeTotal);
+            totalEl.textContent = this.restTimeTotal ? `sur ${this.formatRestCountdownDisplay(this.restTimeTotal)}` : '';
+        }
         this.updateTimerProgress();
         this.updateRestTimerAnimationState(remaining);
         
@@ -13503,8 +14054,9 @@ class App {
         }
 
         const permission = window.Notification.permission;
-        button.hidden = false;
-        button.disabled = permission === 'denied' || permission === 'granted';
+        // Only surface the button while there's still something to do.
+        button.hidden = permission !== 'default';
+        button.disabled = permission !== 'default';
         button.textContent = permission === 'granted'
             ? '🔔 Notifications activées'
             : permission === 'denied'
@@ -13656,6 +14208,7 @@ class App {
         overlay?.classList.remove('ready');
         this.setRestOverlayReadyState(false);
         this.updateRestOverlayContext();
+        this.renderRestDoneCard(null);
         if (countdown) countdown.classList.remove('timer-done', 'go-ready');
         timerRing?.classList.remove('go-ready');
 
@@ -14907,11 +15460,25 @@ class App {
 
             await this.showStimulusScoreAnimation(stimulusScore, finishRecap);
 
+            // The session bonus was announced but never credited: bank it now.
+            const sessionXp = Math.max(0, Math.round(stimulusScore.total * 2));
+            const xpBefore = (await db.getSetting('xp')) ?? 0;
+            await db.setSetting('xp', xpBefore + sessionXp);
+            const levelBefore = this.getPlayerLevel(xpBefore);
+            const levelAfter = this.getPlayerLevel(xpBefore + sessionXp);
+
             gamification.celebrateWorkoutComplete(sessionName, {
                 totalSets,
                 duration,
-                xpGain: Math.round(stimulusScore.total * 2) + challengeFinishXp
+                xpGain: sessionXp + challengeFinishXp
             });
+
+            if (levelAfter.level > levelBefore.level) {
+                setTimeout(() => {
+                    gamification.triggerConfetti('heavy');
+                    gamification.showAchievement(levelAfter.title.emoji, `Niveau ${levelAfter.level} !`, `Tu es maintenant ${levelAfter.title.name}. Continue, la machine se construit.`);
+                }, 4200);
+            }
 
             if (finalizedChallenge?.status === 'failed' || finalizedChallenge?.status === 'missed') {
                 setTimeout(() => {
@@ -15602,8 +16169,10 @@ class App {
             ? `Créer "${(this.exerciseLibraryState.query || '').trim()}" en custom`
             : 'Créer cet exercice en custom';
 
+        const dbResultsHtml = this.renderExerciseDbLibraryResults(query, category, filtered);
+
         if (!filtered.length) {
-            list.innerHTML = `
+            list.innerHTML = dbResultsHtml || `
                 <div class="exercise-library-empty">
                     Aucun exercice trouvé dans la base.<br>
                     Tape un nom libre puis crée-le en custom.
@@ -15643,7 +16212,91 @@ class App {
                     <span class="exercise-library-item-action">Ajouter</span>
                 </button>
             `;
-        }).join('');
+        }).join('') + dbResultsHtml;
+    }
+
+    getLibraryCategoryForMuscle(muscleId) {
+        const map = {
+            pectoraux: 'pectoraux', dos: 'dos', 'trapèzes': 'dos', lombaires: 'dos',
+            epaules: 'epaules', coiffe: 'epaules', biceps: 'bras', triceps: 'bras', 'avant-bras': 'bras',
+            quadriceps: 'jambes', 'ischio-jambiers': 'jambes', fessiers: 'jambes', mollets: 'jambes',
+            abdominaux: 'abdominaux', cardio: 'cardio'
+        };
+        return map[muscleId] || 'fullbody';
+    }
+
+    // The full exercise database only shows up once the user types something,
+    // under the curated library, so the default list stays short.
+    renderExerciseDbLibraryResults(query, category, curated = []) {
+        if (!query || query.length < 2) return '';
+        if (!exerciseDb.data) {
+            exerciseDb.load()
+                .then(() => {
+                    if (document.getElementById('sheet-exercise-library')?.classList.contains('active')) {
+                        this.renderExerciseLibraryList();
+                    }
+                })
+                .catch(() => {});
+            return '<div class="exercise-library-db-head">Base complète · chargement…</div>';
+        }
+        const curatedNames = new Set(curated.map(exercise => this.normalizeExerciseText(exercise.name)));
+        const results = exerciseDb.search(query, { limit: 60 })
+            .filter(entry => category === 'all' || this.getLibraryCategoryForMuscle(entry.m) === category)
+            .filter(entry => !curatedNames.has(this.normalizeExerciseText(entry.n)))
+            .slice(0, 30);
+        if (!results.length) return '';
+        return `
+            <div class="exercise-library-db-head">Base complète · ${results.length} résultat${results.length > 1 ? 's' : ''}</div>
+            ${results.map(entry => `
+                <button type="button" class="exercise-library-item exercise-library-db-item" data-db-id="${entry.id}">
+                    <img class="exercise-library-db-thumb" src="${exerciseDb.imageUrl(entry)}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'">
+                    <div class="exercise-library-item-main">
+                        <div class="exercise-library-item-name">${this.escapeHtml(entry.n)}</div>
+                        <div class="exercise-library-item-meta">
+                            ${MUSCLE_GROUPS.some(group => group.id === entry.m) ? `<span class="exercise-library-item-chip">${this.escapeHtml(this.getMuscleGroupLabel(entry.m))}</span>` : ''}
+                            ${entry.eq ? `<span class="exercise-library-item-chip">${this.escapeHtml(entry.eq)}</span>` : ''}
+                        </div>
+                        <div class="exercise-library-item-instructions">${this.escapeHtml(entry.en)}</div>
+                    </div>
+                    <span class="exercise-library-item-action">Ajouter</span>
+                </button>
+            `).join('')}
+        `;
+    }
+
+    async createExerciseFromDb(entryId) {
+        const sessionId = this.exerciseLibraryState.sessionId;
+        if (!sessionId) return;
+        await exerciseDb.load();
+        const entry = exerciseDb.getById(entryId);
+        if (!entry) return;
+
+        const libraryEntry = this.findExerciseLibraryEntry(entry.n);
+        const definition = libraryEntry || this.inferCustomExerciseTemplate(entry.n, {
+            preferLibraryMatch: false,
+            allowCardioInference: true
+        });
+        if (!libraryEntry) {
+            const muscleId = MUSCLE_GROUPS.some(group => group.id === entry.m) ? entry.m : definition.muscleGroup;
+            definition.muscleGroup = muscleId;
+            definition.category = entry.m === 'cardio' ? 'cardio' : this.getLibraryCategoryForMuscle(muscleId);
+            definition.equipment = entry.eq || definition.equipment;
+            definition.aliases = [entry.en];
+            definition.exerciseDbId = entry.id;
+            await this.persistCustomExerciseDefinition(definition);
+        }
+
+        const links = await this.getExerciseDbLinks();
+        links[this.normalizeExerciseText(definition.name)] = entry.id;
+        await db.setSetting('exerciseDbLinks', links);
+
+        const slots = await db.getSlotsBySession(sessionId);
+        const newSlot = this.buildSlotFromExerciseDefinition(definition, sessionId, slots.length);
+        newSlot.exerciseDbId = entry.id;
+        await db.put('slots', newSlot);
+        this.hideExerciseLibrarySheet();
+        await this.showEditSessionDetailSheet(sessionId);
+        this.showCoachToast(`${newSlot.name} ajouté à la séance.`, 'hot', '➕');
     }
 
     async createExerciseFromLibrary(exerciseName, { custom = false } = {}) {
@@ -16974,9 +17627,35 @@ class App {
             document.getElementById('import-file').click();
         };
 
-        window.addEventListener('resize', () => {
-            if (this.currentScreen === 'home') {
-                this.scheduleHomeChartsRender();
+        this.bindTechniqueSheetEvents();
+        const infoGrid = document.querySelector('#screen-exercise .info-grid');
+        if (infoGrid) {
+            new MutationObserver(() => this.syncExerciseTargetsChip())
+                .observe(infoGrid, { childList: true, characterData: true, subtree: true });
+        }
+
+        document.querySelectorAll('[data-home-tab]').forEach(button => {
+            button.addEventListener('click', () => this.setHomeTab(button.dataset.homeTab));
+        });
+
+        document.getElementById('stats-section')?.addEventListener('click', async (event) => {
+            const claimButton = event.target.closest('[data-quest-claim]');
+            if (claimButton) {
+                claimButton.disabled = true;
+                await this.claimQuest(claimButton.dataset.questClaim, Number(claimButton.dataset.questXp) || 0);
+                return;
+            }
+            if (event.target.closest('[data-trophy-toggle]')) {
+                this.trophyCaseExpanded = !this.trophyCaseExpanded;
+                await this.renderTrophyCase();
+                return;
+            }
+            const trophyButton = event.target.closest('[data-trophy-id]');
+            if (trophyButton) {
+                const trophy = this.buildTrophies().find(item => item.id === trophyButton.dataset.trophyId);
+                if (trophy) {
+                    this.showCoachToast(`${trophy.name} — ${trophy.desc}`, trophy.unlocked ? 'hot' : 'neutral', trophy.icon);
+                }
             }
         });
         
@@ -17487,6 +18166,10 @@ class App {
             exerciseLibraryList.onclick = (e) => {
                 const item = e.target.closest('.exercise-library-item');
                 if (!item) return;
+                if (item.dataset.dbId) {
+                    this.createExerciseFromDb(item.dataset.dbId);
+                    return;
+                }
                 this.createExerciseFromLibrary(item.dataset.exerciseName);
             };
         }

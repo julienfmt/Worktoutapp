@@ -14,9 +14,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=5.2.0">
-    <link rel="stylesheet" href="streak-score.css?v=5.2.0">
-    <link rel="stylesheet" href="theme.css?v=5.2.0">
+    <link rel="stylesheet" href="styles.css?v=5.3.0">
+    <link rel="stylesheet" href="streak-score.css?v=5.3.0">
+    <link rel="stylesheet" href="theme.css?v=5.3.0">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -38,9 +38,18 @@
                     <span class="home-date-kicker" id="home-date-kicker"></span>
                     <h1 id="home-title">Prêt pour ta séance ?</h1>
                 </div>
+                <div class="segmented-control home-tabs" role="tablist" aria-label="Sections de l'accueil">
+                    <button type="button" class="segmented-btn active" role="tab" id="home-tab-session" data-home-tab="session" aria-selected="true">
+                        <span aria-hidden="true">🏋️</span> Séance
+                    </button>
+                    <button type="button" class="segmented-btn" role="tab" id="home-tab-progress" data-home-tab="progress" aria-selected="false">
+                        <span aria-hidden="true">🏆</span> Parcours
+                        <span class="home-tab-dot" id="home-tab-progress-dot" hidden></span>
+                    </button>
+                </div>
             </header>
 
-            <main class="home-content">
+            <main class="home-content" data-tab="session">
                 <!-- Streak Card - Consolidated -->
                 <div class="home-hero" id="streak-card">
                     <!-- Content generated dynamically -->
@@ -122,6 +131,38 @@
                     </div>
                 </section>
 
+                <!-- Progression: player card, weekly quests, trophies, lifts, muscles -->
+                <section class="stats-section progress-zone" id="stats-section" aria-label="Ta progression">
+                    <div class="progress-zone-head">
+                        <span class="progress-zone-kicker">Ton parcours</span>
+                        <h3>Deviens une machine</h3>
+                    </div>
+
+                    <div class="player-card" id="player-card">
+                        <!-- Niveau, XP et totaux générés dynamiquement -->
+                    </div>
+
+                    <div class="pz-card quest-board" id="quest-board">
+                        <!-- Quêtes de la semaine générées dynamiquement -->
+                    </div>
+
+                    <div class="pz-card trophy-case" id="trophy-case">
+                        <!-- Trophées générés dynamiquement -->
+                    </div>
+
+                    <div class="pz-card lifts-card" id="lifts-card">
+                        <!-- Records et progressions générés dynamiquement -->
+                    </div>
+
+                    <div class="pz-card activity-card" id="activity-card">
+                        <!-- Activité hebdo générée dynamiquement -->
+                    </div>
+
+                    <div class="pz-card physique-card" id="physique-card">
+                        <!-- Volume par muscle généré dynamiquement -->
+                    </div>
+                </section>
+
                 <div class="home-actions">
                     <button class="btn btn-outline" id="btn-edit-sessions">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -158,70 +199,9 @@
                     </div>
                 </div>
 
-                <!-- Stats Section -->
-                <div class="stats-section" id="stats-section">
-                    <div class="stats-header">
-                        <h3>Tes statistiques</h3>
-                    </div>
-                    <div class="stats-motivation" id="stats-motivation">
-                        <!-- Message motivant généré dynamiquement -->
-                    </div>
-                    <div class="stats-cards">
-                        <div class="stat-card">
-                            <div class="stat-card-value" id="stat-total-workouts">0</div>
-                            <div class="stat-card-label">Séances totales</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-card-value" id="stat-this-month">0</div>
-                            <div class="stat-card-label">Ce mois-ci</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-card-value" id="stat-total-volume">0</div>
-                            <div class="stat-card-label">Volume total (kg)</div>
-                        </div>
-                    </div>
-                    <div class="stats-insight-grid" id="stats-insight-grid">
-                        <!-- Statistiques avancées générées dynamiquement -->
-                    </div>
-                    <div class="stats-detail-panel" id="stats-detail-panel">
-                        <!-- Détails d'analyse générés dynamiquement -->
-                    </div>
-                    <div class="chart-container">
-                        <div class="chart-title-row">
-                            <div class="chart-title">Évolution du volume</div>
-                            <div class="chart-chip" id="volume-chart-chip">4 semaines</div>
-                        </div>
-                        <div class="chart-subtitle" id="volume-chart-subtitle">Charge totale soulevée par semaine</div>
-                        <div class="chart-wrapper chart-wrapper-volume">
-                            <canvas id="volume-chart" aria-label="Graphique d'évolution du volume"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container">
-                        <div class="chart-title-row">
-                            <div class="chart-title">Fréquence d'entraînement</div>
-                            <div class="chart-chip" id="frequency-chart-chip">6 semaines</div>
-                        </div>
-                        <div class="chart-subtitle" id="frequency-chart-subtitle">Nombre de séances par semaine</div>
-                        <div class="chart-wrapper chart-wrapper-frequency">
-                            <canvas id="frequency-chart" aria-label="Graphique de fréquence des séances"></canvas>
-                        </div>
-                    </div>
-                    
-                    <!-- Muscle Group Stats -->
-                    <div class="muscle-stats-section">
-                        <div class="muscle-stats-header">
-                            <span class="muscle-stats-title">Volume par muscle (cette semaine)</span>
-                            <span class="muscle-stats-subtitle">Séries effectives</span>
-                        </div>
-                        <div class="muscle-stats-grid" id="muscle-stats-grid">
-                            <!-- Generated dynamically -->
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Footer version -->
                 <footer class="app-footer">
-                    <span class="app-version">v5.2.0</span>
+                    <span class="app-version">v5.3.0</span>
                     <span class="storage-info" id="storage-info"></span>
                 </footer>
             </main>
@@ -327,6 +307,13 @@
                     <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
                 <div class="exercise-header-actions">
+                    <button type="button" class="exercise-header-tool exercise-technique-btn" id="btn-open-technique" aria-label="Voir la fiche technique" title="Fiche technique" aria-controls="sheet-technique" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"></path>
+                            <path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"></path>
+                            <path d="M9 8l4 2.5L9 13z" fill="currentColor"></path>
+                        </svg>
+                    </button>
                     <button
                         type="button"
                         class="exercise-header-tool"
@@ -760,6 +747,14 @@
                 <div class="exercise-notes" id="exercise-notes">
                     <h4>Consignes d'exécution</h4>
                     <p id="exercise-instructions">--</p>
+                    <button type="button" class="technique-teaser" id="technique-teaser" hidden>
+                        <img class="technique-teaser-thumb" id="technique-teaser-thumb" alt="" loading="lazy" decoding="async">
+                        <span class="technique-teaser-copy">
+                            <strong>Fiche technique</strong>
+                            <small id="technique-teaser-meta">Animation + étapes détaillées</small>
+                        </span>
+                        <span class="technique-teaser-cta" aria-hidden="true">Voir</span>
+                    </button>
                     <div class="exercise-note-editor">
                         <label for="exercise-note-input">Note de l'exercice</label>
                         <textarea id="exercise-note-input" class="exercise-note-input" rows="3" placeholder="Machine bizarre, douleur coude, très facile, meilleure amplitude..."></textarea>
@@ -783,22 +778,11 @@
                 <div class="timer-content">
                     <div class="timer-stage" id="timer-stage">
                         <span class="timer-stage-badge" id="timer-stage-badge">Repos</span>
+                        <div class="timer-set-track" id="timer-set-track" aria-hidden="true"></div>
                         <p class="timer-stage-copy" id="timer-stage-copy"></p>
                     </div>
 
-                    <div class="timer-context-card" id="timer-context-card">
-                        <div class="timer-context-header">
-                            <span class="timer-context-kicker">Prochaine série</span>
-                            <span class="timer-context-progress" id="timer-context-progress">2/4</span>
-                        </div>
-                        <div class="timer-context-title" id="timer-context-title">Exercice</div>
-                        <div class="timer-context-metrics" id="timer-context-metrics"></div>
-                        <p class="timer-context-note" id="timer-context-note"></p>
-                        <div class="timer-rest-suggestion" id="timer-rest-suggestion" hidden>
-                            <span id="timer-rest-suggestion-copy"></span>
-                            <button type="button" class="btn btn-timer-suggestion" id="btn-use-rest-suggestion">Utiliser la suggestion</button>
-                        </div>
-                    </div>
+                    <div class="timer-done-card" id="timer-done-card" hidden></div>
 
                     <div class="timer-ring">
                         <div class="timer-ring-ornaments" aria-hidden="true">
@@ -821,12 +805,27 @@
                         <div class="timer-ring-inner">
                             <div class="timer-label" id="timer-label">Repos</div>
                             <div class="timer-countdown" id="timer-countdown">90</div>
+                            <div class="timer-total" id="timer-total"></div>
                         </div>
                     </div>
                     
+                    <div class="timer-context-card" id="timer-context-card">
+                        <div class="timer-context-header">
+                            <span class="timer-context-kicker">Prochaine série</span>
+                            <span class="timer-context-progress" id="timer-context-progress">2/4</span>
+                        </div>
+                        <div class="timer-context-title" id="timer-context-title">Exercice</div>
+                        <div class="timer-context-metrics" id="timer-context-metrics"></div>
+                        <p class="timer-context-note" id="timer-context-note"></p>
+                        <div class="timer-rest-suggestion" id="timer-rest-suggestion" hidden>
+                            <span id="timer-rest-suggestion-copy"></span>
+                            <button type="button" class="btn btn-timer-suggestion" id="btn-use-rest-suggestion">Utiliser la suggestion</button>
+                        </div>
+                    </div>
+
                     <div class="rpe-section" id="rpe-section" data-touched="false">
                         <div class="rpe-header">
-                            <div class="rpe-question">RPE</div>
+                            <div class="rpe-question">Ressenti de la série</div>
                         </div>
                         <input type="range" id="rpe-slider" class="rpe-slider" min="6" max="10" step="1" value="8" hidden>
                         <div class="rpe-choices" id="rpe-choices">
@@ -1172,6 +1171,27 @@
         </div>
 
         <!-- Bottom Sheet Outils optionnels de l'exercice -->
+        <div class="bottom-sheet" id="sheet-technique">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large technique-sheet">
+                <div class="sheet-handle"></div>
+                <div class="sheet-titlebar exercise-insights-titlebar">
+                    <div class="sheet-titlebar-spacer"></div>
+                    <div class="exercise-insights-heading">
+                        <span class="exercise-insights-eyebrow">Fiche technique</span>
+                        <h3 id="technique-sheet-title">Exercice</h3>
+                    </div>
+                    <button type="button" class="btn-icon-small exercise-insights-close" id="btn-close-technique" aria-label="Fermer la fiche technique">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M6 6l12 12M18 6L6 18"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="segmented-control technique-switch" id="technique-switch" hidden></div>
+                <div class="technique-body" id="technique-body"></div>
+            </div>
+        </div>
+
         <div class="bottom-sheet" id="sheet-exercise-insights">
             <div class="sheet-backdrop"></div>
             <div class="sheet-content sheet-content-large exercise-insights-sheet">
@@ -1651,8 +1671,9 @@
     </div>
 
     <script src="db.js"></script>
-    <script src="data.js?v=5.2.0"></script>
-    <script src="app.js?v=5.2.0"></script>
+    <script src="data.js?v=5.3.0"></script>
+    <script src="exercise-db.js?v=5.3.0"></script>
+    <script src="app.js?v=5.3.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection

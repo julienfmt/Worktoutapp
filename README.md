@@ -41,6 +41,17 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🗂️ Cartes de séance : infos en 4 mini-tuiles (séries / reps / repos / RIR), défi en bandeau de quête avec bonus XP. Défi actif avec jauge de progression (ex. 12/42 reps). Contrôle libre avec stepper de séries.
 - 🐛 Un exercice « Développé … » n'est plus pris pour du cardio (« velo » était trouvé dans « dé-velo-ppé »).
 
+### Nouveautés v5.3
+- 🗂️ Accueil en 2 onglets **Séance / Parcours** (pastille verte quand une quête est à réclamer).
+- 🏆 Parcours gamifié : carte joueur (niveau + titre, de « Recrue » à « Mythe vivant », jauge d'XP, tonnage total avec équivalence fun), **quêtes hebdo** à réclamer (+XP), **salle des trophées** (29 trophées : séances, tonnage, records, streak, clubs 60→180 kg, séries, niveaux), lifts (record e1RM + progressions avec mini-courbes), activité 8 semaines (tonnage + séances vs objectif), carte « physique » par muscle avec zone de croissance MEV→MAV.
+- ⏱️ Écran de repos refait dans la DA : bilan de la série validée (charge × reps, écart vs la dernière fois, +XP, record doré), jauge des séries, chrono, prochaine série en tuiles, ressenti.
+- ✅ Série validée : ligne compacte (badge ✓, charge × reps, puces record / écart / RPE).
+- 🧹 Haut de l'écran exercice allégé : badge muscle + objectifs (« 4 × 5-8 · 150s · RIR 2 ») dans l'en-tête, coach resserré, défi en bandeau doré, rappel du défi seulement sur la prochaine série.
+- 🎨 Badge muscle coloré avec pictogramme (cartes de séance, en-tête, carte physique).
+- 📚 Base de **1 324 exercices** (`exercises-db.json`, consignes FR) issue de [exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) : fiche technique par exo (animation, muscles, étapes), correction manuelle du mouvement associé, recherche dans « Ajouter un exercice ». Le JSON n'est chargé qu'à la première utilisation ; les animations sont streamées depuis le repo et seules les dernières vues restent en cache (120 max). Données texte : MIT · médias : © Gym visual.
+- 🐛 L'XP de fin de séance annoncé est enfin crédité (et le passage de niveau est fêté) ; chrono de séance au-delà d'1 h affiché en « 1h05:12 ».
+- 🧪 `tests/demo-seed.js` : génère 8 semaines de données factices (à utiliser sur une origine jetable, ex. `127.0.0.1`).
+
 ## Stack technique
 - Frontend pur : HTML, CSS, JavaScript vanilla.
 - Stockage : IndexedDB (abstraction dans `db.js`).
@@ -54,6 +65,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - `theme.css` : couche de DA chargée en dernier (tokens, boutons gamifiés, animations).
 - `app.js` : logique principale (navigation, timers, logbook, coaching adaptatif, analyse série par série, qualité des séries, récupération, analyse gauche/droite, substitutions, charts, import/export, superset, progression, etc.).
 - `data.js` : données de départ (séances Bras/Pecs A/B et slots associés).
+- `exercise-db.js` + `exercises-db.json` : base d'exercices (chargement paresseux, recherche, résolution exo → fiche).
 - `db.js` : couche IndexedDB (stores `sessions`, `slots`, `workoutHistory`, `setHistory`, `settings`, `currentWorkout`).
 - `sw.js` : service worker et cache des assets.
 - `manifest.json` : configuration PWA.

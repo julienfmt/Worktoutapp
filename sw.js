@@ -1,18 +1,24 @@
 // Service Worker for offline support
-const SW_VERSION = '5.2.0';
+const SW_VERSION = '5.3.0';
 const STATIC_CACHE_NAME = `muscu-static-${SW_VERSION}`;
 const RUNTIME_CACHE_NAME = `muscu-runtime-${SW_VERSION}`;
+// Exercise thumbnails/GIFs are fetched on demand from the dataset repo and
+// kept across versions, capped so storage stays small.
+const MEDIA_CACHE_NAME = 'muscu-exercise-media';
+const MEDIA_CACHE_LIMIT = 120;
+const MEDIA_HOST = 'raw.githubusercontent.com';
 const OFFLINE_DOCUMENT = './index.html';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
-    './styles.css?v=5.2.0',
-    './streak-score.css?v=5.2.0',
-    './theme.css?v=5.2.0',
+    './styles.css?v=5.3.0',
+    './streak-score.css?v=5.3.0',
+    './theme.css?v=5.3.0',
     './db.js',
-    './data.js?v=5.2.0',
+    './data.js?v=5.3.0',
+    './exercise-db.js?v=5.3.0',
     './app.js',
-    './app.js?v=5.2.0',
+    './app.js?v=5.3.0',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png'
@@ -96,7 +102,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const cacheKeys = await caches.keys();
-        const validKeys = new Set([STATIC_CACHE_NAME, RUNTIME_CACHE_NAME]);
+        const validKeys = new Set([STATIC_CACHE_NAME, RUNTIME_CACHE_NAME, MEDIA_CACHE_NAME]);
 
         await Promise.all(
             cacheKeys
@@ -116,7 +122,34 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
+function isExerciseMediaRequest(request) {
+    if (request.method !== 'GET') return false;
+    const url = new URL(request.url);
+    return url.hostname === MEDIA_HOST && url.pathname.includes('/exercises-dataset/');
+}
+
+async function handleExerciseMedia(request) {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    const response = await fetch(request);
+    if (response && (response.ok || response.type === 'opaque')) {
+        await cache.put(request, response.clone());
+        const keys = await cache.keys();
+        if (keys.length > MEDIA_CACHE_LIMIT) {
+            await Promise.all(keys.slice(0, keys.length - MEDIA_CACHE_LIMIT).map(key => cache.delete(key)));
+        }
+    }
+    return response;
+}
+
 self.addEventListener('fetch', (event) => {
+    if (isExerciseMediaRequest(event.request)) {
+        event.respondWith(handleExerciseMedia(event.request).catch(() => new Response('', { status: 503 })));
+        return;
+    }
+
     if (!isCacheableRequest(event.request)) {
         return;
     }
