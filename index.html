@@ -15,10 +15,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=5.5.0" as="script">
-    <link rel="stylesheet" href="styles.css?v=5.5.0">
-    <link rel="stylesheet" href="streak-score.css?v=5.5.0">
-    <link rel="stylesheet" href="theme.css?v=5.5.0">
+    <link rel="preload" href="app.js?v=5.5.15" as="script">
+    <link rel="stylesheet" href="styles.css?v=5.5.15">
+    <link rel="stylesheet" href="streak-score.css?v=5.5.15">
+    <link rel="stylesheet" href="theme.css?v=5.5.15">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -62,39 +62,32 @@
                     <!-- Content generated dynamically -->
                 </div>
                 
-                <div class="suggested-session-card" id="suggested-session">
-                    <div class="session-label">Séance suivante</div>
-                    <h2 class="session-name" id="session-name">Chargement...</h2>
-                    <div class="session-meta">
-                        <div class="meta-item">
-                            <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <polyline points="12 6 12 12 16 14"/>
-                            </svg>
-                            <span class="meta-text" id="session-duration">~45 min</span>
-                        </div>
-                        <div class="meta-item">
-                            <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                                <polyline points="10 9 9 9 8 9"/>
-                            </svg>
-                            <span class="meta-text" id="session-slots">0 exercices</span>
+                <div class="suggested-session-card next-quest" id="suggested-session">
+                    <div class="next-quest-head">
+                        <div class="next-quest-heading">
+                            <h2 class="session-name" id="session-name">Chargement...</h2>
+                            <div class="next-quest-muscles" id="session-muscles"></div>
                         </div>
                     </div>
-                    <div class="last-session" id="last-session-info">
-                        Dernière séance : --
-                    </div>
-                    <div class="session-cycle-preview" id="session-cycle-preview">
-                        Cycle : --
+                    <div class="last-session next-quest-last" id="last-session-info">Dernière séance : --</div>
+                    <!-- Kept for the session data hooks, not displayed on the card -->
+                    <div class="next-quest-data" hidden>
+                        <span id="session-duration">~45 min</span>
+                        <span id="session-slots">0 exos</span>
+                        <span id="session-sets">0 séries</span>
+                        <span id="session-cycle-preview">Cycle : --</span>
                     </div>
                     <div class="session-actions">
-                        <button class="btn btn-primary btn-large" id="btn-start-session">
+                        <button class="btn btn-primary btn-large next-quest-start" id="btn-start-session">
+                            <span class="next-quest-play" aria-hidden="true">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.8 5.14v13.72a1 1 0 0 0 1.52.85l10.8-6.86a1 1 0 0 0 0-1.7L8.32 4.29A1 1 0 0 0 6.8 5.14z"/></svg>
+                            </span>
                             Démarrer la séance
                         </button>
-                        <button class="btn btn-secondary" id="btn-change-session">
+                        <button class="btn btn-secondary next-quest-change" id="btn-change-session">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M17 3l4 4-4 4M3 7h18M7 21l-4-4 4-4M21 17H3"/>
+                            </svg>
                             Changer de séance
                         </button>
                     </div>
@@ -228,7 +221,7 @@
 
             <!-- Progress Bar -->
             <div class="session-progress-container">
-                <div class="session-progress-text" id="session-progress-text">0/0 exercices</div>
+                <div class="session-progress-text" id="session-progress-text">0/0 exos</div>
                 <div class="session-progress-bar">
                     <div class="session-progress-fill" id="session-progress-fill"></div>
                 </div>
@@ -883,9 +876,6 @@
                         <button class="btn btn-timer-skip" id="btn-timer-skip" type="button">Passer</button>
                         <button class="btn btn-timer" id="btn-timer-plus" type="button">+15s</button>
                     </div>
-                    <button class="btn btn-timer-notification" id="btn-timer-notification" type="button" hidden>
-                        🔔 Activer la notification de fin de repos
-                    </button>
                     <button class="btn btn-timer-stop" id="btn-timer-stop" type="button">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                             <rect x="6" y="6" width="12" height="12" rx="2"/>
@@ -898,8 +888,13 @@
             <!-- Résumé fin d'exercice -->
             <div class="exercise-summary" id="exercise-summary">
                 <div class="summary-content">
-                    <div class="summary-icon" id="summary-icon">✅</div>
+                    <div class="summary-medal">
+                        <div class="summary-rays" aria-hidden="true"></div>
+                        <div class="summary-icon" id="summary-icon">✅</div>
+                    </div>
+                    <div class="summary-kicker" id="summary-exercise-name"></div>
                     <h3 id="summary-title">Exercice terminé !</h3>
+                    <div class="summary-xp" id="summary-xp" hidden></div>
                     <div class="summary-stats">
                         <div class="stat">
                             <span class="stat-label">Reps totales</span>
@@ -915,8 +910,9 @@
                     </div>
                     <div class="summary-pr-list" id="summary-pr-list"></div>
                     <div class="summary-badges" id="summary-badges"></div>
-                    <button class="btn btn-primary btn-large" id="btn-back-to-session">
-                        Retour à la séance
+                    <button class="btn btn-primary btn-large summary-continue" id="btn-back-to-session">
+                        Continuer la séance
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </button>
                 </div>
             </div>
@@ -1571,7 +1567,7 @@
                 <div class="sheet-handle"></div>
                 <div class="lms-header">
                     <h3><span class="lms-title-icon"></span>Check-in Récupération</h3>
-                    <p class="lms-subtitle">Récup du jour, position dans le cycle, puis tu lances ta séance.</p>
+                    <p class="lms-subtitle">Touche l’état de chaque muscle, puis lance ta séance.</p>
                 </div>
 
                 <div class="cycle-checkin-card" id="cycle-checkin-card">
@@ -1662,20 +1658,26 @@
         <div class="modal" id="modal-session-challenge">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-session-challenge">
+                <div class="challenge-modal-emblem" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 2 4 5.5v6c0 5 3.4 8.8 8 10.5 4.6-1.7 8-5.5 8-10.5v-6L12 2Z"></path><path d="m8.5 12 2.5 2.5 4.5-5"></path></svg>
+                </div>
                 <div class="challenge-modal-kicker">Défi de la séance</div>
                 <h3 id="challenge-modal-title">Objectif du jour</h3>
                 <div class="challenge-modal-target" id="challenge-modal-target">--</div>
                 <p id="challenge-modal-message">Le coach a choisi un défi adapté à ton historique.</p>
-                <div class="challenge-modal-reward" id="challenge-modal-reward">Bonus XP à débloquer</div>
-                <button class="btn btn-primary btn-large" id="btn-close-session-challenge">Défi accepté</button>
+                <div class="challenge-modal-reward">
+                    <span class="challenge-modal-reward-xp" id="challenge-modal-reward">+0 XP</span>
+                    <span class="challenge-modal-reward-label">Bonus si tu le valides</span>
+                </div>
+                <button class="challenge-modal-accept" id="btn-close-session-challenge" type="button">Défi accepté</button>
             </div>
         </div>
     </div>
 
-    <script defer src="db.js?v=5.5.0"></script>
-    <script defer src="data.js?v=5.5.0"></script>
-    <script defer src="exercise-db.js?v=5.5.0"></script>
-    <script defer src="app.js?v=5.5.0"></script>
+    <script defer src="db.js?v=5.5.15"></script>
+    <script defer src="data.js?v=5.5.15"></script>
+    <script defer src="exercise-db.js?v=5.5.15"></script>
+    <script defer src="app.js?v=5.5.15"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection

@@ -297,31 +297,202 @@ class GamificationEngine {
         this.confettiColors = ['#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6'];
     }
     
-    triggerConfetti(intensity = 'medium') {
-        const container = document.createElement('div');
-        container.className = 'confetti-container';
-        document.body.appendChild(container);
-        
-        const counts = { light: 30, medium: 60, heavy: 100 };
-        const count = counts[intensity] || 60;
-        
-        for (let i = 0; i < count; i++) {
-            const confetti = document.createElement('div');
-            const shapes = ['circle', 'square', 'triangle'];
-            const shape = shapes[Math.floor(Math.random() * shapes.length)];
-            
-            confetti.className = `confetti ${shape}`;
-            confetti.style.left = Math.random() * 100 + '%';
-            confetti.style.backgroundColor = this.confettiColors[Math.floor(Math.random() * this.confettiColors.length)];
-            confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
-            confetti.style.animationDelay = Math.random() * 0.5 + 's';
-            
-            container.appendChild(confetti);
-        }
-        
-        setTimeout(() => container.remove(), 4000);
+    get reducedMotion() {
+        return typeof window !== 'undefined'
+            && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     }
-    
+
+    // ---- Canvas confetti engine: one shared overlay, one rAF loop, no DOM churn ----
+    ensureFxCanvas() {
+        if (this.fxCanvas?.isConnected) return this.fxCanvas;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'fx-canvas';
+        canvas.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(canvas);
+        this.fxCanvas = canvas;
+        this.fxCtx = canvas.getContext('2d');
+        this.fxParticles = [];
+        this.resizeFxCanvas();
+        if (!this.fxResizeBound) {
+            this.fxResizeBound = true;
+            window.addEventListener('resize', () => this.resizeFxCanvas(), { passive: true });
+        }
+        return canvas;
+    }
+
+    resizeFxCanvas() {
+        if (!this.fxCanvas) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.fxDpr = dpr;
+        this.fxCanvas.width = Math.round(window.innerWidth * dpr);
+        this.fxCanvas.height = Math.round(window.innerHeight * dpr);
+    }
+
+    /**
+     * Burst of confetti from a point.
+     * @param {object} o { x, y (px, viewport), count, angle (deg, -90 = up), spread (deg),
+     *                     power, colors, shapes ['rect','circle','ribbon','star'], scale, gravity }
+     */
+    burst(o = {}) {
+        if (this.reducedMotion || typeof document === 'undefined') return;
+        this.ensureFxCanvas();
+        const {
+            x = window.innerWidth / 2,
+            y = window.innerHeight / 2,
+            count = 40,
+            angle = -90,
+            spread = 70,
+            power = 14,
+            colors = this.confettiColors,
+            shapes = ['rect', 'rect', 'circle', 'ribbon'],
+            scale = 1,
+            gravity = 0.32,
+            drift = 0
+        } = o;
+        // Keep phones smooth even if several bursts overlap.
+        const room = Math.max(0, 420 - this.fxParticles.length);
+        const total = Math.min(count, room);
+        for (let i = 0; i < total; i++) {
+            const a = (angle + (Math.random() - 0.5) * spread) * Math.PI / 180;
+            const v = power * (0.55 + Math.random() * 0.6);
+            this.fxParticles.push({
+                x,
+                y,
+                vx: Math.cos(a) * v + drift,
+                vy: Math.sin(a) * v,
+                g: gravity * (0.8 + Math.random() * 0.4),
+                drag: 0.965 + Math.random() * 0.02,
+                rot: Math.random() * Math.PI * 2,
+                vrot: (Math.random() - 0.5) * 0.35,
+                tilt: Math.random() * Math.PI * 2,
+                vtilt: 0.08 + Math.random() * 0.12,
+                size: (6 + Math.random() * 6) * scale,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                shape: shapes[Math.floor(Math.random() * shapes.length)],
+                life: 0,
+                maxLife: 140 + Math.random() * 90
+            });
+        }
+        if (!this.fxRunning) {
+            this.fxRunning = true;
+            this.fxLast = performance.now();
+            requestAnimationFrame((t) => this.fxFrame(t));
+        }
+    }
+
+    fxFrame(now) {
+        const ctx = this.fxCtx;
+        const canvas = this.fxCanvas;
+        if (!ctx || !canvas) { this.fxRunning = false; return; }
+        // Frame-rate independent: 1 step = 1/60s, clamped after a tab switch.
+        const step = Math.min(3, (now - this.fxLast) / 16.667);
+        this.fxLast = now;
+        const dpr = this.fxDpr || 1;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const h = window.innerHeight;
+        const alive = [];
+        for (const p of this.fxParticles) {
+            p.life += step;
+            p.vx *= Math.pow(p.drag, step);
+            p.vy = p.vy * Math.pow(p.drag, step) + p.g * step;
+            p.x += p.vx * step + Math.sin(p.tilt) * 0.6 * step;
+            p.y += p.vy * step;
+            p.rot += p.vrot * step;
+            p.tilt += p.vtilt * step;
+            if (p.life > p.maxLife || p.y > h + 40) continue;
+            alive.push(p);
+            const fade = Math.min(1, (p.maxLife - p.life) / 30);
+            ctx.globalAlpha = Math.max(0, fade);
+            ctx.fillStyle = p.color;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            // Fake 3D flip: squash on one axis with the tilt.
+            const flip = Math.cos(p.tilt);
+            ctx.scale(1, Math.abs(flip) < 0.15 ? 0.15 : flip);
+            const s = p.size;
+            if (p.shape === 'circle') {
+                ctx.beginPath();
+                ctx.arc(0, 0, s * 0.42, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (p.shape === 'ribbon') {
+                ctx.fillRect(-s * 0.2, -s * 0.9, s * 0.4, s * 1.8);
+            } else if (p.shape === 'star') {
+                ctx.beginPath();
+                for (let k = 0; k < 10; k++) {
+                    const r = k % 2 === 0 ? s * 0.62 : s * 0.26;
+                    const ang = (k * Math.PI) / 5 - Math.PI / 2;
+                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+                }
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.fillRect(-s / 2, -s * 0.32, s, s * 0.64);
+            }
+            ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        this.fxParticles = alive;
+        if (alive.length) {
+            requestAnimationFrame((t) => this.fxFrame(t));
+        } else {
+            this.fxRunning = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    burstFromElement(el, options = {}) {
+        if (!el?.getBoundingClientRect) return this.burst(options);
+        const r = el.getBoundingClientRect();
+        this.burst({ x: r.left + r.width / 2, y: r.top + r.height / 2, ...options });
+    }
+
+    // Two side cannons + optional top rain: used for big moments.
+    triggerConfetti(intensity = 'medium') {
+        if (this.reducedMotion) return;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const counts = { light: 50, medium: 90, heavy: 130 };
+        const perSide = Math.round((counts[intensity] || 90) / 2);
+        // Tuned so the arc peaks around the top fifth of the screen on any phone.
+        const heightFactor = Math.sqrt(Math.max(500, h) / 812);
+        const power = (intensity === 'heavy' ? 35 : intensity === 'light' ? 28 : 32) * heightFactor;
+        this.burst({ x: -10, y: h * 0.72, angle: -65, spread: 30, count: perSide, power });
+        this.burst({ x: w + 10, y: h * 0.72, angle: -115, spread: 30, count: perSide, power });
+        if (intensity === 'heavy') {
+            setTimeout(() => {
+                this.burst({ x: w * 0.5, y: h * 0.32, angle: -90, spread: 360, count: 60, power: 11, shapes: ['star', 'circle', 'rect'] });
+            }, 350);
+            setTimeout(() => {
+                this.burst({ x: -10, y: h * 0.6, angle: -60, spread: 30, count: 30, power: power * 0.85 });
+                this.burst({ x: w + 10, y: h * 0.6, angle: -120, spread: 30, count: 30, power: power * 0.85 });
+            }, 700);
+        }
+    }
+
+    // Small celebratory pop, e.g. on a validated set.
+    sparkle(el, { gold = false, count = 18 } = {}) {
+        this.burstFromElement(el, {
+            count,
+            spread: 110,
+            power: 9,
+            scale: 0.75,
+            gravity: 0.38,
+            shapes: ['star', 'circle', 'rect'],
+            colors: gold
+                ? ['#f59e0b', '#fbbf24', '#fde68a', '#f97316', '#fff7ed']
+                : ['#22c55e', '#4ade80', '#6366f1', '#a78bfa', '#facc15']
+        });
+    }
+
+    // Gold fireworks for personal records.
+    celebrateRecordBurst(el) {
+        const gold = ['#f59e0b', '#fbbf24', '#fde68a', '#f97316', '#facc15', '#ffffff'];
+        this.burstFromElement(el, { count: 60, spread: 360, power: 13, colors: gold, shapes: ['star', 'star', 'circle', 'rect'] });
+        setTimeout(() => this.burstFromElement(el, { count: 30, spread: 120, power: 16, colors: gold, shapes: ['ribbon', 'star'] }), 220);
+    }
+
     showAchievement(icon, title, message, xpGain = null) {
         // Remove existing toast if any
         const existing = document.querySelector('.achievement-toast');
@@ -357,7 +528,7 @@ class GamificationEngine {
     }
     
     celebrateWorkoutComplete(sessionName, stats) {
-        this.triggerConfetti('medium');
+        this.triggerConfetti('heavy');
         
         setTimeout(() => {
             this.showAchievement(
@@ -2180,7 +2351,11 @@ class App {
             document.getElementById('session-duration').textContent = `~${nextSession.estimatedDuration} min`;
             
             const slots = this.getSlotsForSessionFromSnapshot(nextSession.id, homeData);
-            document.getElementById('session-slots').textContent = `${slots.length} exercices`;
+            document.getElementById('session-slots').textContent = `${slots.length} exo${slots.length > 1 ? 's' : ''}`;
+            const totalSets = slots.reduce((sum, slot) => sum + (Number(slot.sets) || 0), 0);
+            const setsEl = document.getElementById('session-sets');
+            if (setsEl) setsEl.textContent = `${totalSets} série${totalSets > 1 ? 's' : ''}`;
+            this.renderNextSessionMuscles(slots);
             
             this.currentSession = nextSession;
             document.getElementById('btn-start-session').disabled = false;
@@ -2189,15 +2364,22 @@ class App {
             const cyclePreview = document.getElementById('session-cycle-preview');
             if (cyclePreview) {
                 const cycleState = await this.getCurrentCycleState();
-                cyclePreview.textContent = this.formatCycleSummary(cycleState);
+                const isDeload = cycleState?.phase === 'deload';
+                cyclePreview.textContent = cycleState
+                    ? `S${cycleState.weekInCycle}/${cycleState.totalWeeks} · ${isDeload ? 'Deload' : 'Accumulation'}`
+                    : this.formatCycleSummary(cycleState);
+                cyclePreview.classList.toggle('is-deload', isDeload);
             }
         } else {
             document.getElementById('session-name').textContent = 'Crée ta première séance';
             document.getElementById('session-duration').textContent = 'Configure ton programme';
-            document.getElementById('session-slots').textContent = '0 exercice';
-            document.getElementById('last-session-info').textContent = 'Dernière séance : --';
+            document.getElementById('session-slots').textContent = '0 exo';
+            const setsEl = document.getElementById('session-sets');
+            if (setsEl) setsEl.textContent = '0 série';
+            this.renderNextSessionMuscles([]);
+            this.renderLastSessionInfo('');
             const cyclePreview = document.getElementById('session-cycle-preview');
-            if (cyclePreview) cyclePreview.textContent = 'Cycle : configure tes séances pour démarrer ton premier cycle.';
+            if (cyclePreview) cyclePreview.textContent = 'Nouveau cycle';
             document.getElementById('btn-start-session').disabled = true;
             document.getElementById('btn-change-session').disabled = true;
             this.currentSession = null;
@@ -2209,9 +2391,9 @@ class App {
             const lastSessionName = this.getSessionDisplayNameFromArchive(lastWorkout.sessionId, sessionLookup, sessionNameArchive);
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
             const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
-            document.getElementById('last-session-info').textContent = `Dernière séance : ${lastSessionName}, ${daysText}`;
+            this.renderLastSessionInfo(lastSessionName, daysText);
         } else if (nextSession) {
-            document.getElementById('last-session-info').textContent = 'Dernière séance : --';
+            this.renderLastSessionInfo('');
         }
 
         this.renderCurrentMonthCalendar(history, sessions, sessionNameArchive);
@@ -2221,6 +2403,34 @@ class App {
 
         // Render stats
         await this.renderStats(homeData);
+    }
+
+    // Up to three muscle badges for the home "next session" card, most trained first.
+    renderNextSessionMuscles(slots = []) {
+        const container = document.getElementById('session-muscles');
+        if (!container) return;
+        const counts = new Map();
+        slots.forEach(slot => {
+            const muscleId = slot?.muscleGroup;
+            if (muscleId) counts.set(muscleId, (counts.get(muscleId) || 0) + (Number(slot.sets) || 1));
+        });
+        const muscles = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([muscleId]) => muscleId);
+        container.textContent = muscles.map(muscleId => this.getMuscleGroupLabel(muscleId)).join(' · ');
+        container.hidden = muscles.length === 0;
+    }
+
+    renderLastSessionInfo(label, when = '') {
+        const el = document.getElementById('last-session-info');
+        if (!el) return;
+        el.innerHTML = `
+            <span class="next-quest-last-icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </span>
+            <span class="next-quest-last-copy">
+                <span class="next-quest-last-label">Dernière séance</span>
+                <span class="next-quest-last-value">${label ? `<strong>${this.escapeHtml(label)}</strong>${when ? ` · ${this.escapeHtml(when)}` : ''}` : 'Aucune pour l’instant'}</span>
+            </span>
+        `;
     }
 
     getLocalDateKey(dateValue) {
@@ -4438,7 +4648,7 @@ class App {
             .filter(Boolean)
             .join(' ');
         document.getElementById('challenge-modal-reward').textContent =
-            `+${(challenge.xpExerciseBonus || 0) + (challenge.xpFinishBonus || 0)} XP bonus si tu le valides`;
+            `+${(challenge.xpExerciseBonus || 0) + (challenge.xpFinishBonus || 0)} XP`;
 
         modal.querySelector('.modal-session-challenge')?.classList.remove('challenge-accepted-pop');
         modal.classList.add('active');
@@ -4839,6 +5049,13 @@ class App {
             // Add slider event listener
             const slider = muscleItem.querySelector('.lms-slider');
             slider.addEventListener('input', (e) => this.handleLMSSliderChange(e, muscleId));
+            muscleItem.dataset.level = '1';
+            muscleItem.querySelectorAll('.lms-labels > span').forEach((label) => {
+                label.addEventListener('click', () => {
+                    slider.value = label.dataset.value;
+                    slider.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+            });
         }
 
         container.style.display = muscleGroups.length > 0 ? 'flex' : 'none';
@@ -4850,41 +5067,55 @@ class App {
             
             // Confirm button
             const confirmBtn = document.getElementById('btn-confirm-lms');
-            const handleConfirm = async () => {
-                const confirmedScores = Object.entries(this.lmsScoresTemp)
-                    .filter(([muscleId]) => this.lmsScoresTouched?.[muscleId])
-                    .reduce((acc, [muscleId, value]) => {
-                        acc[muscleId] = value;
-                        return acc;
-                    }, {});
-
-                // Save only explicit LMS answers to current workout
-                this.currentWorkout.lmsScores = confirmedScores;
-                await this.applyCurrentWorkoutDeloadChoice(
-                    this.cycleDeloadChoiceTemp === 'on',
-                    cycleContext.suggestionReason || 'manual'
-                );
-                await db.saveCurrentWorkout(this.currentWorkout);
-                
-                // Save LMS history for tracking only if the user answered something
-                if (Object.keys(confirmedScores).length > 0) {
-                    await this.saveLMSHistory(confirmedScores);
-                }
-                
+            let settled = false;
+            const close = () => {
                 sheet.classList.remove('active');
-                confirmBtn.removeEventListener('click', handleConfirm);
-                
-                // Show adaptation modal for worst muscle
-                await this.showAdaptationStatus();
-                
-                resolve();
+                confirmBtn.onclick = null;
+                sheet.querySelector('.sheet-backdrop').onclick = null;
             };
-            confirmBtn.addEventListener('click', handleConfirm);
-            
+            // onclick (not addEventListener) so a sheet abandoned by a previous
+            // start can never leave a stale handler stacked on the button.
+            confirmBtn.onclick = async () => {
+                if (settled) return;
+                settled = true;
+                // Close right away: the saves below hit IndexedDB and must not
+                // leave the button looking dead on a slow phone.
+                close();
+                try {
+                    const confirmedScores = Object.entries(this.lmsScoresTemp)
+                        .filter(([muscleId]) => this.lmsScoresTouched?.[muscleId])
+                        .reduce((acc, [muscleId, value]) => {
+                            acc[muscleId] = value;
+                            return acc;
+                        }, {});
+
+                    // Save only explicit LMS answers to current workout
+                    if (this.currentWorkout) this.currentWorkout.lmsScores = confirmedScores;
+                    await this.applyCurrentWorkoutDeloadChoice(
+                        this.cycleDeloadChoiceTemp === 'on',
+                        cycleContext.suggestionReason || 'manual'
+                    );
+                    if (this.currentWorkout) await db.saveCurrentWorkout(this.currentWorkout);
+
+                    // Save LMS history for tracking only if the user answered something
+                    if (Object.keys(confirmedScores).length > 0) {
+                        await this.saveLMSHistory(confirmedScores);
+                    }
+
+                    // Show adaptation modal for worst muscle
+                    await this.showAdaptationStatus();
+                } catch (error) {
+                    console.error('Check-in récupération non enregistré:', error);
+                } finally {
+                    resolve();
+                }
+            };
+
             // Backdrop close
             sheet.querySelector('.sheet-backdrop').onclick = () => {
-                sheet.classList.remove('active');
-                confirmBtn.removeEventListener('click', handleConfirm);
+                if (settled) return;
+                settled = true;
+                close();
                 resolve();
             };
         });
@@ -4896,6 +5127,7 @@ class App {
         this.lmsScoresTouched[muscleId] = true;
         
         const muscleItem = e.target.closest('.lms-muscle-item');
+        muscleItem.dataset.level = String(value);
         const labels = muscleItem.querySelectorAll('.lms-labels span');
         const feedback = muscleItem.querySelector('.lms-feedback');
         
@@ -5191,13 +5423,22 @@ class App {
 
     normalizeExerciseText(text) {
         if (!text) return '';
-        return String(text)
+        const key = String(text);
+        // Hot path: called hundreds of thousands of times while rendering an
+        // exercise (library scans), so the result is memoized.
+        const cache = this._normalizeTextCache || (this._normalizeTextCache = new Map());
+        const cached = cache.get(key);
+        if (cached !== undefined) return cached;
+        const normalized = key
             .toLowerCase()
             .normalize('NFD')
             .replace(/\p{Diacritic}/gu, '')
             .replace(/[^a-z0-9\s-]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+        if (cache.size > 5000) cache.clear();
+        cache.set(key, normalized);
+        return normalized;
     }
 
     getInputValueOrFallback(savedValue, fallbackValue = '') {
@@ -5692,12 +5933,13 @@ class App {
         if (!raw.includes('/')) return null;
         const targets = this.getAdviceTargetRepsArray(advice, []);
         if (targets.length < 2) return null;
+        if (targets.every(reps => reps === targets[0])) {
+            return `<span class="coach-rep-flat"><b>${targets.length}</b><i>×</i><b>${targets[0]}</b><small>reps</small></span>`;
+        }
         const tokens = targets.map((reps, index) => `
-            <span class="coach-rep-token" style="--i:${index}">
-                <small>S${index + 1}</small>${reps}
-            </span>
+            <span class="coach-rep-step" style="--i:${index}"><b>${reps}</b><small>S${index + 1}</small></span>
         `).join('');
-        return `<span class="coach-rep-tokens">${tokens}</span>`;
+        return `<span class="coach-rep-steps">${tokens}</span>`;
     }
 
     getCoachCardTone(advice) {
@@ -5963,16 +6205,40 @@ class App {
     }
 
     getExerciseLibrary() {
-        const builtInLibrary = Array.isArray(EXERCISE_LIBRARY) ? EXERCISE_LIBRARY : [];
-        const mergedLibrary = [...this.getCustomExerciseLibrary(), ...builtInLibrary];
-        const seen = new Set();
+        return this.getExerciseLibraryIndex().library;
+    }
 
-        return mergedLibrary.filter(entry => {
+    // Merged library + lookup maps, rebuilt only when the custom library array
+    // is replaced (load/save always assign a new array).
+    getExerciseLibraryIndex() {
+        const custom = this.getCustomExerciseLibrary();
+        if (this._exerciseLibraryIndex?.source === custom) return this._exerciseLibraryIndex;
+
+        const builtInLibrary = Array.isArray(EXERCISE_LIBRARY) ? EXERCISE_LIBRARY : [];
+        const seen = new Set();
+        const library = [...custom, ...builtInLibrary].filter(entry => {
             const normalizedName = this.normalizeExerciseText(entry?.name);
             if (!normalizedName || seen.has(normalizedName)) return false;
             seen.add(normalizedName);
             return true;
         });
+
+        // First entry in library order wins, matching the previous Array#find scans.
+        const byName = new Map();
+        const byPool = new Map();
+        library.forEach(entry => {
+            [entry.name, ...(entry.aliases || [])].forEach(name => {
+                const key = this.normalizeExerciseText(name);
+                if (key && !byName.has(key)) byName.set(key, entry);
+            });
+            (entry.pool || []).forEach(name => {
+                const key = this.normalizeExerciseText(name);
+                if (key && !byPool.has(key)) byPool.set(key, entry);
+            });
+        });
+
+        this._exerciseLibraryIndex = { source: custom, library, byName, byPool, semantic: new Map() };
+        return this._exerciseLibraryIndex;
     }
 
     async persistCustomExerciseDefinition(definition) {
@@ -6103,18 +6369,8 @@ class App {
             return;
         }
 
-        const descriptor = this.getExerciseDescriptor(slot);
-        const primaryMuscleId = descriptor.primaryMuscles[0] || slot.muscleGroup || '';
-        const tags = [];
-        if (primaryMuscleId) {
-            tags.push(this.renderMuscleBadge(primaryMuscleId));
-        }
-        tags.push('<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>');
-        if (this.isUnilateralSlot(slot)) {
-            tags.push('<span class="exercise-header-tag exercise-header-tag-format">G/D</span>');
-        } else if (this.isCardioSlot(slot)) {
-            tags.push('<span class="exercise-header-tag exercise-header-tag-format">Cardio</span>');
-        }
+        // Light header: only the targets chip (sets × reps · rest · RIR) under the title.
+        const tags = ['<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>'];
 
         container.innerHTML = tags.join('');
         this.syncExerciseTargetsChip();
@@ -6124,11 +6380,7 @@ class App {
     renderSupersetHeaderMeta() {
         const container = document.getElementById('exercise-header-meta');
         if (!container || !this.currentSlot || !this.supersetSlot) return;
-        const badges = [this.currentSlot, this.supersetSlot]
-            .map(slot => this.getExerciseDescriptor(slot).primaryMuscles[0] || slot.muscleGroup || '')
-            .filter((muscleId, index, list) => muscleId && list.indexOf(muscleId) === index)
-            .map(muscleId => this.renderMuscleBadge(muscleId));
-        container.innerHTML = `${badges.join('')}<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>`;
+        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>';
         this.syncExerciseTargetsChip();
         this.updateTechniqueButton(this.currentSlot);
     }
@@ -6239,6 +6491,19 @@ class App {
             </div>
         `;
 
+        if (!entry && !exerciseDb.data) {
+            // The database itself did not load: say so instead of "no result".
+            body.innerHTML = `
+                ${coachCue ? `<div class="technique-coach"><span aria-hidden="true">🧠</span><p>${this.escapeHtml(coachCue)}</p></div>` : ''}
+                <div class="technique-db-error">
+                    <strong>Base d’exercices indisponible</strong>
+                    <span>Le chargement des fiches a échoué${exerciseDb.lastError ? ` (${this.escapeHtml(exerciseDb.lastError.message || String(exerciseDb.lastError))})` : ''}. Vérifie ta connexion puis réessaie.</span>
+                    <button type="button" class="btn btn-secondary" data-technique-retry>Réessayer</button>
+                </div>
+            `;
+            return;
+        }
+
         if (!entry) {
             body.innerHTML = `
                 ${coachCue ? `<div class="technique-coach"><span aria-hidden="true">🧠</span><p>${this.escapeHtml(coachCue)}</p></div>` : ''}
@@ -6334,6 +6599,10 @@ class App {
                 this.renderTechniqueSheet().then(() => document.getElementById('technique-search')?.focus());
                 return;
             }
+            if (event.target.closest('[data-technique-retry]') && this.techniqueState) {
+                this.renderTechniqueSheet();
+                return;
+            }
             const linkButton = event.target.closest('[data-technique-link]');
             if (linkButton) this.linkTechniqueEntry(linkButton.dataset.techniqueLink);
         });
@@ -6368,34 +6637,18 @@ class App {
         const normalizedName = this.normalizeExerciseText(exerciseName);
         if (!normalizedName) return null;
 
-        const library = this.getExerciseLibrary();
-        const exactEntry = library.find(entry => {
-            const searchableNames = [
-                entry.name,
-                ...(entry.aliases || [])
-            ];
-            return searchableNames.some(name => this.normalizeExerciseText(name) === normalizedName);
-        });
-        if (exactEntry) return exactEntry;
-
+        const index = this.getExerciseLibraryIndex();
         // A pool is a fallback relationship, not an identity. Prefer a
-        // canonical name/alias above so a custom pool cannot shadow the real
+        // canonical name/alias so a custom pool cannot shadow the real
         // definition of a built-in variant (type, muscles, equipment, etc.).
-        return library.find(entry => (entry.pool || [])
-            .some(name => this.normalizeExerciseText(name) === normalizedName)) || null;
+        return index.byName.get(normalizedName) || index.byPool.get(normalizedName) || null;
     }
 
     findExerciseLibraryEntryByNameOrAlias(exerciseName) {
         const normalizedName = this.normalizeExerciseText(exerciseName);
         if (!normalizedName) return null;
 
-        return this.getExerciseLibrary().find(entry => {
-            const searchableNames = [
-                entry.name,
-                ...(entry.aliases || [])
-            ];
-            return searchableNames.some(name => this.normalizeExerciseText(name) === normalizedName);
-        }) || null;
+        return this.getExerciseLibraryIndex().byName.get(normalizedName) || null;
     }
 
     slugifyExerciseIdentity(value = '') {
@@ -6434,6 +6687,15 @@ class App {
     findSemanticLibraryEntry(exerciseName) {
         const rawName = String(exerciseName || '').trim();
         if (!rawName) return null;
+
+        const semanticCache = this.getExerciseLibraryIndex().semantic;
+        if (semanticCache.has(rawName)) return semanticCache.get(rawName);
+        const entry = this.resolveSemanticLibraryEntry(rawName);
+        semanticCache.set(rawName, entry);
+        return entry;
+    }
+
+    resolveSemanticLibraryEntry(rawName) {
 
         const direct = this.findExerciseLibraryEntryByNameOrAlias(rawName);
         if (direct) return direct;
@@ -7143,6 +7405,26 @@ class App {
     }
 
     inferCustomExerciseTemplate(exerciseName, options = {}) {
+        // Pure keyword inference, memoized per library version: it runs for
+        // every custom exercise on each render (tracking mode, descriptors…).
+        const index = this.getExerciseLibraryIndex();
+        const templates = index.templates || (index.templates = new Map());
+        const key = `${exerciseName}|${options.preferLibraryMatch}|${options.allowCardioInference}`;
+        let template = templates.get(key);
+        if (template === undefined) {
+            template = this.computeCustomExerciseTemplate(exerciseName, options);
+            templates.set(key, template);
+        }
+        if (!template || index.library.includes(template)) return template;
+        // Callers may decorate the template, so hand out a copy.
+        const copy = { ...template };
+        Object.keys(copy).forEach(field => {
+            if (Array.isArray(copy[field])) copy[field] = [...copy[field]];
+        });
+        return copy;
+    }
+
+    computeCustomExerciseTemplate(exerciseName, options = {}) {
         const {
             preferLibraryMatch = true,
             allowCardioInference = preferLibraryMatch
@@ -7722,6 +8004,8 @@ class App {
         const card = document.createElement('div');
         const isSkipped = Boolean(renderOptions.isSkipped);
         let cardClass = `slot-card ${isCompleted ? 'completed' : ''} ${isSkipped ? 'skipped' : ''}`;
+        // One-shot "stamp" animation when coming back from a finished exercise.
+        if (isCompleted && this.fxJustCompletedSlots?.delete(slot.id)) cardClass += ' just-finished';
         if (isFirstInSuperset) cardClass += ' superset-start';
         if (isSecondInSuperset) cardClass += ' superset-end';
         const challenge = this.getActiveSessionChallenge();
@@ -10351,7 +10635,15 @@ class App {
         document.getElementById('summary-icon').textContent = '⚡';
         document.getElementById('summary-title').textContent = 'SuperSet terminé !';
         
-        document.getElementById('summary-comparison').innerHTML = `
+        const [historyA, historyB] = await Promise.all([
+            this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name),
+            this.getExerciseWorkoutHistory(this.supersetSlot.activeExercise || this.supersetSlot.name)
+        ]);
+        const supersetPanels = [
+            this.renderExerciseProgressPanel(this.currentSlot, completedSetsA, historyA, { title: this.currentSlot.activeExercise || this.currentSlot.name, compact: true }),
+            this.renderExerciseProgressPanel(this.supersetSlot, completedSetsB, historyB, { title: this.supersetSlot.activeExercise || this.supersetSlot.name, compact: true })
+        ].join('');
+        document.getElementById('summary-comparison').innerHTML = supersetPanels || `
             <div class="comparison-card positive">
                 <span class="comparison-icon">🔥</span>
                 <span class="comparison-text">2 exercices en un ! Efficacité max !</span>
@@ -10373,14 +10665,16 @@ class App {
             ]
         });
 
-        document.getElementById('exercise-summary').classList.add('active');
+        this.presentExerciseSummary();
 
         // Mark both slots as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
+            (this.fxJustCompletedSlots ||= new Set()).add(this.currentSlot.id);
         }
         if (!this.currentWorkout.completedSlots.includes(this.supersetSlot.id)) {
             this.currentWorkout.completedSlots.push(this.supersetSlot.id);
+            (this.fxJustCompletedSlots ||= new Set()).add(this.supersetSlot.id);
         }
         const challengeCompletedA = await this.completeSessionChallengeForSlot(this.currentSlot, slotAData);
         const challengeCompletedB = await this.completeSessionChallengeForSlot(this.supersetSlot, slotBData);
@@ -12846,7 +13140,8 @@ class App {
             `;
         }
         
-        document.getElementById('summary-comparison').innerHTML = comparisonHTML;
+        const progressPanel = this.renderExerciseProgressPanel(this.currentSlot, completedSets, historyWorkouts);
+        document.getElementById('summary-comparison').innerHTML = progressPanel || comparisonHTML;
         this.renderExerciseSummaryAchievements({
             badges: balanced
                 ? [{
@@ -12854,17 +13149,22 @@ class App {
                     label: 'Équilibre propre',
                     detail: 'Les deux côtés sont au même niveau aujourd’hui.'
                 }]
-                : [],
+                : (progressPanel && weakerSide ? [{
+                    icon: '📊',
+                    label: `Côté ${weakerSide} en retrait`,
+                    theme: 'neutral'
+                }] : []),
             microWins: [{
                 icon: '🔁',
                 text: `${totalRepsLeft} reps G · ${totalRepsRight} reps D`
             }]
         });
-        document.getElementById('exercise-summary').classList.add('active');
+        this.presentExerciseSummary();
 
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
+            (this.fxJustCompletedSlots ||= new Set()).add(this.currentSlot.id);
         }
         const challengeCompleted = await this.completeSessionChallengeForSlot(this.currentSlot, slotData);
         await db.saveCurrentWorkout(this.currentWorkout);
@@ -12992,7 +13292,7 @@ class App {
         if (!anchorEl || !text) return;
         const rect = anchorEl.getBoundingClientRect();
         const bubble = document.createElement('div');
-        bubble.className = `xp-float${options.isPr ? ' is-pr' : ''}`;
+        bubble.className = `xp-float${options.isPr ? ' is-pr' : ''}${options.isCombo ? ' is-combo' : ''}`;
         bubble.textContent = text;
         bubble.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
         bubble.style.top = `${Math.round(Math.max(rect.top + 8, 70))}px`;
@@ -13031,6 +13331,20 @@ class App {
         return false;
     }
 
+    // Every 5 validated sets in a workout: a "combo" bubble + a bigger pop.
+    celebrateSetMilestone(card) {
+        if (!this.currentWorkout) return;
+        const count = (this.currentWorkout.fxSetCount || 0) + 1;
+        this.currentWorkout.fxSetCount = count;
+        if (count % 5 !== 0) return;
+        const labels = { 5: 'Échauffé', 10: 'En feu', 15: 'Machine', 20: 'Inarrêtable', 25: 'Légende' };
+        const label = labels[count] || 'Inarrêtable';
+        setTimeout(() => {
+            this.spawnXpFloat(card, `🔥 ${count} séries · ${label}`, { isCombo: true });
+            gamification.burstFromElement(card, { count: 40, spread: 200, power: 12, shapes: ['star', 'circle', 'ribbon'] });
+        }, 450);
+    }
+
     async flushJustCompletedFeedback(prExerciseCandidates = []) {
         const pending = this.pendingJustCompleted;
         this.pendingJustCompleted = null;
@@ -13042,6 +13356,8 @@ class App {
             card.classList.add('just-completed');
         }
         this.hapticTap([10, 40, 18]);
+        gamification.sparkle(card?.querySelector('.series-done-badge, .series-check, .unilateral-series-check, .superset-series-check') || card);
+        this.celebrateSetMilestone(card);
         let isPr = false;
         for (const candidate of prExerciseCandidates) {
             if (await this.detectLivePersonalRecord(candidate.set, candidate.exerciseId)) {
@@ -13061,6 +13377,7 @@ class App {
             const xp = ((await db.getSetting('xp')) ?? 0) + 15;
             await db.setSetting('xp', xp);
             this.hapticTap([20, 60, 20, 60, 40]);
+            gamification.celebrateRecordBurst(card);
             const header = card?.querySelector('.series-header, .unilateral-series-header, .superset-series-header');
             const doneMain = header?.classList.contains('series-done-row') ? header.querySelector('.series-done-main') : null;
             if (doneMain && !doneMain.querySelector('.is-pr')) {
@@ -13486,7 +13803,8 @@ class App {
     renderRestDoneCard(data = this.buildRestDoneData()) {
         const card = document.getElementById('timer-done-card');
         if (!card) return;
-        card.classList.remove('is-pr');
+        card.classList.remove('is-pr', 'is-leaving');
+        clearTimeout(this.restDoneCardTimeout);
         if (!data) {
             card.hidden = true;
             card.innerHTML = '';
@@ -13508,6 +13826,21 @@ class App {
             </div>
             <span class="timer-done-xp" id="timer-done-xp">+${data.xp} XP</span>
         `;
+        this.scheduleRestDoneCardHide();
+    }
+
+    // The "set validated" card is a moment, not a fixture: fade it out after a few seconds.
+    scheduleRestDoneCardHide(delay = 4000) {
+        clearTimeout(this.restDoneCardTimeout);
+        this.restDoneCardTimeout = setTimeout(() => {
+            const card = document.getElementById('timer-done-card');
+            if (!card || card.hidden) return;
+            card.classList.add('is-leaving');
+            this.restDoneCardTimeout = setTimeout(() => {
+                card.hidden = true;
+                card.classList.remove('is-leaving');
+            }, 600);
+        }, delay);
     }
 
     markRestDonePr(totalXp) {
@@ -13518,6 +13851,8 @@ class App {
         if (xp) xp.textContent = `🏆 +${totalXp} XP`;
         const kicker = card.querySelector('.timer-done-kicker');
         if (kicker) kicker.textContent = kicker.textContent.replace(' validée', ' · Record\u00a0!');
+        // A record deserves its full few seconds on screen.
+        this.scheduleRestDoneCardHide(5000);
     }
 
     renderRestSetTrack(progress = '') {
@@ -15176,23 +15511,9 @@ class App {
             `;
         }
 
-        const sequenceSignals = snapshot.sequenceAnalysis?.signals || [];
-        const qualityLabels = Object.entries(snapshot.qualityCounts || {})
-            .filter(([tag]) => SET_QUALITY_TAGS?.[tag])
-            .map(([tag, count]) => `${SET_QUALITY_TAGS[tag].shortLabel || SET_QUALITY_TAGS[tag].label} ×${count}`);
-        if (sequenceSignals.length || qualityLabels.length) {
-            const sequenceText = sequenceSignals.length
-                ? `Lecture de séance : ${snapshot.sequenceAnalysis.summary}.`
-                : '';
-            const qualityText = qualityLabels.length
-                ? `Annotations : ${qualityLabels.join(' · ')}.`
-                : '';
-            comparison.innerHTML += `
-                <div class="summary-analysis-note">
-                    <span class="summary-analysis-note-icon">🧠</span>
-                    <span>${this.escapeHtml([sequenceText, qualityText].filter(Boolean).join(' '))}</span>
-                </div>
-            `;
+        if (!isCardioExercise) {
+            const panel = this.renderExerciseProgressPanel(this.currentSlot, completedSets, historyWorkouts);
+            if (panel) comparison.innerHTML = panel;
         }
 
         this.renderExerciseSummaryAchievements(achievements);
@@ -15201,14 +15522,238 @@ class App {
             gamification.celebratePersonalRecord(this.currentSlot.activeExercise || this.currentSlot.name);
         }
 
-        document.getElementById('exercise-summary').classList.add('active');
+        this.presentExerciseSummary();
 
         // Mark slot as completed
         if (!this.currentWorkout.completedSlots.includes(this.currentSlot.id)) {
             this.currentWorkout.completedSlots.push(this.currentSlot.id);
+            (this.fxJustCompletedSlots ||= new Set()).add(this.currentSlot.id);
         }
         await this.completeSessionChallengeForSlot(this.currentSlot, slotData);
         await db.saveCurrentWorkout(this.currentWorkout);
+    }
+
+    // ===== Exercise summary: at-a-glance progression panel =====
+    // One number per session (best estimated 1RM when loaded, best set reps for
+    // bodyweight), the last sessions as bars, today highlighted with a verdict.
+    buildExerciseProgressData(slot, completedSets = [], historyWorkouts = []) {
+        const currentWorkoutId = this.currentWorkout?.id;
+        const history = (Array.isArray(historyWorkouts) ? historyWorkouts : [])
+            .filter(workout => workout && !workout.isDeload && (!currentWorkoutId || workout.id !== currentWorkoutId))
+            .filter(workout => (workout.sets || []).some(set => Number(set?.reps || 0) > 0))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        const isLoaded = [...completedSets, ...history.flatMap(workout => workout.sets || [])]
+            .some(set => Number(set?.weight || 0) > 0);
+        const score = (sets = []) => {
+            const eligible = this.getProgressionEligibleSets(sets).filter(set => Number(set?.reps || 0) > 0);
+            const pool = eligible.length ? eligible : sets.filter(set => Number(set?.reps || 0) > 0);
+            if (!pool.length) return 0;
+            return isLoaded
+                ? Math.max(...pool.map(set => this.calculateE1RM(set.weight || 0, set.reps || 0, 10)))
+                : Math.max(...pool.map(set => Number(set.reps || 0)));
+        };
+        const summarize = (sets = []) => ({
+            maxWeight: sets.reduce((best, set) => Math.max(best, Number(set?.weight || 0)), 0),
+            totalReps: sets.reduce((sum, set) => sum + Number(set?.reps || 0), 0),
+            volume: sets.reduce((sum, set) => sum + this.getSetLoadedVolume(set, slot), 0)
+        });
+
+        const todayValue = score(completedSets);
+        if (!todayValue) return null;
+        const past = history.map(workout => ({ date: workout.date, value: score(workout.sets || []), ...summarize(workout.sets || []) }))
+            .filter(point => point.value > 0);
+        const previous = past[past.length - 1] || null;
+        const peak = past.reduce((best, point) => Math.max(best, point.value), 0);
+        return {
+            isLoaded,
+            unit: isLoaded ? 'kg' : 'reps',
+            label: isLoaded ? 'Force estimée' : 'Meilleure série',
+            points: [...past.slice(-6), { date: new Date().toISOString(), value: todayValue, isToday: true }],
+            today: { value: todayValue, ...summarize(completedSets) },
+            previous,
+            peak,
+            sessionCount: past.length
+        };
+    }
+
+    formatProgressNumber(value, decimals = 1) {
+        const rounded = Math.round(value * 10 ** decimals) / 10 ** decimals;
+        return String(rounded).replace('.', ',');
+    }
+
+    renderExerciseProgressPanel(slot, completedSets = [], historyWorkouts = [], { title = '', compact = false } = {}) {
+        const data = this.buildExerciseProgressData(slot, completedSets, historyWorkouts);
+        if (!data) return '';
+        const { today, previous, peak } = data;
+        const fmt = value => data.isLoaded ? this.formatProgressNumber(value) : String(Math.round(value));
+
+        let verdict;
+        if (!previous) {
+            verdict = { tone: 'first', label: 'Première', icon: '✦' };
+        } else {
+            const deltaPct = (today.value - previous.value) / previous.value * 100;
+            const sign = deltaPct > 0 ? '+' : deltaPct < 0 ? '−' : '';
+            const pctLabel = `${sign}${this.formatProgressNumber(Math.abs(deltaPct))} %`;
+            if (today.value > peak * 1.005 && deltaPct >= 0.5) verdict = { tone: 'record', label: `Record · ${pctLabel}`, icon: '🏆' };
+            else if (deltaPct >= 1.5) verdict = { tone: 'up', label: pctLabel, icon: '▲' };
+            else if (deltaPct <= -3) verdict = { tone: 'down', label: pctLabel, icon: '▼' };
+            else verdict = { tone: 'stable', label: 'Stable', icon: '●' };
+        }
+
+        // ---- Bars ----
+        const gradId = `xpTodayGrad${(this.progressPanelSeq = (this.progressPanelSeq || 0) + 1)}`;
+        const W = 300;
+        const H = compact ? 84 : 116;
+        const top = 22;
+        const bottom = 18;
+        const values = data.points.map(point => point.value);
+        const maxV = Math.max(...values);
+        const minV = Math.min(...values);
+        // Zoom on the useful range so a 2 % change is visible, but never fake a cliff.
+        const floor = Math.max(0, minV - Math.max((maxV - minV) * 0.9, maxV * 0.06));
+        const span = Math.max(maxV - floor, 1e-6);
+        const n = data.points.length;
+        const slotW = W / Math.max(n, 4);
+        const barW = Math.min(34, slotW * 0.56);
+        const offsetX = (W - slotW * n) / 2;
+        const yOf = value => top + (H - top - bottom) * (1 - (value - floor) / span);
+        const fmtDate = iso => {
+            const d = new Date(iso);
+            return Number.isNaN(d.getTime()) ? '' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        };
+        const bars = data.points.map((point, index) => {
+            const cx = offsetX + slotW * index + slotW / 2;
+            const y = yOf(point.value);
+            const h = Math.max(4, H - bottom - y);
+            const isToday = point.isToday;
+            return `
+                <g class="prog-bar${isToday ? ' is-today' : ''}" style="--i:${index}">
+                    <rect x="${(cx - barW / 2).toFixed(1)}" y="${(H - bottom - h).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(8, barW / 3).toFixed(1)}" ${isToday ? `fill="url(#${gradId})"` : ''}/>
+                    ${isToday ? `<text class="prog-bar-value" x="${cx.toFixed(1)}" y="${(H - bottom - h - 7).toFixed(1)}" text-anchor="middle">${fmt(point.value)}</text>` : ''}
+                    <text class="prog-bar-date" x="${cx.toFixed(1)}" y="${H - 3}" text-anchor="middle">${isToday ? 'Auj.' : fmtDate(point.date)}</text>
+                </g>
+            `;
+        }).join('');
+        const previousLine = previous ? (() => {
+            const y = yOf(previous.value).toFixed(1);
+            return `<line class="prog-prev-line" x1="0" x2="${W}" y1="${y}" y2="${y}"/>`;
+        })() : '';
+
+        // ---- Deltas vs last time ----
+        const deltaChip = (label, diff, text) => {
+            const tone = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+            return `<span class="prog-delta is-${tone}"><small>${label}</small><b>${text}</b></span>`;
+        };
+        const signed = (value, unit = '') => `${value > 0 ? '+' : value < 0 ? '−' : '±'}${this.formatProgressNumber(Math.abs(value))}${unit}`;
+        let deltas = '';
+        if (previous) {
+            const chips = [];
+            if (data.isLoaded) chips.push(deltaChip('Charge max', today.maxWeight - previous.maxWeight, signed(today.maxWeight - previous.maxWeight, ' kg')));
+            chips.push(deltaChip('Reps', today.totalReps - previous.totalReps, signed(today.totalReps - previous.totalReps)));
+            if (data.isLoaded && previous.volume > 0) {
+                const volPct = (today.volume - previous.volume) / previous.volume * 100;
+                chips.push(deltaChip('Volume', Math.abs(volPct) < 0.5 ? 0 : volPct, `${signed(volPct)} %`));
+            }
+            deltas = `<div class="prog-deltas"><span class="prog-deltas-label">vs dernière fois</span>${chips.join('')}</div>`;
+        } else {
+            deltas = `<div class="prog-deltas is-first">Première trace : on compare dès la prochaine séance.</div>`;
+        }
+
+        return `
+            <div class="prog-panel is-${verdict.tone}${compact ? ' is-compact' : ''}">
+                <div class="prog-panel-head">
+                    <div class="prog-panel-title">
+                        ${title ? `<strong>${this.escapeHtml(title)}</strong>` : ''}
+                        <span>${data.label}${data.isLoaded ? ' (kg)' : ' (reps)'}</span>
+                    </div>
+                    <span class="prog-verdict is-${verdict.tone}"><i aria-hidden="true">${verdict.icon}</i>${verdict.label}</span>
+                </div>
+                <svg class="prog-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${this.escapeHtml(`${data.label} : ${fmt(today.value)} ${data.unit} aujourd'hui${previous ? `, ${fmt(previous.value)} la dernière fois` : ''}`)}">
+                    <defs>
+                        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" class="prog-grad-top"/>
+                            <stop offset="1" class="prog-grad-bottom"/>
+                        </linearGradient>
+                    </defs>
+                    ${previousLine}
+                    ${bars}
+                </svg>
+                ${deltas}
+            </div>
+        `;
+    }
+
+    // Shared "victory screen" polish for normal / unilateral / superset summaries.
+    presentExerciseSummary() {
+        const summary = document.getElementById('exercise-summary');
+        if (!summary) return;
+        const slots = [this.currentSlot, this.isSupersetMode ? this.supersetSlot : null].filter(Boolean);
+
+        // Generic check icons read poorly on the gold medal.
+        const iconEl = document.getElementById('summary-icon');
+        if (iconEl && ['✅', '🔄'].includes(iconEl.textContent.trim())) iconEl.textContent = '💪';
+
+        const nameEl = document.getElementById('summary-exercise-name');
+        if (nameEl) {
+            nameEl.textContent = slots.map(slot => slot.activeExercise || slot.name).filter(Boolean).join(' + ');
+        }
+
+        // Same XP values as the per-set feedback: 10 / set, 5 / side, 20 / superset set, +15 / live record.
+        let xp = 0;
+        slots.forEach((slot, index) => {
+            const data = this.currentWorkout?.slots?.[slot.id] || {};
+            const sides = [...(data.setsLeft || []), ...(data.setsRight || [])].filter(set => set?.completed);
+            const sets = (data.sets || []).filter(set => set?.completed);
+            if (sides.length) xp += sides.length * 5;
+            else if (this.isSupersetMode) xp += index === 0 ? sets.length * 20 : 0;
+            else xp += sets.length * 10;
+            xp += [...sides, ...sets].filter(set => set?.livePr).length * 15;
+        });
+        const xpEl = document.getElementById('summary-xp');
+        if (xpEl) {
+            xpEl.hidden = xp <= 0;
+            xpEl.innerHTML = `<span aria-hidden="true">⚡</span> +<span class="summary-xp-value">0</span> XP`;
+            this.animateCountUp(xpEl.querySelector('.summary-xp-value'), xp, { delay: 450 });
+        }
+
+        ['summary-total-reps', 'summary-max-weight'].forEach((id, index) => {
+            const el = document.getElementById(id);
+            const match = el?.textContent.match(/^(\d+(?:[.,]\d+)?)(.*)$/);
+            if (!match) return;
+            const target = parseFloat(match[1].replace(',', '.'));
+            const decimals = (match[1].split(/[.,]/)[1] || '').length;
+            this.animateCountUp(el, target, { suffix: match[2], decimals, delay: 250 + index * 120 });
+        });
+
+        summary.scrollTop = 0;
+        summary.classList.remove('active');
+        void summary.offsetWidth;
+        summary.classList.add('active');
+        this.hapticTap([16, 50, 24]);
+        setTimeout(() => {
+            gamification.burstFromElement(document.getElementById('summary-icon'), {
+                count: 46, spread: 360, power: 12, shapes: ['star', 'circle', 'rect', 'ribbon']
+            });
+        }, 260);
+    }
+
+    animateCountUp(el, target, { suffix = '', decimals = 0, delay = 0, duration = 900 } = {}) {
+        if (!el || !Number.isFinite(target)) return;
+        const format = value => `${value.toFixed(decimals)}${suffix}`;
+        if (gamification.reducedMotion || target === 0) {
+            el.textContent = format(target);
+            return;
+        }
+        el.textContent = format(0);
+        const start = performance.now() + delay;
+        const tick = now => {
+            if (!el.isConnected) return;
+            const t = Math.min(1, Math.max(0, (now - start) / duration));
+            const eased = 1 - Math.pow(1 - t, 3);
+            el.textContent = format(target * eased);
+            if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
     }
 
     hideExerciseSummary() {
@@ -15217,21 +15762,7 @@ class App {
     
     // ===== Confetti Effect =====
     triggerConfetti() {
-        const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
-        const confettiCount = 50;
-        
-        for (let i = 0; i < confettiCount; i++) {
-            const confetti = document.createElement('div');
-            confetti.className = 'confetti';
-            confetti.style.left = Math.random() * 100 + 'vw';
-            confetti.style.top = Math.random() * 50 + 50 + 'vh';
-            confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
-            confetti.style.animationDuration = (Math.random() * 1 + 0.5) + 's';
-            confetti.style.animationDelay = Math.random() * 0.5 + 's';
-            document.body.appendChild(confetti);
-            
-            setTimeout(() => confetti.remove(), 2000);
-        }
+        gamification.triggerConfetti('medium');
     }
 
     // ===== Finish Session =====
@@ -15761,90 +16292,100 @@ class App {
                 `).join('');
             };
             
+            const rankLetter = normalizedScore >= 90 ? 'S' : normalizedScore >= 75 ? 'A' : normalizedScore >= 55 ? 'B' : 'C';
+            const ringRadius = 54;
+            const ringCircumference = 2 * Math.PI * ringRadius;
+            const finAchievementsHtml = achievementBadges.length ? `
+                <section class="fin-section">
+                    <h4 class="fin-heading">Réussites <span>${achievementBadges.length}</span></h4>
+                    <ul class="fin-list">
+                        ${achievementBadges.map(badge => `
+                            <li class="fin-achievement">
+                                <span class="fin-achievement-icon">${this.escapeHtml(badge.icon)}</span>
+                                <span class="fin-list-copy">
+                                    <strong>${this.escapeHtml(badge.label)}</strong>
+                                    <small>${this.escapeHtml(badge.detail)}</small>
+                                </span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </section>
+            ` : '';
+            const finTrendList = (rows, tone) => rows.map(row => {
+                const delta = Number.isFinite(row.deltaPct) && Math.abs(row.deltaPct) >= 0.5
+                    ? `<em class="${row.deltaPct >= 0 ? 'up' : 'down'}">${row.deltaPct >= 0 ? '▲' : '▼'}${Math.abs(Math.round(row.deltaPct))}%</em>`
+                    : '';
+                return `
+                    <li class="fin-trend-item ${tone}">
+                        <span class="fin-list-copy">
+                            <strong>${this.escapeHtml(row.label)}</strong>
+                            <small>${this.escapeHtml(row.headline)}</small>
+                        </span>
+                        ${delta}
+                    </li>
+                `;
+            }).join('');
+            const finTrendsHtml = (focusRows.length || cautionRows.length) ? `
+                <section class="fin-section">
+                    ${focusRows.length ? `<h4 class="fin-heading">Points forts</h4><ul class="fin-list">${finTrendList(focusRows, 'good')}</ul>` : ''}
+                    ${cautionRows.length ? `<h4 class="fin-heading fin-heading-spaced">À surveiller</h4><ul class="fin-list">${finTrendList(cautionRows, 'warn')}</ul>` : ''}
+                </section>
+            ` : '';
+
+            overlay.classList.add('fin-screen');
             overlay.innerHTML = `
-                <div class="stimulus-score-shell">
-                    <div class="stimulus-score-content">
-                        <div class="stimulus-score-orb stimulus-score-orb-a"></div>
-                        <div class="stimulus-score-orb stimulus-score-orb-b"></div>
-                        <div class="stimulus-score-header">
-                            <div class="stimulus-score-header-copy">
-                                <div class="stimulus-score-kicker">Séance terminée</div>
-                                <div class="stimulus-score-message">${message}</div>
-                                <div class="stimulus-score-summary">${summaryLine}</div>
+                <div class="fin-shell">
+                    <header class="fin-header">
+                        <div class="fin-kicker">Séance terminée</div>
+                        <h2 class="fin-title">${this.escapeHtml(message)}</h2>
+                        <p class="fin-summary">${summaryLine}</p>
+                    </header>
+
+                    <div class="fin-hero">
+                        <div class="fin-ring">
+                            <svg viewBox="0 0 120 120" aria-hidden="true">
+                                <defs>
+                                    <linearGradient id="finRingGold" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#8b5cf6"></stop>
+                                        <stop offset="55%" stop-color="#ec4899"></stop>
+                                        <stop offset="100%" stop-color="#f97316"></stop>
+                                    </linearGradient>
+                                </defs>
+                                <circle class="fin-ring-track" cx="60" cy="60" r="${ringRadius}"></circle>
+                                <circle class="fin-ring-progress" cx="60" cy="60" r="${ringRadius}"
+                                    style="stroke-dasharray:${ringCircumference.toFixed(2)};--fin-ring-offset:${(ringCircumference * (1 - normalizedScore / 100)).toFixed(2)};--fin-ring-full:${ringCircumference.toFixed(2)}"></circle>
+                            </svg>
+                            <div class="fin-ring-center">
+                                <span class="score-number">${normalizedScore}</span>
+                                <small>Stimulus</small>
                             </div>
-                            <div class="stimulus-score-emoji">${emoji}</div>
+                            <div class="fin-rank rank-${rankLetter.toLowerCase()}">${rankLetter}</div>
                         </div>
+                        <div class="fin-quality">${this.escapeHtml(qualityLabel)}</div>
+                        <div class="fin-quality-note">${normalizedScore}% du plein potentiel du jour</div>
+                    </div>
 
-                        <div class="stimulus-score-hero">
-                            <div class="stimulus-score-gauge ${quality}">
-                                <div class="stimulus-rank-stamp rank-${normalizedScore >= 90 ? 's' : normalizedScore >= 75 ? 'a' : normalizedScore >= 55 ? 'b' : 'c'}" aria-label="Rang">${normalizedScore >= 90 ? 'S' : normalizedScore >= 75 ? 'A' : normalizedScore >= 55 ? 'B' : 'C'}</div>
-                                <svg class="stimulus-score-gauge-svg" viewBox="0 0 120 120" aria-hidden="true">
-                                    <circle class="stimulus-score-gauge-track" cx="60" cy="60" r="52"></circle>
-                                    <circle class="stimulus-score-gauge-progress" cx="60" cy="60" r="52" style="stroke-dasharray:${scoreCircumference};stroke-dashoffset:${scoreOffset};"></circle>
-                                </svg>
-                                <div class="stimulus-score-value ${quality}">
-                                    <span class="score-number">0</span>
-                                </div>
-                            </div>
-                            <div class="stimulus-score-hero-copy">
-                                <div class="stimulus-score-label">Stimulus Score</div>
-                                <div class="stimulus-score-hero-title">${qualityLabel}</div>
-                                <div class="stimulus-score-hero-note">Un résumé clair de la qualité du stimulus, de l'effort utile et de la progression utile sur cette séance.</div>
-                                <div class="stimulus-score-progress">
-                                    <div class="stimulus-score-progress-track">
-                                        <div class="stimulus-score-progress-fill ${quality}" style="width:${normalizedScore}%;"></div>
-                                    </div>
-                                    <div class="stimulus-score-progress-label">${normalizedScore}% du plein potentiel du jour</div>
-                                </div>
-                            </div>
-                        </div>
+                    ${this.renderSessionFinishXp(recap?.charts?.xp)}
 
-                        ${this.renderSessionFinishXp(recap?.charts?.xp)}
+                    ${heroMetricsHtml ? `<div class="fin-stats">${heroMetricsHtml}</div>` : ''}
 
-                        ${heroMetricsHtml ? `
-                            <div class="fin-stats">
-                                ${heroMetricsHtml}
-                            </div>
-                        ` : ''}
+                    ${this.renderSessionFinishCharts(recap?.charts)}
 
-                        ${this.renderSessionFinishCharts(recap?.charts)}
+                    ${finAchievementsHtml}
 
-                        ${achievementsHtml}
+                    <section class="fin-section">
+                        <h4 class="fin-heading">Verdict</h4>
+                        <p class="fin-verdict ${this.escapeHtml(comparisonTone)}">${comparisonText}</p>
+                    </section>
 
-                        <div class="stimulus-score-comparison ${comparisonTone}">
-                            <div class="stimulus-score-comparison-kicker">Lecture rapide</div>
-                            <div>${comparisonText}</div>
-                        </div>
+                    ${finTrendsHtml}
 
-                        <div class="stimulus-score-panels">
-                            <div class="stimulus-score-panel">
-                                <div class="stimulus-score-panel-title">Les points forts</div>
-                                ${renderTrendRows(
-                                    focusRows,
-                                    'Les tendances positives ressortiront dès que tu cumules un peu plus d’historique.'
-                                )}
-                            </div>
-                            <div class="stimulus-score-panel">
-                                <div class="stimulus-score-panel-title">À surveiller</div>
-                                ${renderTrendRows(
-                                    cautionRows,
-                                    'Aucun signal faible détecté sur cette séance.',
-                                    'warning'
-                                )}
-                            </div>
-                        </div>
-
-                        ${microWinsHtml}
-                        <div class="stimulus-score-footer">
-                            <div class="stimulus-score-footer-note">${topMusclesText}</div>
-                            <div class="stimulus-score-action-bar">
-                                <button class="btn btn-primary btn-large stimulus-score-btn">Continuer</button>
-                            </div>
-                        </div>
+                    <div class="fin-action">
+                        <button class="fin-continue stimulus-score-btn" type="button">Continuer</button>
                     </div>
                 </div>
             `;
-            
+
             document.body.appendChild(overlay);
             
             // Animate score counter
@@ -17637,9 +18178,17 @@ class App {
     // ===== Event Bindings =====
     bindEvents() {
         // Home screen
-        document.getElementById('btn-start-session').onclick = () => {
-            if (this.currentSession) {
-                this.startSession(this.currentSession);
+        document.getElementById('btn-start-session').onclick = async () => {
+            // A double tap used to start two workouts racing for the same sheet.
+            if (!this.currentSession || this.isStartingSession) return;
+            this.isStartingSession = true;
+            gamification.burstFromElement(document.getElementById('btn-start-session'), {
+                count: 34, spread: 150, power: 11, scale: 0.85, shapes: ['star', 'circle', 'rect']
+            });
+            try {
+                await this.startSession(this.currentSession);
+            } finally {
+                this.isStartingSession = false;
             }
         };
 
@@ -20753,7 +21302,7 @@ class App {
             const delta = pastAvg > 0 ? ((last.value - pastAvg) / pastAvg) * 100 : 0;
             const isBest = last.value >= max;
             cards.push(`
-                <div class="fin-chart-card fin-chart-wide">
+                <div class="fin-section">
                     <div class="fin-chart-head">
                         <div>
                             <div class="fin-chart-kicker">Volume · ${trend.length} séances</div>
@@ -20787,7 +21336,7 @@ class App {
         if (bars.length) {
             const max = Math.max(...bars.map(bar => Math.max(bar.value, bar.previous || 0)), 1);
             cards.push(`
-                <div class="fin-chart-card fin-chart-wide">
+                <div class="fin-section">
                     <div class="fin-chart-head">
                         <div class="fin-chart-kicker">Volume par exercice</div>
                         <span class="fin-legend-ghost">▏ séance précédente</span>
@@ -20819,7 +21368,7 @@ class App {
             const max = Math.max(...timeline.map(item => item.load), 1);
             const rpeTone = rpe => rpe == null ? 'mid' : rpe >= 9 ? 'max' : rpe >= 8 ? 'high' : rpe >= 7 ? 'mid' : 'low';
             cards.push(`
-                <div class="fin-chart-card fin-chart-wide">
+                <div class="fin-section">
                     <div class="fin-chart-head">
                         <div class="fin-chart-kicker">Série par série</div>
                         <span class="fin-rpe-legend"><i class="low"></i>RPE&lt;7<i class="mid"></i>7<i class="high"></i>8<i class="max"></i>9+</span>
@@ -20849,7 +21398,7 @@ class App {
                 return segment;
             }).join('');
             cards.push(`
-                <div class="fin-chart-card fin-chart-wide">
+                <div class="fin-section">
                     <div class="fin-chart-kicker">Muscles ciblés</div>
                     <div class="fin-donut-wrap">
                         <div class="fin-donut">
@@ -22399,6 +22948,28 @@ class App {
     }
 
     async renderRecoveryMap(options = {}) {
+        // Several renders (series, unilateral, insights) ask for the map in the
+        // same tick: coalesce them so the history snapshot is built once.
+        if (this.recoveryMapRenderPromise) {
+            this.recoveryMapRenderQueued = options;
+            return this.recoveryMapRenderPromise;
+        }
+        this.recoveryMapRenderPromise = (async () => {
+            try {
+                await this.renderRecoveryMapNow(options);
+                while (this.recoveryMapRenderQueued) {
+                    const queuedOptions = this.recoveryMapRenderQueued;
+                    this.recoveryMapRenderQueued = null;
+                    await this.renderRecoveryMapNow(queuedOptions);
+                }
+            } finally {
+                this.recoveryMapRenderPromise = null;
+            }
+        })();
+        return this.recoveryMapRenderPromise;
+    }
+
+    async renderRecoveryMapNow(options = {}) {
         const card = document.getElementById('recovery-map-card');
         const body = document.getElementById('recovery-map-body');
         const list = document.getElementById('recovery-map-list');

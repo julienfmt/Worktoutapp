@@ -3,31 +3,41 @@
 // The JSON is only fetched the first time it is needed and then lives in the
 // service-worker cache; media is streamed on demand, never bundled.
 class ExerciseDatabase {
-    constructor(url = 'exercises-db.json?v=1') {
+    constructor(url = 'exercises-db.json?v=2') {
         this.url = url;
         this.data = null;
         this.loading = null;
+        this.lastError = null;
         this.resolveCache = new Map();
+    }
+
+    static async fetchPayload(url, init) {
+        const response = await fetch(url, init);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (!payload || !Array.isArray(payload.x)) throw new Error('Format de base invalide');
+        return payload;
     }
 
     load() {
         if (this.data) return Promise.resolve(this.data);
         if (!this.loading) {
-            this.loading = fetch(this.url)
-                .then(response => {
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    return response.json();
-                })
+            // Second attempt skips every cache: a stale or broken cached copy
+            // must never leave the technique sheet empty for good.
+            this.loading = ExerciseDatabase.fetchPayload(this.url)
+                .catch(() => ExerciseDatabase.fetchPayload(`${this.url}&r=${Date.now()}`, { cache: 'no-store' }))
                 .then(payload => {
                     payload.byId = new Map(payload.x.map(entry => [entry.id, entry]));
                     payload.x.forEach(entry => {
                         entry.key = ExerciseDatabase.normalize(`${entry.n} ${entry.en}`);
                     });
                     this.data = payload;
+                    this.lastError = null;
                     return payload;
                 })
                 .catch(error => {
                     this.loading = null;
+                    this.lastError = error;
                     throw error;
                 });
         }
@@ -44,8 +54,18 @@ class ExerciseDatabase {
     }
 
     static tokens(text = '') {
-        const stop = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'a', 'au', 'en', 'et', 'the', 'with', 'on', 'v', '2', '3']);
-        return ExerciseDatabase.normalize(text).split(' ').filter(token => token && !stop.has(token));
+        const stop = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'a', 'au', 'aux', 'en', 'et', 'the', 'with', 'on', 'v', '2', '3']);
+        return ExerciseDatabase.normalize(text).split(' ')
+            .filter(token => token && !stop.has(token))
+            .map(ExerciseDatabase.stem);
+    }
+
+    // Light French/English stemming so "tractions assistées" meets "traction assisté".
+    static stem(token) {
+        let t = token;
+        if (t.length > 4 && /[^s]s$/.test(t)) t = t.slice(0, -1);
+        if (t.length > 5 && /[^e]ee$/.test(t)) t = t.slice(0, -1);
+        return t;
     }
 
     getById(id) {
