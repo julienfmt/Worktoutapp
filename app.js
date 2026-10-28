@@ -8277,9 +8277,11 @@ class App {
         const muscleBadge = primaryMuscle
             ? this.renderMuscleBadge(primaryMuscleId, { label: primaryMuscle.name, className: 'slot-muscle-badge' })
             : '';
-        const formatBadge = this.isUnilateralSlot(slot)
-            ? '<span class="slot-format-tag">Unilatéral</span>'
-            : '';
+        const formatBadge = slot.role === 'warmup' && this.isCardioSlot(slot)
+            ? '<span class="slot-role-tag">🔥 Échauffement</span>'
+            : this.isUnilateralSlot(slot)
+                ? '<span class="slot-format-tag">Unilatéral</span>'
+                : '';
         const substitutionCount = this.currentWorkout?.slots?.[slot.id]?.exerciseChanges?.length || 0;
         const substitutionBadge = substitutionCount > 0
             ? `<span class="slot-format-tag slot-substitution-tag">Variante ${substitutionCount > 1 ? `×${substitutionCount}` : ''}</span>`
@@ -15958,13 +15960,25 @@ class App {
         }
 
         document.getElementById('summary-total-reps').textContent = isTimedExercise
-            ? this.formatDurationLabel(totalReps)
+            ? this.formatDurationLabel(totalReps, { compact: true })
             : totalReps;
         document.getElementById('summary-max-weight').textContent = isTimedExercise
             ? this.formatSetWeight(maxWeight, this.currentSlot)
             : (this.isPureBodyweightSlot(this.currentSlot)
             ? 'PDC'
             : `${maxWeight} kg`);
+        // Cardio console blocks carry distance and calories: show the most telling one.
+        if (this.isCardioSlot(this.currentSlot)) {
+            const cardioSets = (slotData?.sets || []).filter(set => set?.completed && set.cardio);
+            const distanceKm = cardioSets.reduce((sum, set) => sum + (Number(set.cardio.distanceKm) || 0), 0);
+            const calories = cardioSets.reduce((sum, set) => sum + (Number(set.cardio.calories) || 0), 0);
+            if (distanceKm > 0 || calories > 0) {
+                if (summaryLoadLabel) summaryLoadLabel.textContent = distanceKm > 0 ? 'Distance' : 'Calories';
+                document.getElementById('summary-max-weight').textContent = distanceKm > 0
+                    ? `${String(Math.round(distanceKm * 100) / 100).replace('.', ',')} km`
+                    : `${Math.round(calories)} kcal`;
+            }
+        }
         
         // Get comparison with last session
         const comparison = document.getElementById('summary-comparison');
@@ -16248,6 +16262,8 @@ class App {
             else if (this.isSupersetMode) xp += index === 0 ? sets.length * 20 : 0;
             else xp += sets.length * 10;
             xp += [...sides, ...sets].filter(set => set?.livePr).length * 15;
+            // Cardio console bonus: +1 XP per minute, capped at 30 per block.
+            xp += sets.filter(set => set?.cardio).reduce((sum, set) => sum + Math.min(30, Math.floor((Number(set.durationSeconds) || 0) / 60)), 0);
         });
         const xpEl = document.getElementById('summary-xp');
         if (xpEl) {
@@ -16488,6 +16504,7 @@ class App {
                         durationSeconds: setData.durationSeconds ?? null,
                         cardioMetric: setData.cardioMetric || slot.cardioMetric || null,
                         cardioMetricValue: setData.cardioMetricValue ?? null,
+                        ...(setData.cardio ? { cardio: setData.cardio } : {}),
                         rpe: setData.rpe ?? 8,
                         rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                         targetSetCount: entryTargetSetCount,
@@ -17853,6 +17870,20 @@ class App {
                 </button>
             </div>
 
+            <section class="se-block se-cardio-only">
+                <div class="se-block-title">Place dans la séance</div>
+                <div class="se-role" role="radiogroup" aria-label="Rôle du bloc cardio">
+                    <label class="se-role-option">
+                        <input type="radio" name="edit-slot-role" value="work" ${slot.role !== 'warmup' ? 'checked' : ''}>
+                        <span><strong>❤️ Bloc cardio</strong><small>Compte dans ton cardio et ta progression</small></span>
+                    </label>
+                    <label class="se-role-option">
+                        <input type="radio" name="edit-slot-role" value="warmup" ${slot.role === 'warmup' ? 'checked' : ''}>
+                        <span><strong>🔥 Échauffement</strong><small>Quelques minutes légères avant de pousser</small></span>
+                    </label>
+                </div>
+            </section>
+
             <section class="se-block se-strength-only">
                 <div class="se-block-title">Ton objectif</div>
                 <div class="se-presets" id="edit-slot-presets">
@@ -18792,6 +18823,10 @@ class App {
             : null;
 
         this.normalizeSlotProgressionConfig(slot);
+
+        const roleChoice = document.querySelector('#edit-slot-form input[name="edit-slot-role"]:checked')?.value;
+        if (slot.trackingMode === 'cardio' && roleChoice === 'warmup') slot.role = 'warmup';
+        else delete slot.role;
         
         // Get pool from individual inputs
         const poolInputs = document.querySelectorAll('.pool-input');
@@ -19387,43 +19422,6 @@ class App {
             this.pendingImportContext = 'default';
             e.target.value = '';
         };
-
-        document.getElementById('btn-onboarding-next').onclick = () => this.nextOnboardingStep();
-        document.getElementById('btn-onboarding-back').onclick = () => this.previousOnboardingStep();
-        document.getElementById('btn-onboarding-skip').onclick = () => this.skipOnboardingProgramStep();
-        document.getElementById('btn-onboarding-import').onclick = async () => {
-            const saved = await this.saveOnboardingProfile();
-            if (!saved) return;
-            this.pendingImportContext = 'onboarding';
-            document.getElementById('import-file').click();
-        };
-        document.getElementById('btn-onboarding-manual').onclick = () => this.startOnboardingManualCreation();
-        document.getElementById('btn-onboarding-chat').onclick = () => this.copyOnboardingPrompt();
-
-        const onboardingGoalInput = document.getElementById('onboarding-weekly-goal');
-        if (onboardingGoalInput) {
-            onboardingGoalInput.oninput = (e) => {
-                this.updateOnboardingWeeklyGoalUI(e.target.value);
-            };
-        }
-
-        const onboardingObjectiveInput = document.getElementById('onboarding-objective');
-        if (onboardingObjectiveInput) {
-            onboardingObjectiveInput.oninput = (e) => this.updateOnboardingGoalChips(e.target.value);
-        }
-
-        const onboardingGoalChips = document.getElementById('onboarding-goal-chips');
-        if (onboardingGoalChips) {
-            onboardingGoalChips.onclick = (e) => {
-                const chip = e.target.closest('.onboarding-chip');
-                if (!chip) return;
-                const objectiveInput = document.getElementById('onboarding-objective');
-                if (objectiveInput) {
-                    objectiveInput.value = chip.dataset.value || '';
-                    this.updateOnboardingGoalChips(objectiveInput.value);
-                }
-            };
-        }
 
         // Session screen
         document.getElementById('btn-back-home').onclick = () => this.showQuitSessionModal();
@@ -20420,6 +20418,15 @@ class App {
         
         // Set slider values
         document.getElementById('setting-weekly-goal').value = weeklyGoal;
+        const bodyWeightInput = document.getElementById('setting-body-weight');
+        if (bodyWeightInput) {
+            const bodyWeight = (await db.getSetting('bodyWeight')) || 75;
+            bodyWeightInput.value = bodyWeight;
+            document.getElementById('setting-body-weight-value').textContent = bodyWeight;
+            bodyWeightInput.oninput = () => {
+                document.getElementById('setting-body-weight-value').textContent = bodyWeightInput.value;
+            };
+        }
         document.getElementById('setting-weekly-goal-value').textContent = weeklyGoal;
         
         document.getElementById('setting-failure-count').value = failureCount;
@@ -20577,6 +20584,10 @@ class App {
     
     async saveSettings() {
         const weeklyGoal = parseInt(document.getElementById('setting-weekly-goal').value);
+        const bodyWeightValue = parseInt(document.getElementById('setting-body-weight')?.value, 10);
+        if (Number.isFinite(bodyWeightValue) && bodyWeightValue >= 35) {
+            await db.setSetting('bodyWeight', bodyWeightValue);
+        }
         const failureCount = parseInt(document.getElementById('setting-failure-count').value);
         const deloadPercent = parseInt(document.getElementById('setting-deload-percent').value);
         const weightIncrement = parseFloat(document.getElementById('setting-weight-increment').value);
@@ -22047,6 +22058,7 @@ class App {
                     durationSeconds: set.durationSeconds ?? null,
                     cardioMetric: set.cardioMetric || metadata.cardioMetric || null,
                     cardioMetricValue: set.cardioMetricValue ?? null,
+                    ...(set.cardio ? { cardio: set.cardio } : {}),
                     rpe: set.rpe ?? null,
                     rpeSource: set.rpeSource || null,
                     variant,

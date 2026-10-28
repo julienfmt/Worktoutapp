@@ -22,6 +22,18 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
+### Nouveautés v6.0
+- 🧭 **3 onglets swipables** : Accueil / Parcours / Stats, barre d'onglets en bas, glisser à gauche ou à droite pour changer de volet (`shell.js`).
+- 🏠 Accueil recentré : streak, prochaine séance, prochaine étape du parcours et **carte musculaire de la semaine** (séries par muscle vs zone de croissance visée).
+- 🗺️ **Parcours façon Duolingo** (`journey.js`) : un chemin infini de chapitres thématiques, une étape par séance terminée, coffres à ouvrir (+XP), séance de boss et récompense de fin de chapitre. Les chapitres déjà terminés avant la mise à jour sont marqués ouverts.
+- 🏆 **~130 trophées** en 6 familles (Séances, Force, Cardio, Régularité, Exploration) avec paliers bronze / argent / or / diamant, filtres, et titres de niveau jusqu'au niveau 100. Quête hebdo cardio.
+- 📊 Onglet **Stats** : total depuis le début, calendrier, activité 8 semaines, carte **cardio** (minutes / objectif santé 150 min, distance, calories), lifts, sauvegarde.
+- 🏃 **Console cardio** (`cardio.js`) : chrono live qui survit à la mise en arrière-plan, modes Continu / Fractionné (Tabata, 30/30, 4×4…) / Libre, réglages machine pendant l'effort (vitesse + pente, résistance + cadence, watts…), distance et calories en direct, bips et vibrations, objectif du coach basé sur la dernière fois, saisie sans chrono, ressenti.
+- 🔥 **Échauffement** : rôle « Échauffement » pour un bloc cardio, raccourci « Ajouter un échauffement » en tête de séance.
+- ✨ **Onboarding refait** (`onboarding.js`) : une question par écran (objectif, niveau, fréquence, durée, cardio, poids), puis un **programme complet généré** (découpage, exercices, séries/reps/repos, échauffement, cardio). Le même générateur est disponible dans « Mes séances ».
+- 🔁 **Changer d'exercice** (`swap.js`) : bouton dans l'écran exercice, raison (machine prise, pas le matériel, gêne, envie de varier), **juste aujourd'hui** ou pour de bon, suggestions classées depuis toute la bibliothèque avec la dernière perf, charge de départ estimée par le coach pour un exercice jamais fait, défi de séance mis en pause. Un changement « aujourd'hui » est annulé sur le programme à la fin de la séance, l'historique garde l'exercice réellement fait.
+- 🗄️ Base IndexedDB **v2** (index `setHistory.exerciseStableId`), migration automatique sans perte ; service worker 6.0.0.
+
 ### Nouveautés v5
 - 🎨 DA unifiée mauve/violet + vert de validation (`theme.css`) : boutons 3D gamifiés, cartes de série identiques en bilatéral / unilatéral / superset, animations (entrée de cartes, validation, « +XP » flottant, badge record).
 - ↔️ Unilatéral repensé : une ligne compacte par côté (G indigo, D violet), le côté le plus faible passe en premier, RPE enregistré sur la paire, réglage « Auto / G-D / Bilatéral » par exercice.
@@ -83,6 +95,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - `index.html` : structure des écrans (accueil, séance, exercice, paramètres, bottom sheets, modals).
 - `styles.css` : design mobile-first et composants (cards, boutons, charts, overlays, etc.).
 - `theme.css` : couche de DA chargée en dernier (tokens, boutons gamifiés, animations).
+- `shell.js`, `journey.js`, `cardio.js`, `onboarding.js`, `swap.js` : modules v6 qui étendent `App` (navigation, parcours/trophées, console cardio, onboarding, changement d'exercice) ; `v6.css` pour leurs styles.
 - `app.js` : logique principale (navigation, timers, logbook, coaching adaptatif, analyse série par série, qualité des séries, récupération, analyse gauche/droite, substitutions, charts, import/export, superset, progression, etc.).
 - `data.js` : données de départ (séances Bras/Pecs A/B et slots associés).
 - `exercise-db.js` + `exercises-db.json` : base d'exercices (chargement paresseux, recherche, résolution exo → fiche).

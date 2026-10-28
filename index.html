@@ -15,11 +15,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=5.5.22" as="script">
-    <link rel="stylesheet" href="styles.css?v=5.5.22">
-    <link rel="stylesheet" href="streak-score.css?v=5.5.22">
-    <link rel="stylesheet" href="theme.css?v=5.5.22">
-    <link rel="stylesheet" href="ai-coach.css?v=5.5.22">
+    <link rel="preload" href="app.js?v=6.0.0" as="script">
+    <link rel="stylesheet" href="styles.css?v=6.0.0">
+    <link rel="stylesheet" href="streak-score.css?v=6.0.0">
+    <link rel="stylesheet" href="theme.css?v=6.0.0">
+    <link rel="stylesheet" href="ai-coach.css?v=6.0.0">
+    <link rel="stylesheet" href="v6.css?v=6.0.0">
 </head>
 <body>
     <!-- SVG Gradient Definitions -->
@@ -36,34 +37,30 @@
     <div id="app">
         <!-- Écran Accueil -->
         <div id="screen-home" class="screen active">
-            <header class="header-home">
-                <div class="header-top">
-                    <span class="home-date-kicker" id="home-date-kicker"></span>
-                    <h1 id="home-title">Prêt pour ta séance ?</h1>
-                </div>
-                <div class="segmented-control home-tabs" role="tablist" aria-label="Sections de l'accueil">
-                    <button type="button" class="segmented-btn active" role="tab" id="home-tab-session" data-home-tab="session" aria-selected="true">
-                        <span aria-hidden="true">🏋️</span> Séance
-                    </button>
-                    <button type="button" class="segmented-btn" role="tab" id="home-tab-progress" data-home-tab="progress" aria-selected="false">
-                        <span aria-hidden="true">🏆</span> Parcours
-                        <span class="home-tab-dot" id="home-tab-progress-dot" hidden></span>
-                    </button>
-                </div>
-            </header>
+            <div class="home-pager" id="home-pager">
+                <!-- Volet 1 : Accueil -->
+                <section class="home-pane" id="pane-home" data-pane="session" aria-labelledby="home-tab-session">
+                    <div class="home-content pane-scroll">
+                        <header class="pane-header">
+                            <div class="pane-header-text">
+                                <span class="home-date-kicker" id="home-date-kicker"></span>
+                                <h1 id="home-title">Prêt pour ta séance ?</h1>
+                            </div>
+                            <button type="button" class="pane-header-btn" id="btn-settings" aria-label="Paramètres" title="Paramètres">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                            </button>
+                        </header>
 
-            <main class="home-content" data-tab="session">
-                <!-- Streak Card - Consolidated -->
-                <div class="home-hero" id="streak-card">
-                    <!-- Content generated dynamically -->
-                </div>
-                
-                <!-- Week Prediction/Warning -->
-                <div class="week-prediction" id="week-prediction" style="display: none;">
-                    <!-- Content generated dynamically -->
-                </div>
-                
-                <div class="suggested-session-card next-quest" id="suggested-session">
+                        <!-- Streak Card - Consolidated -->
+                        <div class="home-hero" id="streak-card"></div>
+
+                        <!-- Week Prediction/Warning -->
+                        <div class="week-prediction" id="week-prediction" style="display: none;"></div>
+
+                        <div class="suggested-session-card next-quest" id="suggested-session">
                     <div class="next-quest-head">
                         <div class="next-quest-heading">
                             <span class="next-quest-tag" id="session-tag">Prochaine séance</span>
@@ -95,7 +92,68 @@
                     </div>
                 </div>
 
-                <section class="history-calendar-section" id="history-calendar-section">
+                        <button type="button" class="journey-teaser" id="journey-teaser" data-home-tab="progress" hidden></button>
+
+                        <div class="pz-card physique-card is-compact" id="physique-card">
+                            <!-- Volume par muscle généré dynamiquement -->
+                        </div>
+
+                        <div class="home-actions">
+                            <button class="btn btn-outline" id="btn-edit-sessions">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                                Mes séances
+                            </button>
+                            <button class="btn btn-outline btn-ai-coach" type="button" data-ai-open>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M10 2.5l1.7 5.1 5.1 1.7-5.1 1.7L10 16.1l-1.7-5.1-5.1-1.7 5.1-1.7z"/>
+                                    <path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" opacity=".75"/>
+                                </svg>
+                                Coach IA
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Volet 2 : Parcours -->
+                <section class="home-pane" id="pane-journey" data-pane="progress" aria-labelledby="home-tab-progress">
+                    <div class="home-content pane-scroll progress-zone" id="stats-section">
+                        <header class="pane-header">
+                            <div class="pane-header-text">
+                                <span class="home-date-kicker">Ton parcours</span>
+                                <h1>Deviens une machine</h1>
+                            </div>
+                        </header>
+
+                        <div class="player-card" id="player-card"></div>
+
+                        <div class="journey" id="journey-path">
+                            <!-- Chemin façon Duolingo (journey.js) -->
+                        </div>
+
+                        <div class="pz-card quest-board" id="quest-board"></div>
+
+                        <div class="pz-card trophy-case" id="trophy-case"></div>
+
+                        <div class="ai-coach-card" id="ai-coach-card"></div>
+                    </div>
+                </section>
+
+                <!-- Volet 3 : Stats -->
+                <section class="home-pane" id="pane-stats" data-pane="stats" aria-labelledby="home-tab-stats">
+                    <div class="home-content pane-scroll">
+                        <header class="pane-header">
+                            <div class="pane-header-text">
+                                <span class="home-date-kicker">Tes stats</span>
+                                <h1>Tes chiffres</h1>
+                            </div>
+                        </header>
+
+                        <div class="pz-card stats-overview" id="stats-overview"></div>
+
+                        <section class="history-calendar-section" id="history-calendar-section">
                     <div class="history-calendar-header">
                         <div class="history-calendar-heading">
                             <div class="history-calendar-meta">
@@ -131,65 +189,20 @@
                     </div>
                 </section>
 
-                <!-- Progression: player card, weekly quests, trophies, lifts, muscles -->
-                <section class="stats-section progress-zone" id="stats-section" aria-label="Ta progression">
-                    <div class="progress-zone-head">
-                        <span class="progress-zone-kicker">Ton parcours</span>
-                        <h3>Deviens une machine</h3>
-                    </div>
+                        <div class="pz-card activity-card" id="activity-card"></div>
 
-                    <div class="player-card" id="player-card">
-                        <!-- Niveau, XP et totaux générés dynamiquement -->
-                    </div>
+                        <div class="pz-card cardio-card" id="cardio-card"></div>
 
-                    <div class="ai-coach-card" id="ai-coach-card">
-                        <!-- Coach IA (ai-coach-ui.js) -->
-                    </div>
+                        <div class="pz-card lifts-card" id="lifts-card"></div>
 
-                    <div class="pz-card quest-board" id="quest-board">
-                        <!-- Quêtes de la semaine générées dynamiquement -->
-                    </div>
-
-                    <div class="pz-card trophy-case" id="trophy-case">
-                        <!-- Trophées générés dynamiquement -->
-                    </div>
-
-                    <div class="pz-card lifts-card" id="lifts-card">
-                        <!-- Records et progressions générés dynamiquement -->
-                    </div>
-
-                    <div class="pz-card activity-card" id="activity-card">
-                        <!-- Activité hebdo générée dynamiquement -->
-                    </div>
-
-                    <div class="pz-card physique-card" id="physique-card">
-                        <!-- Volume par muscle généré dynamiquement -->
-                    </div>
-                </section>
-
-                <div class="home-actions">
-                    <button class="btn btn-outline" id="btn-edit-sessions">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                        Mes séances
-                    </button>
-                    <button class="btn btn-outline btn-ai-coach" type="button" data-ai-open>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M10 2.5l1.7 5.1 5.1 1.7-5.1 1.7L10 16.1l-1.7-5.1-5.1-1.7 5.1-1.7z"/>
-                            <path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" opacity=".75"/>
-                        </svg>
-                        Coach IA
-                    </button>
-                    <button class="btn btn-outline" id="btn-settings" title="Paramètres">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                        </svg>
-                        Paramètres
-                    </button>
-                    <div class="backup-actions">
+                        <div class="pz-card backup-card">
+                            <div class="pz-card-head">
+                                <div>
+                                    <span class="pz-kicker">Sauvegarde</span>
+                                    <h4>Tes données restent sur ton téléphone</h4>
+                                </div>
+                            </div>
+                            <div class="backup-actions">
                         <button class="btn btn-ghost" id="btn-export">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -208,14 +221,32 @@
                         </button>
                         <input type="file" id="import-file" accept=".json,.txt" hidden>
                     </div>
-                </div>
+                        </div>
 
-                <!-- Footer version -->
-                <footer class="app-footer">
-                    <span class="app-version">v5.5.22</span>
-                    <span class="storage-info" id="storage-info"></span>
-                </footer>
-            </main>
+                        <footer class="app-footer">
+                            <span class="app-version">v6.0.0</span>
+                            <span class="storage-info" id="storage-info"></span>
+                        </footer>
+                    </div>
+                </section>
+            </div>
+
+            <nav class="tabbar" role="tablist" aria-label="Navigation principale">
+                <button type="button" class="tabbar-btn active" role="tab" id="home-tab-session" data-home-tab="session" aria-selected="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+                    <span>Accueil</span>
+                </button>
+                <button type="button" class="tabbar-btn" role="tab" id="home-tab-progress" data-home-tab="progress" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+                    <span>Parcours</span>
+                    <span class="home-tab-dot" id="home-tab-progress-dot" hidden></span>
+                </button>
+                <button type="button" class="tabbar-btn" role="tab" id="home-tab-stats" data-home-tab="stats" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+                    <span>Stats</span>
+                </button>
+                <span class="tabbar-indicator" aria-hidden="true"></span>
+            </nav>
         </div>
 
         <!-- Écran Séance -->
@@ -318,6 +349,9 @@
                     <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
                 <div class="exercise-header-actions">
+                    <button type="button" class="exercise-header-tool exercise-swap-btn" id="btn-exercise-swap" aria-label="Changer d'exercice" title="Changer d'exercice" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>
+                    </button>
                     <button type="button" class="exercise-header-tool exercise-technique-btn" id="btn-open-technique" aria-label="Voir la fiche technique" title="Fiche technique" aria-controls="sheet-technique" hidden>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"></path>
@@ -935,147 +969,16 @@
         </div>
 
         <!-- Modal Onboarding -->
-        <div class="modal modal-onboarding" id="modal-onboarding">
-            <div class="modal-backdrop"></div>
-            <div class="modal-content onboarding-modal-content">
-                <div class="onboarding-shell">
-                    <div class="onboarding-progress-row">
-                        <div>
-                            <div class="onboarding-kicker">Premier lancement</div>
-                            <h2 id="onboarding-title">Installe l'app</h2>
-                        </div>
-                        <div class="onboarding-step-badge" id="onboarding-step-badge">Étape 1/3</div>
-                    </div>
-
-                    <div class="onboarding-stepper" id="onboarding-stepper"></div>
-
-                    <div class="onboarding-body">
-                        <section class="onboarding-panel active" id="onboarding-panel-install" data-step="install">
-                            <div class="onboarding-install-grid" id="onboarding-install-grid">
-                                <div class="onboarding-install-card onboarding-install-card-ios">
-                                    <div class="onboarding-install-platform">
-                                        <div class="onboarding-install-label">iPhone / iPad</div>
-                                        <span class="onboarding-install-pill">Safari</span>
-                                    </div>
-                                    <p>1. Clique sur le bouton partager <span aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" style="display:inline-block; vertical-align:-0.15em;"><path d="M12 3v10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.5 6.5 12 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 10.5v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>.</p>
-                                    <p>2. Appuie sur la flèche vers le bas qui dit "Voir plus".</p>
-                                    <p>3. Appuie sur le <strong>+</strong> "Sur l'écran d'accueil".</p>
-                                    <p>4. Appuie sur "Ajouter" et c'est bon.</p>
-                                </div>
-                                <div class="onboarding-install-card onboarding-install-card-android">
-                                    <div class="onboarding-install-platform">
-                                        <div class="onboarding-install-label">Android</div>
-                                        <span class="onboarding-install-pill">Chrome</span>
-                                    </div>
-                                    <p>1. Ouvre l'app dans Chrome ou le navigateur de ton téléphone.</p>
-                                    <p>2. Ouvre le menu du navigateur en haut à droite.</p>
-                                    <p>3. Choisis "Installer l'application" ou "Ajouter à l'écran d'accueil".</p>
-                                    <p>4. Confirme pour avoir l'app directement sur l'écran d'accueil.</p>
-                                </div>
-                            </div>
-
-                            <div class="onboarding-tip">
-                                Si l'app est déjà installée, cette étape se saute toute seule. Si tu ne vois pas l'option, ouvre l'app dans le navigateur de ton téléphone.
-                            </div>
-                        </section>
-
-                        <section class="onboarding-panel" id="onboarding-panel-profile" data-step="profile">
-                            <div class="form-group">
-                                <label for="onboarding-objective">Ton objectif principal</label>
-                                <input
-                                    type="text"
-                                    id="onboarding-objective"
-                                    class="form-input"
-                                    placeholder="Ex: prise de masse, reprise, recomposition, force..."
-                                >
-                            </div>
-
-                            <div class="onboarding-goal-chips" id="onboarding-goal-chips">
-                                <button type="button" class="onboarding-chip" data-value="Prise de masse">Prise de masse</button>
-                                <button type="button" class="onboarding-chip" data-value="Perte de gras">Perte de gras</button>
-                                <button type="button" class="onboarding-chip" data-value="Recomposition">Recomposition</button>
-                                <button type="button" class="onboarding-chip" data-value="Reprise">Reprise</button>
-                                <button type="button" class="onboarding-chip" data-value="Force">Force</button>
-                            </div>
-
-                            <div class="onboarding-weekly-card" id="onboarding-weekly-card">
-                                <div class="onboarding-weekly-head">
-                                    <div>
-                                        <div class="onboarding-install-label">Nombre de séances par semaine</div>
-                                        <p id="onboarding-weekly-goal-caption">Bon rythme</p>
-                                    </div>
-                                    <div class="onboarding-weekly-value" id="onboarding-weekly-goal-value">3</div>
-                                </div>
-                                <div class="onboarding-weekly-meter" id="onboarding-weekly-meter" aria-hidden="true">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
-                                <input type="range" id="onboarding-weekly-goal" min="1" max="7" value="3">
-                                <div class="onboarding-weekly-scale">
-                                    <span>Cool</span>
-                                    <span>Solide</span>
-                                    <span>Max</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="onboarding-panel" id="onboarding-panel-program" data-step="program">
-                            <div class="onboarding-choice-grid">
-                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-import">
-                                    <div class="onboarding-choice-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24">
-                                            <path d="M12 4v10"></path>
-                                            <path d="M8 10l4 4 4-4"></path>
-                                            <path d="M4 16.5v1a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-1"></path>
-                                        </svg>
-                                    </div>
-                                    <div class="onboarding-choice-copy">
-                                        <div class="onboarding-choice-title">Importer</div>
-                                        <p>Importe un programme déjà tout fait.</p>
-                                    </div>
-                                </button>
-
-                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-manual">
-                                    <div class="onboarding-choice-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24">
-                                            <path d="M4 20l4.5-1 9-9a2.12 2.12 0 1 0-3-3l-9 9L4 20z"></path>
-                                            <path d="M13.5 7.5l3 3"></path>
-                                        </svg>
-                                    </div>
-                                    <div class="onboarding-choice-copy">
-                                        <div class="onboarding-choice-title">Créer manuellement</div>
-                                        <p>Crée ton programme pas à pas dans l'app.</p>
-                                    </div>
-                                </button>
-
-                                <button type="button" class="onboarding-choice-card" id="btn-onboarding-chat">
-                                    <div class="onboarding-choice-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24">
-                                            <title>OpenAI icon</title>
-                                            <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"></path>
-                                        </svg>
-                                    </div>
-                                    <div class="onboarding-choice-copy">
-                                        <div class="onboarding-choice-title">Demander à ChatGPT</div>
-                                        <p>Colle le message dans ChatGPT et il te crée un programme compatible avec l'app.</p>
-                                    </div>
-                                </button>
-                            </div>
-                        </section>
-                    </div>
-
-                    <div class="onboarding-actions">
-                        <button class="btn btn-secondary" id="btn-onboarding-back" type="button">Retour</button>
-                        <button class="btn btn-outline" id="btn-onboarding-skip" type="button">Ignorer</button>
-                        <button class="btn btn-primary btn-large" id="btn-onboarding-next" type="button">Suivant</button>
-                    </div>
-                </div>
+        <!-- Onboarding (onboarding.js) -->
+        <div class="onboard" id="modal-onboarding" role="dialog" aria-modal="true" aria-label="Bienvenue">
+            <div class="onboard-top">
+                <button type="button" class="onboard-back" id="onboard-back" aria-label="Retour">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <div class="onboard-progress" aria-hidden="true"><span id="onboard-progress-fill"></span></div>
             </div>
+            <div class="onboard-stage" id="onboard-stage"></div>
+            <div class="onboard-footer" id="onboard-footer"></div>
         </div>
 
         <!-- Bottom Sheet Changement de séance -->
@@ -1179,7 +1082,7 @@
                     <!-- Exercices de la pool générés dynamiquement -->
                 </div>
                 <button class="btn btn-ghost pool-ignore" id="btn-pool-ignore" type="button">
-                    Ignorer pour l'instant
+                    Annuler
                 </button>
             </div>
         </div>
@@ -1361,6 +1264,22 @@
                         <input type="range" id="setting-weekly-goal" class="settings-slider" min="1" max="7" value="3">
                         <div class="settings-slider-value">
                             <span id="setting-weekly-goal-value">3</span> séances/semaine
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>
+                        </svg>
+                        Poids du corps
+                    </h4>
+                    <p class="settings-description">Sert uniquement à estimer les calories de tes blocs cardio.</p>
+                    <div class="settings-slider-container">
+                        <input type="range" id="setting-body-weight" class="settings-slider" min="35" max="180" value="75">
+                        <div class="settings-slider-value">
+                            <span id="setting-body-weight-value">75</span> kg
                         </div>
                     </div>
                 </div>
@@ -1690,12 +1609,17 @@
         </div>
     </div>
 
-    <script defer src="db.js?v=5.5.22"></script>
-    <script defer src="data.js?v=5.5.22"></script>
-    <script defer src="exercise-db.js?v=5.5.22"></script>
-    <script defer src="app.js?v=5.5.22"></script>
-    <script defer src="ai-coach.js?v=5.5.22"></script>
-    <script defer src="ai-coach-ui.js?v=5.5.22"></script>
+    <script defer src="db.js?v=6.0.0"></script>
+    <script defer src="data.js?v=6.0.0"></script>
+    <script defer src="exercise-db.js?v=6.0.0"></script>
+    <script defer src="app.js?v=6.0.0"></script>
+    <script defer src="shell.js?v=6.0.0"></script>
+    <script defer src="journey.js?v=6.0.0"></script>
+    <script defer src="cardio.js?v=6.0.0"></script>
+    <script defer src="onboarding.js?v=6.0.0"></script>
+    <script defer src="swap.js?v=6.0.0"></script>
+    <script defer src="ai-coach.js?v=6.0.0"></script>
+    <script defer src="ai-coach-ui.js?v=6.0.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
@@ -1705,7 +1629,7 @@
             navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
         }
         if ('serviceWorker' in navigator && !isLocalDevHost) {
-            const APP_VERSION = '5.5.22';
+            const APP_VERSION = '6.0.0';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

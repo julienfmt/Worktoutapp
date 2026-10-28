@@ -1,6 +1,7 @@
 // ===== IndexedDB Database Layer =====
 const DB_NAME = 'MuscuDB';
-const DB_VERSION = 1;
+// v2 (app 6.0): index on setHistory.exerciseStableId for exercise lookups.
+const DB_VERSION = 2;
 const IMPORT_STORE_NAMES = ['sessions', 'slots', 'workoutHistory', 'setHistory', 'settings', 'currentWorkout'];
 
 // Storage management configuration
@@ -24,7 +25,12 @@ class Database {
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
                 this.db = request.result;
+                // Let a newer version of the app upgrade the schema from another tab.
+                this.db.onversionchange = () => this.db.close();
                 resolve(this.db);
+            };
+            request.onblocked = () => {
+                console.warn('Mise à jour de la base en attente : ferme les autres onglets de l’app.');
             };
 
             request.onupgradeneeded = (event) => {
@@ -56,6 +62,10 @@ class Database {
                     setStore.createIndex('exerciseId', 'exerciseId', { unique: false });
                     setStore.createIndex('workoutId', 'workoutId', { unique: false });
                     setStore.createIndex('date', 'date', { unique: false });
+                }
+                const setHistoryStore = event.target.transaction.objectStore('setHistory');
+                if (!setHistoryStore.indexNames.contains('exerciseStableId')) {
+                    setHistoryStore.createIndex('exerciseStableId', 'exerciseStableId', { unique: false });
                 }
 
                 // Store pour les paramètres de l'app
