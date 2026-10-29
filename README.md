@@ -129,6 +129,23 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 📱 Prêt pour une app native : `ai-coach.js` passe par un adaptateur (`AiBridge`) qui utilise les plugins Capacitor (Clipboard, Share, Filesystem, AppLauncher / Browser) quand ils sont présents, sinon les API web.
 - Fichiers : `ai-coach.js` (données, prompts, lecture de la réponse — sans DOM, testé), `ai-coach-ui.js` (interface), `ai-coach.css`. Tests : `tests/browser-runner.html?test=ai-coach`.
 
+## Notifications du rhino
+Le rhino est un pote de salle un peu bête, trop impliqué dans tes progrès. Les textes (fr/en, ~50 lignes, mêmes ids dans les deux langues) et les règles de planification sont dans `rhino-notifications.js` (pur, testé par `tests/notifications.test.js`). `native.js` collecte les vraies données (historique, objectif hebdo, prochaine séance, potes), tient le journal et programme via Capacitor Local Notifications. Réglages → Rappels : interrupteur, heure et puces (🔥 Séances, 👀 Retour, 🎁 Récompenses, 🦏 Potes si tu as des amis). L'aperçu « Prochain : jeudi 18:30 » vient du vrai plan ; `window.previewRhinoNotifications()` le logue en console.
+
+| Déclencheur | Puce | Quand (toujours vrai) |
+|---|---|---|
+| `session` | Séances | Jour d'entraînement habituel (jours réels des 8 dernières semaines, sinon motif par défaut), à l'heure choisie, tant qu'il reste des séances à faire cette semaine. « Jambes » seulement si la prochaine séance est jambes. |
+| `weekOne` | Séances | Il reste exactement une séance (et au moins une déjà faite) : « 2 séances sur 3 », chiffres réels. |
+| `weekLast` | Séances | Dimanche, objectif non atteint, série de semaines à perdre. |
+| `friendPassed` / `friendFinished` / `friendFirst` | Potes | Changement réel détecté entre deux synchronisations du classement ; envoyé le jour même seulement s'il reste moins de 6 h (sinon abandonné, jamais de « vient de » périmé). Max 2 messages potes par semaine. |
+| `friendGap` | Potes | Un pote est vraiment devant (écart réel en XP, ≤ 400), un jour sans séance prévue, une fois par semaine. |
+| `comeback` | Retour | Après 2 séances prévues manquées (à partir du jour 3 sans séance, au plus tard jour 5), puis 2 jours plus tard. Les pushs « séance » sont coupés pendant l'absence. |
+| `farewell` | Retour | Jour 7 sans séance (jusqu'au jour 10) : « Je vais arrêter de te relancer. » Ensuite silence total jusqu'à la prochaine séance. |
+| `reward` | Récompenses | Un coffre ou une quête attend vraiment. |
+| `record`, `weekDone`, `rest` | (dans l'app) | Jamais en push : bulle du rhino à la fermeture du récap (objectif de la semaine validé, sinon record), et ligne sous la carte série de l'accueil les jours de repos (jour hors motif, ou objectif déjà atteint). |
+
+**Plafonds** : 1 push par jour maximum, rien entre 22:00 et 8:00 (l'heure choisie est ramenée dans 8:00-21:30), 5 par fenêtre de 7 jours, jamais de rappel pour soulever tous les jours (pas plus de pushs « séance » que de séances restantes), jamais de faux record, faux ami ou fausse urgence. **Pas de répétition** : pour chaque déclencheur on prend la phrase utilisée le moins récemment (jamais utilisée d'abord, une phrase n'apparaît pas deux fois dans un même plan). **Back-off** : on compte les rappels ignorés d'affilée (app non ouverte et pas de séance dans les 12 h) ; à 3 ignorés, 2 jours minimum entre deux pushs, à 5, 4 jours ; une séance remet le compteur à zéro. Le message d'adieu n'est jamais retenu. **Mesure locale** (réglage `rhinoNotifications`, rien d'envoyé) : chaque rappel dû est archivé avec `opened` et `followed` (séance dans les 12 h), `RhinoNotifications.getStats()` donne envoyés / ouverts / suivis d'une séance. Le plan est recalculé à l'ouverture de l'app et après chaque séance (10 jours d'avance). Sur le web seul l'aperçu existe : rien ne sonne app fermée, rien n'est compté.
+
 ## Stack technique
 - Frontend pur : HTML, CSS, JavaScript vanilla.
 - Stockage : IndexedDB (abstraction dans `db.js`).

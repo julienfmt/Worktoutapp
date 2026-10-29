@@ -31,6 +31,7 @@ const APP_SHELL_ASSETS = [
     './swap.js?v=6.4.0',
     './engage.js?v=6.4.0',
     './premium.js?v=6.4.0',
+    './rhino-notifications.js?v=6.4.0',
     './native.js?v=6.4.0',
     './tools.js?v=6.4.0',
     './league.js?v=6.4.0',

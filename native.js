@@ -2,14 +2,13 @@
 // Everything the store app will need, behind small adapters:
 // - HealthBridge: Apple Health (HealthKit) / Health Connect through a
 //   Capacitor health plugin. Writes each finished workout, reads body weight.
-// - Reminders: Duolingo-style local notifications (training day, streak at
-//   risk, comeback, chest waiting, monthly challenge). Planned here from the
-//   player's data; scheduled with Capacitor LocalNotifications natively. In
-//   the PWA nothing can fire while the app is closed, so the plan is kept
-//   and shown as a preview in the settings.
+// - Reminders: the rhino's notifications (planned session, weekly goal,
+//   friends, comeback, chest waiting). The copy and the planning rules live in
+//   rhino-notifications.js (loaded before this file); here we gather the real
+//   data, keep the sent/followed log and schedule with Capacitor
+//   LocalNotifications natively. In the PWA nothing can fire while the app is
+//   closed, so the plan is kept and shown as a preview in the settings.
 (() => {
-    const MASCOT = '💪';
-
     const HealthBridge = {
         get plugin() {
             const plugins = window.Capacitor?.Plugins || {};
@@ -83,7 +82,7 @@
                     title: item.title,
                     body: item.body,
                     schedule: { at: new Date(item.at), allowWhileIdle: true },
-                    extra: { kind: item.kind }
+                    extra: { kind: item.kind, trigger: item.trigger, msgId: item.msgId }
                 }))
             });
             return true;
@@ -93,7 +92,32 @@
     window.HealthBridge = HealthBridge;
     window.NotificationBridge = NotificationBridge;
 
-    const pick = (list, seed) => list[Math.abs(seed) % list.length];
+    const RN = () => window.RhinoNotifications;
+
+    // Tiny local strings (hint under Rappels), fr / en.
+    const HINT = {
+        fr: { next: 'Prochain', today: 'aujourd’hui', tomorrow: 'demain', none: 'Rien de prévu, le rhino se repose', mobile: 'dans l’app mobile' },
+        en: { next: 'Next', today: 'today', tomorrow: 'tomorrow', none: 'Nothing planned, the rhino is resting', mobile: 'in the mobile app' }
+    };
+
+    // Small rhino moments live in their own tiny stylesheet (no heavy boxes).
+    const injectRhinoStyles = () => {
+        if (document.getElementById('rhino-notif-style')) return;
+        const style = document.createElement('style');
+        style.id = 'rhino-notif-style';
+        style.textContent = `
+            .rhino-line { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; padding: 8px 14px 8px 8px; border-radius: 18px; background: color-mix(in srgb, var(--violet, #8b5cf6) 8%, transparent); }
+            .rhino-line img, .rhino-bubble img { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
+            .rhino-line-copy, .rhino-bubble-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+            .rhino-line-title, .rhino-bubble-title { font-size: 13.5px; font-weight: 700; color: var(--text-primary, #0f172a); line-height: 1.25; }
+            .rhino-line-body, .rhino-bubble-body { font-size: 12.5px; color: var(--text-secondary, #475569); line-height: 1.35; }
+            .rhino-bubble { position: fixed; left: 50%; bottom: calc(96px + var(--safe-bottom, 0px)); width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 22px; background: var(--card-bg, #fff); border: 1.5px solid color-mix(in srgb, var(--violet, #8b5cf6) 28%, transparent); box-shadow: 0 10px 28px color-mix(in srgb, var(--violet, #8b5cf6) 18%, transparent); z-index: 10001; opacity: 0; transform: translateX(-50%) translateY(14px); transition: opacity .3s ease, transform .3s ease; cursor: pointer; }
+            .rhino-bubble img { width: 46px; height: 46px; }
+            .rhino-bubble.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+            @media (prefers-reduced-motion: reduce) { .rhino-bubble { transition: opacity .15s linear; transform: translateX(-50%); } }
+        `;
+        document.head.appendChild(style);
+    };
 
     Object.assign(App.prototype, {
         async getReminderPreferences() {
@@ -103,106 +127,201 @@
                 time: /^\d{2}:\d{2}$/.test(stored.time || '') ? stored.time : '18:30',
                 streak: stored.streak !== false,
                 comeback: stored.comeback !== false,
-                rewards: stored.rewards !== false
+                rewards: stored.rewards !== false,
+                friends: stored.friends !== false
             };
         },
 
-        // Builds the next 7 days of reminders from the real state: training
-        // days follow the weekly goal, streak rescue on the last day, etc.
+        getRhinoLocale() {
+            return RN().getLocale();
+        },
+
+        // Serialises every read-modify-write of the stored notification state.
+        async withRhinoState(mutate) {
+            const run = async () => {
+                const state = RN().normalizeState(await db.getSetting('rhinoNotifications'));
+                const result = await mutate(state);
+                await db.setSetting('rhinoNotifications', state);
+                return result;
+            };
+            this.rhinoStateQueue = (this.rhinoStateQueue || Promise.resolve()).then(run, run);
+            return this.rhinoStateQueue;
+        },
+
+        hasFriendData() {
+            return Array.isArray(this.social?.friends) && this.social.friends.length > 0;
+        },
+
+        // Real data the planner needs: history, goal, next session, friends.
+        async collectRhinoInput() {
+            const [history, streak, sessions, storedIndex] = await Promise.all([
+                db.getAll('workoutHistory'),
+                streakEngine.getStreakData(),
+                db.getSessions().catch(() => []),
+                db.getSetting('nextSessionIndex')
+            ]);
+            const workouts = history.map(item => new Date(item.date)).filter(date => !Number.isNaN(date.getTime()));
+            let nextSession = null;
+            if (sessions.length) {
+                const session = sessions[this.getSuggestedSessionIndex(sessions, history, storedIndex ?? 0)] || sessions[0];
+                const slots = await db.getSlotsBySession(session.id).catch(() => []);
+                nextSession = { name: session.name, muscles: [...new Set(slots.map(slot => slot.muscleGroup).filter(Boolean))] };
+            }
+            let friends = null;
+            if (this.hasFriendData()) {
+                const score = this.social.myScore || (await this.getMyWeekScore?.().catch(() => null)) || {};
+                friends = {
+                    weekKey: score.weekKey || this.getWeekKey?.() || '',
+                    me: { xp: Number(score.weekXp) || 0, sessions: Number(score.weekSessions) || 0 },
+                    list: this.social.friends.map(friend => ({ id: friend.id || friend.handle, name: friend.name, weekXp: friend.weekXp, weekSessions: friend.weekSessions }))
+                };
+            }
+            return {
+                workouts,
+                goal: Math.max(1, Number(streak.weeklyGoal) || 3),
+                streak: Number(streak.displayStreakCount ?? streak.streakCount) || 0,
+                nextSession,
+                friends,
+                rewardsPending: (this.journeyPendingCount || 0) > 0 || Boolean(this.questsReady)
+            };
+        },
+
+        // Next reminders (not persisted): used by the settings hint and the
+        // dev preview. syncReminders() is the one that schedules and records.
         async buildReminderPlan(now = new Date()) {
             const prefs = await this.getReminderPreferences();
             if (!prefs.enabled) return [];
-            const [history, streak] = await Promise.all([db.getAll('workoutHistory'), streakEngine.getStreakData()]);
-            const weeklyGoal = Math.max(1, Number(streak.weeklyGoal) || 3);
-            const [hour, minute] = prefs.time.split(':').map(Number);
-            const lastWorkout = history.map(item => new Date(item.date)).filter(date => !Number.isNaN(date)).sort((a, b) => b - a)[0] || null;
-            const doneThisWeek = Number(streak.currentWeekSessions) || 0;
-            const streakCount = Number(streak.displayStreakCount ?? streak.streakCount) || 0;
-            const trainingDays = {
-                1: [3], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 5, 6], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6]
-            }[Math.min(7, weeklyGoal)];
-            const plan = [];
-            const at = (date, h = hour, m = minute) => {
-                const copy = new Date(date);
-                copy.setHours(h, m, 0, 0);
-                return copy;
-            };
-
-            for (let offset = 0; offset < 7; offset += 1) {
-                const day = new Date(now);
-                day.setDate(now.getDate() + offset);
-                const when = at(day);
-                if (when <= now) continue;
-                const weekday = day.getDay();
-                const trainedThatDay = lastWorkout && this.getLocalDateKey(lastWorkout) === this.getLocalDateKey(day);
-                if (trainedThatDay) continue;
-
-                // Sunday evening, week not validated: the streak is at risk.
-                // Only this week's Sunday: next weeks start from zero sessions.
-                if (prefs.streak && weekday === 0 && offset === (7 - now.getDay()) % 7 && doneThisWeek < weeklyGoal && streakCount > 0) {
-                    plan.push({
-                        kind: 'streak',
-                        at: at(day, 17, 0).toISOString(),
-                        title: `🔥 Ta série de ${streakCount} semaine${streakCount > 1 ? 's' : ''} est en danger`,
-                        body: pick([
-                            `Encore ${weeklyGoal - doneThisWeek} séance${weeklyGoal - doneThisWeek > 1 ? 's' : ''} pour valider la semaine. Tu y vas ?`,
-                            'Dernier jour pour valider ta semaine. Même une séance courte compte !',
-                            'Un bouclier ne te sauvera pas à chaque fois. Allez, on y va.'
-                        ], streakCount + offset)
-                    });
-                    continue;
-                }
-
-                if (trainingDays.includes(weekday)) {
-                    plan.push({
-                        kind: 'training',
-                        at: when.toISOString(),
-                        title: pick([`${MASCOT} C'est jour de séance !`, '🏋️ La salle t’attend', '⚡ Prêt pour ta séance ?', '🗺️ Ton parcours continue'], weekday + offset),
-                        body: pick([
-                            'Le coach a préparé tes charges. 45 minutes et c’est validé.',
-                            'Une séance de plus et tu avances d’une étape sur le chemin.',
-                            'Tes muscles se reposent depuis assez longtemps. Go !',
-                            'Petite séance ou grosse séance, l’important c’est d’y aller.'
-                        ], weekday * 3 + offset)
-                    });
-                }
-            }
-
-            // Comeback after 3 days without training (once).
-            if (prefs.comeback && lastWorkout) {
-                const comeback = new Date(lastWorkout);
-                comeback.setDate(comeback.getDate() + 3);
-                const when = at(comeback, 12, 30);
-                if (when > now && !plan.some(item => this.getLocalDateKey(new Date(item.at)) === this.getLocalDateKey(when))) {
-                    plan.push({
-                        kind: 'comeback',
-                        at: when.toISOString(),
-                        title: '👀 On ne t’a pas vu depuis 3 jours',
-                        body: 'Ton coach garde tes charges au chaud. Une séance et tu repars !'
-                    });
-                }
-            }
-
-            // Rewards waiting (chests, quests, monthly challenge).
-            if (prefs.rewards && ((this.journeyPendingCount || 0) > 0 || this.questsReady)) {
-                const tomorrow = new Date(now);
-                tomorrow.setDate(now.getDate() + 1);
-                plan.push({
-                    kind: 'reward',
-                    at: at(tomorrow, 9, 0).toISOString(),
-                    title: '🎁 Une récompense t’attend',
-                    body: 'Ouvre l’app pour récupérer ton XP avant la fin de la semaine.'
-                });
-            }
-
-            return plan.sort((a, b) => new Date(a.at) - new Date(b.at)).slice(0, 12);
+            const input = await this.collectRhinoInput();
+            const state = RN().resolveLog(await db.getSetting('rhinoNotifications'), input.workouts, now);
+            return RN().buildPlan({ ...input, now, prefs, locale: this.getRhinoLocale(), state });
         },
 
         async syncReminders() {
-            const plan = await this.buildReminderPlan();
+            const now = new Date();
+            const prefs = await this.getReminderPreferences();
+            let plan = [];
+            if (prefs.enabled) {
+                if (!this.hasFriendData() && this.social?.backend && this.social.me) await this.refreshSocialInbox?.().catch(() => {});
+                const input = await this.collectRhinoInput();
+                plan = await this.withRhinoState(state => {
+                    Object.assign(state, RN().resolveLog(state, input.workouts, now));
+                    if (!state.startedAt) state.startedAt = now.toISOString();
+                    if (input.friends) {
+                        const snap = RN().buildSocialSnapshot(input.friends.weekKey, input.friends.me, input.friends.list);
+                        const fresh = RN().detectFriendEvents(state.socialSnap, snap, now);
+                        state.socialSnap = snap;
+                        state.friendEvents = [...fresh, ...state.friendEvents.filter(event => now - Date.parse(event.at) < 6 * 3600 * 1000)].slice(0, 5);
+                    }
+                    const next = RN().buildPlan({ ...input, now, prefs, locale: this.getRhinoLocale(), state });
+                    // Only the phone really fires them: only there do we track them.
+                    state.pending = NotificationBridge.isNative() ? next.map(item => ({ id: item.msgId, trigger: item.trigger, at: item.at })) : [];
+                    return next;
+                });
+            }
             this.reminderPlan = plan;
             if (NotificationBridge.isNative()) await NotificationBridge.schedule(plan).catch(() => {});
             return plan;
+        },
+
+        // "Prochain : jeudi 18:30" (the next real reminder).
+        formatNextReminder(plan, now = new Date()) {
+            const locale = this.getRhinoLocale();
+            const text = HINT[locale] || HINT.fr;
+            if (!plan.length) return text.none;
+            const at = new Date(plan[0].at);
+            const diff = Math.round((new Date(at).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86400000);
+            const tag = locale === 'en' ? 'en-US' : 'fr-FR';
+            const dayLabel = diff === 0 ? text.today : diff === 1 ? text.tomorrow : at.toLocaleDateString(tag, { weekday: 'long' });
+            const time = at.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit', hour12: locale === 'en' });
+            return `${text.next} : ${dayLabel} ${time}`;
+        },
+
+        // ---------- In-app rhino moments (never a push) ----------
+        showRhinoBubble({ title, body, image = 'pouces' }) {
+            injectRhinoStyles();
+            document.querySelectorAll('.rhino-bubble').forEach(item => item.remove());
+            const bubble = document.createElement('div');
+            bubble.className = 'rhino-bubble';
+            bubble.setAttribute('role', 'status');
+            const img = document.createElement('img');
+            img.src = `icons/buddies/${image}.webp`;
+            img.alt = '';
+            const copy = document.createElement('div');
+            copy.className = 'rhino-bubble-copy';
+            const titleEl = document.createElement('span');
+            titleEl.className = 'rhino-bubble-title';
+            titleEl.textContent = title;
+            const bodyEl = document.createElement('span');
+            bodyEl.className = 'rhino-bubble-body';
+            bodyEl.textContent = body;
+            copy.append(titleEl, bodyEl);
+            bubble.append(img, copy);
+            document.body.appendChild(bubble);
+            const close = () => {
+                bubble.classList.remove('visible');
+                setTimeout(() => bubble.remove(), 350);
+            };
+            bubble.addEventListener('click', close);
+            setTimeout(() => bubble.classList.add('visible'), 50);
+            setTimeout(close, 6500);
+        },
+
+        // After the recap: the weekly goal wins over a record (one bubble only).
+        async showRhinoSessionMoment(recap) {
+            const streak = await streakEngine.getStreakData();
+            const locale = this.getRhinoLocale();
+            const goal = Math.max(1, Number(streak.weeklyGoal) || 3);
+            const goalJustMet = streak.currentWeekSessions === goal;
+            const recordCount = Number(recap?.recordCount) || 0;
+            if (!goalJustMet && recordCount < 1) return;
+            const now = new Date();
+            const moment = await this.withRhinoState(state => {
+                const lastRecord = state.lastRecordAt ? now - Date.parse(state.lastRecordAt) : Infinity;
+                const result = goalJustMet
+                    ? RN().inAppMoment('weekDone', { goal, streak2: (Number(streak.displayStreakCount) || 0) >= 2 }, state, now, locale)
+                    : RN().inAppMoment('record', { count: recordCount, many: recordCount >= 3, again: lastRecord < 10 * 86400000 }, state, now, locale);
+                if (result) Object.assign(state, result.state);
+                return result;
+            });
+            if (!moment) return;
+            // The goal moment waits for the "Objectif atteint" achievement to clear.
+            setTimeout(() => this.showRhinoBubble({ title: moment.title, body: moment.body, image: goalJustMet ? 'flex' : 'pouces' }), goalJustMet ? 3800 : 700);
+        },
+
+        // Rest-day line under the streak card on home (non-training days).
+        async renderRhinoRestLine() {
+            injectRhinoStyles();
+            const anchor = document.getElementById('week-prediction');
+            if (!anchor) return;
+            document.getElementById('rhino-line')?.remove();
+            const now = new Date();
+            const [history, streak] = await Promise.all([db.getAll('workoutHistory'), streakEngine.getStreakData()]);
+            const workouts = history.map(item => new Date(item.date)).filter(date => !Number.isNaN(date.getTime()));
+            if (!RN().isRestDay({ now, workouts, goal: streak.weeklyGoal })) return;
+            const locale = this.getRhinoLocale();
+            const moment = await this.withRhinoState(state => {
+                const result = RN().inAppMoment('rest', {}, state, now, locale);
+                if (result) Object.assign(state, result.state);
+                return result;
+            });
+            if (!moment || document.getElementById('rhino-line')) return;
+            const line = document.createElement('div');
+            line.id = 'rhino-line';
+            line.className = 'rhino-line';
+            const img = document.createElement('img');
+            img.src = 'icons/buddies/serviette.webp';
+            img.alt = '';
+            const copy = document.createElement('div');
+            copy.className = 'rhino-line-copy';
+            const title = document.createElement('span');
+            title.className = 'rhino-line-title';
+            title.textContent = moment.title;
+            const body = document.createElement('span');
+            body.className = 'rhino-line-body';
+            body.textContent = moment.body;
+            copy.append(title, body);
+            line.append(img, copy);
+            anchor.insertAdjacentElement('afterend', line);
         },
 
         // After each saved workout: health sync + refreshed reminders.
@@ -241,12 +360,9 @@
             const offer = this.getPremiumOffer?.();
             const theme = this.themeChoice || 'auto';
             const locale = await this.getLocaleChoice();
-            const formatWhen = iso => new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
             const reminderHint = !prefs.enabled
                 ? ''
-                : (!NotificationBridge.isNative()
-                    ? 'Ils sonneront dans l’app iOS / Android'
-                    : (plan.length ? `Prochain : ${formatWhen(plan[0].at)}` : 'Rien de prévu, tu es à jour'));
+                : `${this.formatNextReminder(plan)}${NotificationBridge.isNative() ? '' : ` · ${(HINT[this.getRhinoLocale()] || HINT.fr).mobile}`}`;
             const toggle = (id, checked, disabled = false) => `
                 <span class="toggle-switch">
                     <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
@@ -283,7 +399,7 @@
                         <input type="time" id="setting-reminders-time" class="set-time" value="${prefs.time}">
                     </label>
                     <div class="set-row set-row-sub set-chips">
-                        ${[['streak', '🔥 Série en danger'], ['comeback', '👀 Retour'], ['rewards', '🎁 Récompenses']].map(([key, label]) => `
+                        ${[['streak', '🔥 Séances'], ['comeback', '👀 Retour'], ['rewards', '🎁 Récompenses'], ...(this.hasFriendData() ? [['friends', '🦏 Potes']] : [])].map(([key, label]) => `
                             <label class="set-chip"><input type="checkbox" data-reminder-kind="${key}" ${prefs[key] ? 'checked' : ''}><span>${label}</span></label>
                         `).join('')}
                     </div>
@@ -376,7 +492,26 @@
     App.prototype.showStimulusScoreAnimation = function showRecapThenSync(...args) {
         // The workout is saved at this point; run native follow-ups in the background.
         void this.onWorkoutSavedNative?.();
-        return baseShowStimulusScoreAnimation.apply(this, args);
+        const result = baseShowStimulusScoreAnimation.apply(this, args);
+        // Once the recap is closed: the rhino reacts to a record / the weekly goal.
+        Promise.resolve(result).then(() => this.showRhinoSessionMoment(args[1])).catch(() => {});
+        return result;
+    };
+
+    const baseRenderHome = App.prototype.renderHome;
+    App.prototype.renderHome = async function renderHomeWithRhino(...args) {
+        const result = await baseRenderHome.apply(this, args);
+        await this.renderRhinoRestLine().catch(() => {});
+        return result;
+    };
+
+    // Dev helper: logs the next reminders, the stored log and its stats.
+    window.previewRhinoNotifications = async function previewRhinoNotifications() {
+        const plan = await app.buildReminderPlan();
+        const state = RN().normalizeState(await db.getSetting('rhinoNotifications'));
+        console.table(plan.map(item => ({ quand: new Date(item.at).toLocaleString(), trigger: item.trigger, titre: item.title, texte: item.body })));
+        console.info('Stats rappels', RN().getStats(state));
+        return plan;
     };
 
     const baseInit = App.prototype.init;
