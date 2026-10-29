@@ -640,7 +640,7 @@
             const showDetails = this.cardioAdvancedOpen === true || live.showDetails === true;
             return `
                 <div class="cc-finish">
-                    <strong class="cc-finish-title">${live.manual ? 'Saisis ton bloc' : 'Bloc terminé !'}</strong>
+                    <strong class="cc-finish-title">${live.manual ? 'Saisis ton bloc' : 'Bloc terminé'}</strong>
                     <label class="cc-field">
                         <span>Durée</span>
                         <span class="cc-field-input"><input type="number" inputmode="decimal" step="0.5" min="0" value="${minutes || ''}" placeholder="20" data-cc-finish="minutes"><small>min</small></span>
@@ -802,7 +802,7 @@
                 case 'start':
                 case 'resume': {
                     if (!live) {
-                        this.showCoachToast('Une seconde, le coach prépare ton bloc…', 'neutral', '⏳');
+                        this.showCoachToast('Préparation du bloc…', 'neutral', '⏳');
                         return;
                     }
                     this.unlockCardioAudio();
@@ -830,7 +830,7 @@
                     if (!live) return;
                     this.freezeCardioLive(live);
                     if (this.getCardioElapsedSeconds(live) < 5) {
-                        this.showCoachToast('Moins de 5 secondes : rien à enregistrer. Démarre quand tu es prêt.', 'neutral', '⏱️');
+                        this.showCoachToast('Moins de 5 secondes : rien n’est enregistré.', 'neutral', '⏱️');
                         live.status = 'idle';
                         live.accumulatedMs = 0;
                         break;
@@ -1091,7 +1091,7 @@
                 this.hapticTap?.([30, 60, 30, 60, 40]);
                 this.playCardioBeep('done');
                 gamification.triggerConfetti?.('medium');
-                this.showCoachToast('Objectif atteint ! Continue ou termine quand tu veux.', 'hot', '🎯');
+                this.showCoachToast('Objectif atteint.', 'hot', '🎯');
                 void db.saveCurrentWorkout(this.currentWorkout);
             }
             this.updateCardioConsoleLive();

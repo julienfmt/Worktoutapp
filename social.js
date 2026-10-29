@@ -192,7 +192,7 @@
                 duo.acceptedAt = now;
                 await this.save(state);
             }
-            const friend = state.friends.find(item => item.id === duo.friendId) || { id: duo.friendId, name: 'Ton pote' };
+            const friend = state.friends.find(item => item.id === duo.friendId) || { id: duo.friendId, name: t('social.friendFallback') };
             let progress = null;
             if (duo.acceptedAt) {
                 const elapsed = now - duo.acceptedAt;
@@ -329,7 +329,7 @@
             sheet = document.createElement('div');
             sheet.className = 'bottom-sheet';
             sheet.id = 'sheet-friends';
-            sheet.innerHTML = '<div class="sheet-backdrop"></div><div class="sheet-content sheet-content-large sf-sheet" role="dialog" aria-label="Amis"></div>';
+            sheet.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet-content sheet-content-large sf-sheet" role="dialog" aria-label="${escape(t('social.title'))}"></div>`;
             document.body.appendChild(sheet);
             sheet.addEventListener('click', event => void this.onFriendsClick(event));
             sheet.addEventListener('submit', event => {
@@ -372,12 +372,12 @@
             return `
                 <div class="sf-intro">
                     ${this.renderMascot()}
-                    <h3>Entraîne-toi avec tes potes</h3>
-                    <p>Comment tes amis t’appellent ?</p>
+                    <h3>${t('social.title')}</h3>
+                    <p>${t('social.name.body')}</p>
                 </div>
                 <form class="sf-form" data-sf-form="name">
-                    <input class="sf-input" name="name" maxlength="24" autocomplete="given-name" placeholder="Ton prénom" required>
-                    <button type="submit" class="btn btn-primary btn-large">Continuer</button>
+                    <input class="sf-input" name="name" maxlength="24" autocomplete="given-name" placeholder="${escape(t('social.name.placeholder'))}" aria-label="${escape(t('social.name.placeholder'))}" required>
+                    <button type="submit" class="btn btn-primary btn-large">${t('common.continue')}</button>
                 </form>
             `;
         },
@@ -393,12 +393,12 @@
                 <div class="sf-invite">
                     ${avatar(invite.from)}
                     <div class="sf-invite-text">
-                        <strong>${escape(invite.from.name)} t’invite</strong>
-                        <small>${escape(invite.session.name)} · ${invite.session.exercises.length} exercices</small>
+                        <strong>${escape(t('social.invite.from', { name: invite.from.name }))}</strong>
+                        <small>${escape(invite.session.name)} · ${t('common.exercises', { count: invite.session.exercises.length })}</small>
                     </div>
                     <div class="sf-invite-actions">
-                        <button type="button" class="sf-btn-ghost" data-sf="decline" data-id="${escape(invite.id)}">Plus tard</button>
-                        <button type="button" class="sf-btn-join" data-sf="join" data-id="${escape(invite.id)}">Rejoindre</button>
+                        <button type="button" class="sf-btn-ghost" data-sf="decline" data-id="${escape(invite.id)}">${t('social.invite.later')}</button>
+                        <button type="button" class="sf-btn-join" data-sf="join" data-id="${escape(invite.id)}">${t('social.invite.join')}</button>
                     </div>
                 </div>
             `).join('');
@@ -406,47 +406,47 @@
             if (!friends.length) {
                 return `
                     <div class="sf-head">
-                        <h3>Tes potes</h3>
-                        <button type="button" class="sf-icon-btn" data-sf="close" aria-label="Fermer">${svg(ICONS.close, 18)}</button>
+                        <h3>${t('social.title')}</h3>
+                        <button type="button" class="sf-icon-btn" data-sf="close" aria-label="${escape(t('common.close'))}">${svg(ICONS.close, 18)}</button>
                     </div>
                     ${invitesHtml}
                     <div class="sf-intro">
                         ${this.renderMascot()}
-                        <h3>À plusieurs, on lâche rien</h3>
-                        <p>Invite un pote : vous pourrez faire la même séance, suivre vos progrès et vous comparer chaque semaine.</p>
+                        <h3>${t('social.empty.title')}</h3>
+                        <p>${t('social.empty.body')}</p>
                     </div>
                     <div class="sf-actions-col">
-                        <button type="button" class="btn btn-primary btn-large sf-main" data-sf="share">${svg(ICONS.share, 18)} Inviter un pote</button>
-                        <button type="button" class="sf-link" data-sf="code">J’ai un code d’ami</button>
+                        <button type="button" class="btn btn-primary btn-large sf-main" data-sf="share">${svg(ICONS.share, 18)} ${t('social.inviteFriend')}</button>
+                        <button type="button" class="sf-link" data-sf="code">${t('social.haveCode')}</button>
                     </div>
                 `;
             }
 
             return `
                 <div class="sf-head">
-                    <h3>Tes potes</h3>
-                    <button type="button" class="sf-icon-btn" data-sf="close" aria-label="Fermer">${svg(ICONS.close, 18)}</button>
+                    <h3>${t('social.title')}</h3>
+                    <button type="button" class="sf-icon-btn" data-sf="close" aria-label="${escape(t('common.close'))}">${svg(ICONS.close, 18)}</button>
                 </div>
                 ${invitesHtml}
                 <div class="sf-actions-row">
-                    <button type="button" class="btn btn-primary sf-main" data-sf="duo">${svg(ICONS.play, 16)} Séance à deux</button>
-                    <button type="button" class="btn btn-secondary sf-main" data-sf="share">${svg(ICONS.share, 18)} Inviter</button>
+                    <button type="button" class="btn btn-primary sf-main" data-sf="duo">${svg(ICONS.play, 16)} ${t('social.duo.title')}</button>
+                    <button type="button" class="btn btn-secondary sf-main" data-sf="share">${svg(ICONS.share, 18)} ${t('social.invite.button')}</button>
                 </div>
                 <div class="sf-board">
-                    <span class="sf-kicker">Cette semaine</span>
+                    <span class="sf-kicker">${t('social.board.thisWeek')}</span>
                     ${board.map((person, index) => `
                         <div class="sf-row ${person.isMe ? 'is-me' : ''}">
                             <span class="sf-rank">${index + 1}</span>
                             ${avatar(person)}
                             <div class="sf-row-text">
-                                <strong>${person.isMe ? 'Toi' : escape(person.name)}</strong>
-                                <small>${person.inSession ? '<span class="sf-live">En séance</span>' : `${person.weekSessions} séance${person.weekSessions > 1 ? 's' : ''}`}</small>
+                                <strong>${person.isMe ? t('social.me') : escape(person.name)}</strong>
+                                <small>${person.inSession ? `<span class="sf-live">${t('social.board.inSession')}</span>` : t('common.sessions', { count: person.weekSessions })}</small>
                             </div>
                             <span class="sf-xp">${person.weekXp} <small>XP</small></span>
                         </div>
                     `).join('')}
                 </div>
-                <button type="button" class="sf-link" data-sf="code">Ajouter avec un code</button>
+                <button type="button" class="sf-link" data-sf="code">${t('social.addWithCode')}</button>
             `;
         },
 
@@ -454,19 +454,19 @@
             const { me } = this.social;
             return `
                 <div class="sf-head">
-                    <button type="button" class="sf-icon-btn" data-sf="home" aria-label="Retour">${svg(ICONS.back, 18)}</button>
-                    <h3>Code d’ami</h3>
+                    <button type="button" class="sf-icon-btn" data-sf="home" aria-label="${escape(t('common.back'))}">${svg(ICONS.back, 18)}</button>
+                    <h3>${t('social.code.title')}</h3>
                     <span class="sf-head-spacer"></span>
                 </div>
                 <div class="sf-code-card">
-                    <span class="sf-kicker">Ton code</span>
+                    <span class="sf-kicker">${t('social.code.mine')}</span>
                     <strong class="sf-code">${escape(me.code)}</strong>
-                    <button type="button" class="sf-link" data-sf="copy-code">${svg(ICONS.copy, 16)} Copier</button>
+                    <button type="button" class="sf-link" data-sf="copy-code">${svg(ICONS.copy, 16)} ${t('social.code.copy')}</button>
                 </div>
                 <form class="sf-form" data-sf-form="code">
-                    <label class="sf-label" for="sf-code-input">Le code de ton pote</label>
+                    <label class="sf-label" for="sf-code-input">${t('social.code.friendLabel')}</label>
                     <input class="sf-input sf-input-code" id="sf-code-input" name="code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123" required>
-                    <button type="submit" class="btn btn-primary btn-large">Ajouter</button>
+                    <button type="submit" class="btn btn-primary btn-large">${t('social.code.add')}</button>
                 </form>
             `;
         },
@@ -479,11 +479,11 @@
             this.social.pick = { friendId, sessionId };
             return `
                 <div class="sf-head">
-                    <button type="button" class="sf-icon-btn" data-sf="home" aria-label="Retour">${svg(ICONS.back, 18)}</button>
-                    <h3>Séance à deux</h3>
+                    <button type="button" class="sf-icon-btn" data-sf="home" aria-label="${escape(t('common.back'))}">${svg(ICONS.back, 18)}</button>
+                    <h3>${t('social.duo.title')}</h3>
                     <span class="sf-head-spacer"></span>
                 </div>
-                <span class="sf-kicker">Avec qui ?</span>
+                <span class="sf-kicker">${t('social.duo.withWho')}</span>
                 <div class="sf-choices">
                     ${friends.map(friend => `
                         <button type="button" class="sf-choice ${friend.id === friendId ? 'active' : ''}" data-sf="pick-friend" data-id="${escape(friend.id)}" aria-pressed="${friend.id === friendId}">
@@ -492,20 +492,19 @@
                         </button>
                     `).join('')}
                 </div>
-                <span class="sf-kicker">Quelle séance ?</span>
+                <span class="sf-kicker">${t('social.duo.whichSession')}</span>
                 <div class="sf-sessions">
                     ${sessions.map((session, index) => `
                         <button type="button" class="sf-session ${session.id === sessionId ? 'active' : ''}" data-sf="pick-session" data-id="${escape(session.id)}" aria-pressed="${session.id === sessionId}">
                             <span class="sf-session-text">
                                 <strong>${escape(session.name)}</strong>
-                                <small>${session.count} exercice${session.count > 1 ? 's' : ''}${index === 0 ? ' · prévue aujourd’hui' : ''}</small>
+                                <small>${t('common.exercises', { count: session.count })}${index === 0 ? ` · ${t('social.duo.next')}` : ''}</small>
                             </span>
                             <span class="sf-radio" aria-hidden="true">${svg(ICONS.check, 14)}</span>
                         </button>
                     `).join('')}
                 </div>
-                <button type="button" class="btn btn-primary btn-large sf-launch" data-sf="launch-duo" ${friendId && sessionId ? '' : 'disabled'}>Lancer et inviter</button>
-                <p class="sf-note">Ton pote reçoit l’invitation et fait la même séance de son côté.</p>
+                <button type="button" class="btn btn-primary btn-large sf-launch" data-sf="launch-duo" ${friendId && sessionId ? '' : 'disabled'}>${t('social.duo.launch')}</button>
             `;
         },
 
@@ -532,7 +531,7 @@
                     this.social.view = action;
                     return this.renderFriendsSheet();
                 case 'share': return this.shareFriendInvite();
-                case 'copy-code': return this.copyText(this.social.me.code, 'Code copié');
+                case 'copy-code': return this.copyText(this.social.me.code, t('social.toast.codeCopied'));
                 case 'duo':
                     await this.loadSessionsForDuo();
                     this.social.view = 'duo';
@@ -584,22 +583,22 @@
         async addFriendByCode(code, { quiet = false } = {}) {
             try {
                 const friend = await this.social.backend.addFriend(String(code || '').trim().toUpperCase());
-                if (!quiet) this.showCoachToast(`${friend.name} fait partie de tes potes`, 'hot');
+                if (!quiet) this.showCoachToast(t('social.toast.added', { name: friend.name }), 'hot');
                 return friend;
             } catch (error) {
                 const messages = {
-                    'invalid-code': 'Ce code ne correspond à personne.',
-                    'own-code': 'C’est ton propre code.',
-                    'not-found': 'Ce code ne correspond à personne.'
+                    'invalid-code': t('social.error.unknownCode'),
+                    'own-code': t('social.error.ownCode'),
+                    'not-found': t('social.error.unknownCode')
                 };
-                this.showCoachToast(messages[error.code] || 'Impossible d’ajouter ce pote pour le moment.', 'warning');
+                this.showCoachToast(messages[error.code] || t('social.error.addFailed'), 'warning');
                 return null;
             }
         },
 
         async shareFriendInvite() {
             const url = `${location.origin}${location.pathname}?ami=${encodeURIComponent(this.social.me.code)}`;
-            const text = `${this.social.me.name} t’invite à s’entraîner ensemble sur Muscu. Code ami : ${this.social.me.code}`;
+            const text = t('social.share.text', { name: this.social.me.name, code: this.social.me.code });
             const nativeShare = window.Capacitor?.Plugins?.Share;
             try {
                 if (nativeShare) return await nativeShare.share({ title: 'Muscu', text, url });
@@ -607,7 +606,7 @@
             } catch (error) {
                 if (error?.name === 'AbortError') return;
             }
-            await this.copyText(`${text}\n${url}`, 'Lien d’invitation copié');
+            await this.copyText(`${text}\n${url}`, t('social.toast.linkCopied'));
         },
 
         async copyText(text, message) {
@@ -646,14 +645,14 @@
                 const { id } = await this.social.backend.createDuo(friendId, payload);
                 await this.setDuo({ id, friend: { id: friend.id, name: friend.name }, sessionId, total: payload.exercises.length, role: 'host' });
             } catch (error) {
-                this.showCoachToast('Invitation impossible pour le moment. Réessaie dans un instant.', 'warning');
+                this.showCoachToast(t('social.error.inviteFailed'), 'warning');
                 this.renderFriendsSheet();
                 return;
             }
             this.closeFriends();
             this.pendingDuoSessionId = sessionId;
             await this.startSession(session);
-            this.showCoachToast(`Invitation envoyée à ${friend.name}`, 'hot');
+            this.showCoachToast(t('social.toast.inviteSent', { name: friend.name }), 'hot');
         },
 
         // The friend's session is matched by name in your program; otherwise
@@ -682,7 +681,7 @@
             const invite = this.social.invites.find(item => item.id === inviteId);
             if (!invite) return;
             if (this.currentWorkout) {
-                this.showCoachToast('Termine d’abord ta séance en cours.', 'warning');
+                this.showCoachToast(t('social.error.sessionInProgress'), 'warning');
                 this.renderFriendsSheet();
                 return;
             }
@@ -696,7 +695,7 @@
                 await this.startSession(session);
             } catch (error) {
                 console.warn('[Social] rejoindre impossible', error);
-                this.showCoachToast('Impossible de rejoindre la séance pour le moment.', 'warning');
+                this.showCoachToast(t('social.error.joinFailed'), 'warning');
                 this.renderFriendsSheet();
             }
         },
@@ -748,10 +747,10 @@
             if (previous) {
                 const before = previous.progress?.exercisesDone || 0;
                 const after = member?.progress?.exercisesDone || 0;
-                if (!previous.accepted && member?.accepted) this.showCoachToast(`${name} a rejoint la séance`, 'hot');
-                else if (member?.progress?.finished && !previous.progress?.finished) this.showCoachToast(`${name} a terminé sa séance`, 'hot');
-                else if (after > before) this.showCoachToast(`${name} a fini un exercice (${after}/${member.progress.exercisesTotal})`, 'cold');
-                if (data.status === 'declined' && previous.status !== 'declined') this.showCoachToast(`${name} ne peut pas cette fois`, 'neutral');
+                if (!previous.accepted && member?.accepted) this.showCoachToast(t('social.duo.toast.joined', { name }), 'hot');
+                else if (member?.progress?.finished && !previous.progress?.finished) this.showCoachToast(t('social.duo.toast.finished', { name }), 'hot');
+                else if (after > before) this.showCoachToast(t('social.duo.toast.exerciseDone', { name, done: after, total: member.progress.exercisesTotal }), 'cold');
+                if (data.status === 'declined' && previous.status !== 'declined') this.showCoachToast(t('social.duo.toast.declined', { name }), 'neutral');
             }
             this.renderDuoStrip();
             this.updateDuoCompare();
@@ -772,16 +771,16 @@
             }
             const { friend, friendState } = this.duo;
             const progress = friendState?.progress;
-            let line = 'Invitation envoyée…';
-            if (friendState?.status === 'declined') line = 'Ne peut pas cette fois';
-            else if (progress?.finished) line = `A terminé · ${progress.sets} séries`;
-            else if (progress) line = `${progress.exercisesDone}/${progress.exercisesTotal} exos · ${progress.sets} séries`;
-            else if (friendState?.accepted) line = 'Vient de commencer';
+            let line = t('social.duo.strip.pending');
+            if (friendState?.status === 'declined') line = t('social.duo.strip.declined');
+            else if (progress?.finished) line = `${t('social.duo.strip.finished')} · ${t('common.sets', { count: progress.sets })}`;
+            else if (progress) line = `${t('social.duo.strip.exercises', { done: progress.exercisesDone, total: progress.exercisesTotal })} · ${t('common.sets', { count: progress.sets })}`;
+            else if (friendState?.accepted) line = t('social.duo.strip.started');
             const ratio = progress ? Math.min(1, progress.exercisesDone / Math.max(1, progress.exercisesTotal)) : 0;
             strip.innerHTML = `
                 ${avatar(friend, 'sm')}
                 <div class="duo-strip-text">
-                    <strong>Avec ${escape(friend.name)}</strong>
+                    <strong>${escape(t('social.duo.strip.with', { name: friend.name }))}</strong>
                     <small>${escape(line)}</small>
                 </div>
                 <div class="duo-strip-bar" aria-hidden="true"><span style="width: ${Math.round(ratio * 100)}%"></span></div>
@@ -874,15 +873,15 @@
             const friend = this.duoFinal.duo.friend;
             const theirs = this.duo?.friendState?.progress || null;
             const rows = [
-                ['Séries', mine.sets, theirs?.sets, value => String(value)],
-                ['Volume', mine.tonnage, theirs?.tonnage, formatTonnage],
-                ['Exercices', mine.exercisesDone, theirs?.exercisesDone, value => String(value)]
+                [t('social.compare.sets'), mine.sets, theirs?.sets, value => String(value)],
+                [t('social.compare.volume'), mine.tonnage, theirs?.tonnage, formatTonnage],
+                [t('social.compare.exercises'), mine.exercisesDone, theirs?.exercisesDone, value => String(value)]
             ];
             const together = mine.tonnage + (theirs?.tonnage || 0);
             section.innerHTML = `
-                <h4 class="fin-heading">Toi vs ${escape(friend.name)}</h4>
+                <h4 class="fin-heading">${escape(t('social.compare.title', { name: friend.name }))}</h4>
                 <div class="duo-compare-head">
-                    <span>Toi</span>
+                    <span>${t('social.me')}</span>
                     <span></span>
                     <span>${escape(friend.name)}</span>
                 </div>
@@ -897,8 +896,8 @@
                     `;
                 }).join('')}
                 <p class="duo-compare-note">${theirs && !theirs.finished
-                    ? `${escape(friend.name)} est encore en séance : ça se met à jour en direct.`
-                    : `Ensemble : ${formatTonnage(together)} soulevés. Belle équipe.`}</p>
+                    ? escape(t('social.compare.live', { name: friend.name }))
+                    : escape(t('social.compare.together', { volume: formatTonnage(together) }))}</p>
             `;
         }
     });

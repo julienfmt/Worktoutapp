@@ -5,18 +5,18 @@
 // Loaded after shell.js (uses gameMetrics built there).
 (() => {
     const CHAPTER_THEMES = [
-        { title: 'Les fondations', emoji: '🧱', color: '#6366f1', tip: 'Apprends les mouvements, garde de la marge, reviens.' },
-        { title: 'Le rythme', emoji: '🥁', color: '#8b5cf6', tip: 'Revenir chaque semaine, c’est 80 % du travail.' },
-        { title: 'La technique', emoji: '🎯', color: '#0ea5e9', tip: 'Amplitude complète, tempo contrôlé : la base des gains.' },
-        { title: 'Premiers records', emoji: '⚡', color: '#f59e0b', tip: 'Tes charges montent : note tout, le coach suit.' },
-        { title: 'La surcharge', emoji: '📈', color: '#22c55e', tip: 'Un peu plus que la dernière fois. Toujours.' },
-        { title: 'Le volume', emoji: '🌊', color: '#06b6d4', tip: 'Assez de séries par muscle, ni trop, ni trop peu.' },
-        { title: 'Force brute', emoji: '🦍', color: '#ef4444', tip: 'Les gros mouvements deviennent tes alliés.' },
-        { title: 'Cœur d’acier', emoji: '❤️‍🔥', color: '#f43f5e', tip: 'Un peu de cardio rend chaque séance plus facile.' },
-        { title: 'Discipline', emoji: '🛡️', color: '#14b8a6', tip: 'La motivation va et vient, l’habitude reste.' },
-        { title: 'Le sommet', emoji: '🏔️', color: '#3b82f6', tip: 'Tu fais partie de ceux qui ne lâchent pas.' },
-        { title: 'Titan', emoji: '🗿', color: '#a855f7', tip: 'Chaque séance renforce une machine déjà rodée.' },
-        { title: 'Légende', emoji: '👑', color: '#eab308', tip: 'Peu de gens arrivent ici. Continue d’écrire l’histoire.' }
+        { title: 'Les fondations', emoji: '🧱', color: '#6366f1', tip: 'Apprends les mouvements et garde 2 ou 3 reps en réserve.' },
+        { title: 'Le rythme', emoji: '🥁', color: '#8b5cf6', tip: 'Vise le même nombre de séances chaque semaine.' },
+        { title: 'La technique', emoji: '🎯', color: '#0ea5e9', tip: 'Amplitude complète et descente contrôlée.' },
+        { title: 'Premiers records', emoji: '⚡', color: '#f59e0b', tip: 'Note chaque série : le coach s’en sert pour régler tes charges.' },
+        { title: 'La surcharge', emoji: '📈', color: '#22c55e', tip: 'Une rep ou un peu de charge en plus que la dernière fois.' },
+        { title: 'Le volume', emoji: '🌊', color: '#06b6d4', tip: 'Surveille tes séries par muscle sur l’accueil.' },
+        { title: 'Force brute', emoji: '🦍', color: '#ef4444', tip: 'Place les mouvements polyarticulaires en début de séance.' },
+        { title: 'Cœur d’acier', emoji: '❤️‍🔥', color: '#f43f5e', tip: 'Ajoute 10 à 20 min de cardio à une séance par semaine.' },
+        { title: 'Discipline', emoji: '🛡️', color: '#14b8a6', tip: 'Garde les mêmes jours d’entraînement chaque semaine.' },
+        { title: 'Le sommet', emoji: '🏔️', color: '#3b82f6', tip: 'Prévois un deload toutes les 4 à 6 semaines.' },
+        { title: 'Titan', emoji: '🗿', color: '#a855f7', tip: 'Une charge stagne ? Essaie une variante de l’exercice.' },
+        { title: 'Légende', emoji: '👑', color: '#eab308', tip: 'Fais relire ton programme par le Coach IA.' }
     ];
     const ROMAN = ['', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
     // Horizontal offsets (px) of the zigzag, like the Duolingo path.
@@ -171,7 +171,6 @@
             container.innerHTML = `
                 <div class="journey-head">
                     <div>
-                        <span class="pz-kicker">Le chemin</span>
                         <h4>Chapitre ${position.chapterIndex + 1} · étape ${position.stepInChapter + 1}/${getChapterSize(position.chapterIndex)}</h4>
                     </div>
                     ${pending.length ? `<span class="pz-chip is-gold">🎁 ${pending.length} à ouvrir</span>` : `<span class="pz-chip">${position.chaptersDone} chapitre${position.chaptersDone > 1 ? 's' : ''} ✓</span>`}
@@ -237,7 +236,7 @@
                         ${node.state === 'current' ? '<span class="journey-node-ring" aria-hidden="true"></span>' : ''}
                     </button>
                     ${node.state === 'current' ? `
-                        <span class="journey-bubble">${isBoss ? 'Séance de boss !' : 'Commencer'}<small>${this.escapeHtml(this.currentSession?.name || 'Ta prochaine séance')}</small></span>
+                        <span class="journey-bubble">${isBoss ? 'Séance de boss' : 'Commencer'}<small>${this.escapeHtml(this.currentSession?.name || 'Prochaine séance')}</small></span>
                         <span class="journey-avatar" aria-hidden="true">${avatar}</span>
                     ` : ''}
                 </div>
@@ -256,7 +255,7 @@
                     await this.claimJourneyChest(chest.dataset.journeyChest, Number(chest.dataset.journeyXp) || 0, chest);
                 } else if (chest.classList.contains('is-locked')) {
                     this.hapticTap?.(6);
-                    this.showCoachToast('Avance sur le chemin pour ouvrir ce coffre.', 'neutral', '🔒');
+                    this.showCoachToast('Coffre verrouillé : termine les séances qui le précèdent.', 'neutral', '🔒');
                 }
                 return;
             }
@@ -308,9 +307,9 @@
             gamification.triggerConfetti(this.progressContext.player.level > previousLevel ? 'heavy' : 'medium');
             const isBoss = chestId.endsWith('-boss');
             if (this.progressContext.player.level > previousLevel) {
-                gamification.showAchievement('⬆️', `Niveau ${this.progressContext.player.level} !`, `Tu passes ${this.progressContext.player.title.name}.`, xpAmount);
+                gamification.showAchievement('⬆️', t('celebrate.levelUp.title', { level: this.progressContext.player.level }), t('celebrate.levelUp.body', { title: this.progressContext.player.title.name }), xpAmount);
             } else {
-                gamification.showAchievement(isBoss ? '🏆' : '🎁', isBoss ? 'Chapitre terminé !' : 'Coffre ouvert !', `+${xpAmount} XP`, xpAmount);
+                gamification.showAchievement(isBoss ? '🏆' : '🎁', isBoss ? 'Chapitre terminé' : 'Coffre ouvert', `+${xpAmount} XP`, xpAmount);
             }
             this.renderPlayerCard();
             await this.renderJourneyPath();
@@ -342,7 +341,7 @@
                 <span class="journey-teaser-node ${pending ? 'is-chest' : ''}" aria-hidden="true">${pending ? '🎁' : chapter.emoji}</span>
                 <span class="journey-teaser-main">
                     <small>Chapitre ${chapter.number} · ${this.escapeHtml(chapter.title)}</small>
-                    <strong>${pending ? `${pending} coffre${pending > 1 ? 's' : ''} à ouvrir !` : `Étape ${position.stepInChapter + 1} sur ${chapter.size}`}</strong>
+                    <strong>${pending ? `${pending} coffre${pending > 1 ? 's' : ''} à ouvrir` : `Étape ${position.stepInChapter + 1} sur ${chapter.size}`}</strong>
                     <span class="journey-teaser-track"><span style="width: ${pct}%"></span></span>
                 </span>
                 <svg class="journey-teaser-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
@@ -649,7 +648,7 @@
                 const best = fresh[fresh.length - 1];
                 setTimeout(() => {
                     gamification.triggerConfetti('heavy');
-                    gamification.showAchievement(best.icon, 'Trophée débloqué !', fresh.length > 1 ? `${best.name} + ${fresh.length - 1} autre${fresh.length > 2 ? 's' : ''}` : best.name);
+                    gamification.showAchievement(best.icon, 'Trophée débloqué', fresh.length > 1 ? `${best.name} + ${fresh.length - 1} autre${fresh.length > 2 ? 's' : ''}` : best.name);
                 }, 900);
             }
 
@@ -682,10 +681,9 @@
             container.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Salle des trophées</span>
-                        <h4>${unlocked.length}/${trophies.length} débloqués</h4>
+                        <h4>Trophées</h4>
                     </div>
-                    <span class="pz-chip is-gold">🏆 ${unlocked.length}</span>
+                    <span class="pz-chip is-gold">🏆 ${unlocked.length}/${trophies.length}</span>
                 </div>
                 ${nextUp.length ? `
                     <div class="trophy-next-list">

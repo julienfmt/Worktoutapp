@@ -11,45 +11,46 @@
     const SHARE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="M8 7l4-4 4 4"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg>';
     const DOTS_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
 
+    // Titles and descriptions come from locales (onboarding.<field>.<id>.title / .desc).
+    // `objective` is stored in the program profile: it stays as data.
     const GOALS = [
-        { id: 'muscle', emoji: '💪', title: 'Prendre du muscle', desc: 'Plus de volume, des muscles qui se voient', objective: 'Prise de masse' },
-        { id: 'fat', emoji: '🔥', title: 'Perdre du gras', desc: 'Garder ses muscles et s\'affiner', objective: 'Perte de gras' },
-        { id: 'recomp', emoji: '⚖️', title: 'Un peu des deux', desc: 'Se muscler et s\'affiner en même temps', objective: 'Recomposition' },
-        { id: 'strength', emoji: '🏋️', title: 'Devenir plus fort', desc: 'Soulever plus lourd sur les gros mouvements', objective: 'Force' },
-        { id: 'restart', emoji: '🌱', title: 'Reprendre en douceur', desc: 'Retrouver la forme sans se blesser', objective: 'Reprise' }
+        { id: 'muscle', emoji: '💪', objective: 'Prise de masse' },
+        { id: 'fat', emoji: '🔥', objective: 'Perte de gras' },
+        { id: 'recomp', emoji: '⚖️', objective: 'Recomposition' },
+        { id: 'strength', emoji: '🏋️', objective: 'Force' },
+        { id: 'restart', emoji: '🌱', objective: 'Reprise' }
     ];
 
     const LEVELS = [
-        { id: 'beginner', emoji: '🐣', title: 'Je débute', desc: 'Moins de 6 mois de muscu' },
-        { id: 'intermediate', emoji: '🚀', title: 'J\'ai les bases', desc: '6 mois à 2 ans de pratique' },
-        { id: 'advanced', emoji: '🦾', title: 'Confirmé', desc: 'Plus de 2 ans, je connais les mouvements' }
+        { id: 'beginner', emoji: '🐣' },
+        { id: 'intermediate', emoji: '🚀' },
+        { id: 'advanced', emoji: '🦾' }
     ];
 
     const EQUIPMENT = [
-        { id: 'gym', emoji: '🏢', title: 'En salle', desc: 'Machines, poulies, barres et haltères' },
-        { id: 'home', emoji: '🏠', title: 'À la maison', desc: 'Des haltères et un banc' },
-        { id: 'bodyweight', emoji: '🤸', title: 'Sans matériel', desc: 'Poids du corps, une barre de traction au mieux' }
+        { id: 'gym', emoji: '🏢' },
+        { id: 'home', emoji: '🏠' },
+        { id: 'bodyweight', emoji: '🤸' }
     ];
+
+    const withCopy = (field, item) => ({
+        ...item,
+        title: t(`onboarding.${field}.${item.id}.title`),
+        desc: t(`onboarding.${field}.${item.id}.desc`)
+    });
 
     const FOCUS = [
-        { id: 'pecs', icon: 'pectoraux', label: 'Pecs', muscles: ['pectoraux'] },
-        { id: 'back', icon: 'dos', label: 'Dos', muscles: ['dos'] },
-        { id: 'shoulders', icon: 'epaules', label: 'Épaules', muscles: ['epaules'] },
-        { id: 'arms', icon: 'biceps', label: 'Bras', muscles: ['biceps', 'triceps'] },
-        { id: 'legs', icon: 'quadriceps', label: 'Jambes', muscles: ['quadriceps', 'ischio-jambiers', 'mollets'] },
-        { id: 'glutes', icon: 'fessiers', label: 'Fessiers', muscles: ['fessiers'] },
-        { id: 'abs', icon: 'abdominaux', label: 'Abdos', muscles: ['abdominaux'] }
+        { id: 'pecs', icon: 'pectoraux', muscles: ['pectoraux'] },
+        { id: 'back', icon: 'dos', muscles: ['dos'] },
+        { id: 'shoulders', icon: 'epaules', muscles: ['epaules'] },
+        { id: 'arms', icon: 'biceps', muscles: ['biceps', 'triceps'] },
+        { id: 'legs', icon: 'quadriceps', muscles: ['quadriceps', 'ischio-jambiers', 'mollets'] },
+        { id: 'glutes', icon: 'fessiers', muscles: ['fessiers'] },
+        { id: 'abs', icon: 'abdominaux', muscles: ['abdominaux'] }
     ];
 
-    const DAY_CAPTIONS = [
-        { emoji: '🌤️', text: 'Une séance, c\'est déjà un vrai départ' },
-        { emoji: '🙂', text: 'Tranquille, facile à tenir' },
-        { emoji: '😎', text: 'Le rythme parfait pour progresser' },
-        { emoji: '🔥', text: 'Très solide, ça va payer' },
-        { emoji: '⚡', text: 'Gros rythme, pense à bien dormir' },
-        { emoji: '🦾', text: 'Mode machine activé' },
-        { emoji: '🤯', text: 'Tous les jours ? Respect.' }
-    ];
+    // Caption under the days slider: onboarding.days.caption<N>.
+    const DAY_EMOJIS = ['🌤️', '🙂', '😎', '🔥', '⚡', '🦾', '📅'];
 
     // When N sessions a week, which days light up (Mon → Sun).
     const WEEK_PATTERNS = {
@@ -88,35 +89,31 @@
     };
 
     const SESSION_TEMPLATES = {
-        fullA: { name: 'Corps complet A', moves: ['squat', 'chestPress', 'row', 'hinge', 'lateralRaise', 'biceps', 'triceps', 'abs', 'calves'] },
-        fullB: { name: 'Corps complet B', moves: ['legPress', 'verticalPull', 'inclinePress', 'legCurl', 'rearDelt', 'triceps2', 'biceps2', 'calves', 'abs'] },
-        fullC: { name: 'Corps complet C', moves: ['hipThrust', 'shoulderPress', 'row', 'squat', 'chestFly', 'biceps', 'triceps', 'abs', 'legCurl'] },
-        upperA: { name: 'Haut du corps A', moves: ['chestPress', 'row', 'shoulderPress', 'verticalPull', 'lateralRaise', 'biceps', 'triceps', 'rearDelt', 'chestFly'] },
-        lowerA: { name: 'Bas du corps A', moves: ['squat', 'hinge', 'legCurl', 'legExt', 'calves', 'abs', 'hipThrust'] },
-        upperB: { name: 'Haut du corps B', moves: ['inclinePress', 'verticalPull', 'row2', 'chestFly', 'lateralRaise', 'triceps2', 'biceps2', 'rearDelt', 'row'] },
-        lowerB: { name: 'Bas du corps B', moves: ['legPress', 'hipThrust', 'legCurl', 'legExt', 'calves', 'abs', 'hinge'] },
-        push: { name: 'Poussée · pecs, épaules, triceps', moves: ['chestPress', 'shoulderPress', 'inclinePress', 'lateralRaise', 'chestFly', 'triceps', 'triceps2'] },
-        pull: { name: 'Tirage · dos, biceps', moves: ['verticalPull', 'row', 'row2', 'rearDelt', 'biceps', 'biceps2', 'abs'] },
-        legs: { name: 'Jambes · cuisses, fessiers', moves: ['squat', 'hinge', 'legPress', 'legCurl', 'legExt', 'calves', 'abs', 'hipThrust'] }
+        fullA: { moves: ['squat', 'chestPress', 'row', 'hinge', 'lateralRaise', 'biceps', 'triceps', 'abs', 'calves'] },
+        fullB: { moves: ['legPress', 'verticalPull', 'inclinePress', 'legCurl', 'rearDelt', 'triceps2', 'biceps2', 'calves', 'abs'] },
+        fullC: { moves: ['hipThrust', 'shoulderPress', 'row', 'squat', 'chestFly', 'biceps', 'triceps', 'abs', 'legCurl'] },
+        upperA: { moves: ['chestPress', 'row', 'shoulderPress', 'verticalPull', 'lateralRaise', 'biceps', 'triceps', 'rearDelt', 'chestFly'] },
+        lowerA: { moves: ['squat', 'hinge', 'legCurl', 'legExt', 'calves', 'abs', 'hipThrust'] },
+        upperB: { moves: ['inclinePress', 'verticalPull', 'row2', 'chestFly', 'lateralRaise', 'triceps2', 'biceps2', 'rearDelt', 'row'] },
+        lowerB: { moves: ['legPress', 'hipThrust', 'legCurl', 'legExt', 'calves', 'abs', 'hinge'] },
+        push: { moves: ['chestPress', 'shoulderPress', 'inclinePress', 'lateralRaise', 'chestFly', 'triceps', 'triceps2'] },
+        pull: { moves: ['verticalPull', 'row', 'row2', 'rearDelt', 'biceps', 'biceps2', 'abs'] },
+        legs: { moves: ['squat', 'hinge', 'legPress', 'legCurl', 'legExt', 'calves', 'abs', 'hipThrust'] }
     };
 
     const SPLITS = {
-        1: { label: 'Corps complet', sessions: ['fullA'] },
-        2: { label: 'Corps complet', sessions: ['fullA', 'fullB'] },
-        3: { label: 'Corps complet', sessions: ['fullA', 'fullB', 'fullC'] },
-        '3plus': { label: 'Poussée / Tirage / Jambes', sessions: ['push', 'pull', 'legs'] },
-        4: { label: 'Haut / Bas', sessions: ['upperA', 'lowerA', 'upperB', 'lowerB'] },
-        5: { label: 'Poussée / Tirage / Jambes + Haut / Bas', sessions: ['push', 'pull', 'legs', 'upperA', 'lowerA'] },
-        6: { label: 'Poussée / Tirage / Jambes ×2', sessions: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] }
+        // label: onboarding.split.<label>
+        1: { label: 'full', sessions: ['fullA'] },
+        2: { label: 'full', sessions: ['fullA', 'fullB'] },
+        3: { label: 'full', sessions: ['fullA', 'fullB', 'fullC'] },
+        '3plus': { label: 'ppl', sessions: ['push', 'pull', 'legs'] },
+        4: { label: 'upperLower', sessions: ['upperA', 'lowerA', 'upperB', 'lowerB'] },
+        5: { label: 'pplUpperLower', sessions: ['push', 'pull', 'legs', 'upperA', 'lowerA'] },
+        6: { label: 'ppl2', sessions: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] }
     };
 
-    const BUILD_STEPS = [
-        { emoji: '🎯', text: 'Analyse de ton objectif' },
-        { emoji: '🗓️', text: 'Organisation de ta semaine' },
-        { emoji: '🏋️', text: 'Choix des exercices' },
-        { emoji: '⏱️', text: 'Réglage des séries et des repos' },
-        { emoji: '🧠', text: 'Activation de ton coach' }
-    ];
+    // Text: onboarding.build.step<N>.
+    const BUILD_STEPS = ['🎯', '🗓️', '🏋️', '⏱️', '🧠'];
 
     const QUESTION_STEPS = ['name', 'goal', 'level', 'how', 'days', 'duration', 'equipment', 'focus'];
 
@@ -184,7 +181,7 @@
         );
 
         const sessions = split.sessions.map((templateId, index) => {
-            const template = SESSION_TEMPLATES[templateId];
+            const template = { ...SESSION_TEMPLATES[templateId], name: t(`onboarding.session.${templateId}`) };
             const available = template.moves
                 .map(moveId => ({ moveId, ...MOVES[moveId] }))
                 .filter(move => move[equipment]);
@@ -231,7 +228,7 @@
                 objective: goal?.objective || 'Prise de masse',
                 weeklyGoal: days
             },
-            splitLabel: split.label,
+            splitLabel: t(`onboarding.split.${split.label}`),
             sessions
         };
     };
@@ -303,11 +300,11 @@
             root.className = 'ob-root';
             root.setAttribute('role', 'dialog');
             root.setAttribute('aria-modal', 'true');
-            root.setAttribute('aria-label', 'Bienvenue');
+            root.setAttribute('aria-label', t('onboarding.aria'));
             root.innerHTML = `
                 <div class="ob-bg" aria-hidden="true"><span></span><span></span><span></span></div>
                 <header class="ob-top">
-                    <button type="button" class="ob-back" data-ob-action="back" aria-label="Retour">${ARROW_LEFT_SVG}</button>
+                    <button type="button" class="ob-back" data-ob-action="back" aria-label="${t('common.back')}">${ARROW_LEFT_SVG}</button>
                     <div class="ob-progress" aria-hidden="true"><div class="ob-progress-fill"></div></div>
                     <span class="ob-top-spacer"></span>
                 </header>
@@ -416,27 +413,27 @@
 
         getOnboardingFooterHtml(step) {
             const labels = {
-                welcome: 'C\'est parti',
-                name: 'Continuer',
-                goal: 'Continuer',
-                level: 'Continuer',
-                how: 'Compris !',
-                days: 'Continuer',
-                duration: 'Continuer',
-                equipment: 'Continuer',
-                focus: 'Créer mon programme',
-                plan: 'Commencer',
-                install: 'C\'est fait'
+                welcome: t('onboarding.cta.start'),
+                name: t('common.continue'),
+                goal: t('common.continue'),
+                level: t('common.continue'),
+                how: t('common.continue'),
+                days: t('common.continue'),
+                duration: t('common.continue'),
+                equipment: t('common.continue'),
+                focus: t('onboarding.cta.create'),
+                plan: t('common.continue'),
+                install: t('onboarding.cta.done')
             };
             if (!labels[step]) return '';
 
             let secondary = '';
             if (step === 'welcome') {
-                secondary = '<button type="button" class="ob-link" data-ob-action="own">J\'ai déjà un programme</button>';
+                secondary = `<button type="button" class="ob-link" data-ob-action="own">${t('onboarding.cta.own')}</button>`;
             } else if (step === 'name') {
-                secondary = '<button type="button" class="ob-link" data-ob-action="skip-name">Passer</button>';
+                secondary = `<button type="button" class="ob-link" data-ob-action="skip-name">${t('onboarding.cta.skip')}</button>`;
             } else if (step === 'install') {
-                secondary = '<button type="button" class="ob-link" data-ob-action="finish">Plus tard</button>';
+                secondary = `<button type="button" class="ob-link" data-ob-action="finish">${t('onboarding.cta.later')}</button>`;
             }
 
             return `
@@ -457,13 +454,12 @@
 
             if (this.onboarding.step === 'focus') {
                 const count = this.onboarding.answers.focus.size;
-                cta.querySelector('span').textContent = count ? 'Créer mon programme' : 'Équilibré, créer mon programme';
+                cta.querySelector('span').textContent = count ? t('onboarding.cta.create') : t('onboarding.cta.createBalanced');
             }
         },
 
         getOnboardingScreenHtml(step) {
             const answers = this.onboarding.answers;
-            const firstName = answers.name ? `, ${esc(answers.name)}` : '';
 
             switch (step) {
                 case 'welcome':
@@ -477,35 +473,35 @@
                                 <span class="ob-float ob-float-2">🔥</span>
                                 <span class="ob-float ob-float-3">📈</span>
                             </div>
-                            <h1 class="ob-title ob-title-xl">Ton coach muscu,<br><span class="ob-grad">dans ta poche.</span></h1>
-                            <p class="ob-sub">Un programme fait pour toi en 1 minute. Ensuite, l'app te dit quoi soulever à chaque série.</p>
+                            <h1 class="ob-title ob-title-xl">${t('onboarding.welcome.title')}<br><span class="ob-grad">${t('onboarding.welcome.titleAccent')}</span></h1>
+                            <p class="ob-sub">${t('onboarding.welcome.sub')}</p>
                             <ul class="ob-perks">
-                                <li><span>🎯</span>Programme adapté à ton objectif</li>
-                                <li><span>🧠</span>Charges calculées pour progresser</li>
-                                <li><span>🔥</span>Séries, records et trophées</li>
+                                <li><span>🎯</span>${t('onboarding.welcome.perk1')}</li>
+                                <li><span>🧠</span>${t('onboarding.welcome.perk2')}</li>
+                                <li><span>🏆</span>${t('onboarding.welcome.perk3')}</li>
                             </ul>
                         </div>
                     `;
 
                 case 'name':
                     return `
-                        ${this.getOnboardingHeadHtml('👋', 'Comment on t\'appelle ?', 'Juste pour te parler comme un vrai coach.')}
-                        <input type="text" class="ob-input" id="ob-name" maxlength="24" autocomplete="given-name" autocapitalize="words" placeholder="Ton prénom" value="${esc(answers.name)}">
+                        ${this.getOnboardingHeadHtml('👋', t('onboarding.name.title'), '')}
+                        <input type="text" class="ob-input" id="ob-name" maxlength="24" autocomplete="given-name" autocapitalize="words" placeholder="${esc(t('onboarding.name.placeholder'))}" aria-label="${esc(t('onboarding.name.placeholder'))}" value="${esc(answers.name)}">
                     `;
 
                 case 'goal':
                     return `
-                        ${this.getOnboardingHeadHtml('🎯', `Ton objectif principal${firstName} ?`, 'On construit ton programme autour.')}
+                        ${this.getOnboardingHeadHtml('🎯', answers.name ? t('onboarding.goal.titleName', { name: esc(answers.name) }) : t('onboarding.goal.title'), '')}
                         <div class="ob-options">
-                            ${GOALS.map((goal, index) => this.getOnboardingOptionHtml('goal', goal, answers.goal === goal.id, index)).join('')}
+                            ${GOALS.map((goal, index) => this.getOnboardingOptionHtml('goal', withCopy('goal', goal), answers.goal === goal.id, index)).join('')}
                         </div>
                     `;
 
                 case 'level':
                     return `
-                        ${this.getOnboardingHeadHtml('📊', 'Tu en es où en muscu ?', 'Pas de jugement, ça règle juste la difficulté.')}
+                        ${this.getOnboardingHeadHtml('📊', t('onboarding.level.title'), t('onboarding.level.sub'))}
                         <div class="ob-options">
-                            ${LEVELS.map((level, index) => this.getOnboardingOptionHtml('level', level, answers.level === level.id, index)).join('')}
+                            ${LEVELS.map((level, index) => this.getOnboardingOptionHtml('level', withCopy('level', level), answers.level === level.id, index)).join('')}
                         </div>
                     `;
 
@@ -514,13 +510,13 @@
 
                 case 'days':
                     return `
-                        ${this.getOnboardingHeadHtml('🗓️', 'Combien de séances par semaine ?', 'Mieux vaut un rythme tenable qu\'un rythme parfait.')}
+                        ${this.getOnboardingHeadHtml('🗓️', t('onboarding.days.title'), t('onboarding.days.sub'))}
                         <div class="ob-slider-card" id="ob-days-card">
-                            <div class="ob-big-value"><span class="ob-big-number" id="ob-days-value">${answers.days}</span><span class="ob-big-unit" id="ob-days-unit">${answers.days > 1 ? 'séances' : 'séance'}</span></div>
+                            <div class="ob-big-value"><span class="ob-big-number" id="ob-days-value">${answers.days}</span><span class="ob-big-unit" id="ob-days-unit">${t('onboarding.days.unit', { count: answers.days })}</span></div>
                             <div class="ob-week" id="ob-week">
-                                ${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => `<span class="ob-day" data-day="${index}">${day}</span>`).join('')}
+                                ${t('common.weekdayInitials').split(',').map((day, index) => `<span class="ob-day" data-day="${index}">${day}</span>`).join('')}
                             </div>
-                            <input type="range" class="ob-range" id="ob-days" min="1" max="7" step="1" value="${answers.days}" aria-label="Séances par semaine">
+                            <input type="range" class="ob-range" id="ob-days" min="1" max="7" step="1" value="${answers.days}" aria-label="${t('onboarding.days.aria')}">
                             <div class="ob-range-scale"><span>1</span><span>7</span></div>
                             <p class="ob-caption" id="ob-days-caption"></p>
                         </div>
@@ -528,13 +524,13 @@
 
                 case 'duration':
                     return `
-                        ${this.getOnboardingHeadHtml('⏱️', 'Combien de temps par séance ?', 'Échauffement et repos compris.')}
+                        ${this.getOnboardingHeadHtml('⏱️', t('onboarding.duration.title'), t('onboarding.duration.sub'))}
                         <div class="ob-slider-card" id="ob-duration-card">
                             <div class="ob-clock" aria-hidden="true">
                                 <svg viewBox="0 0 120 120"><circle class="ob-clock-bg" cx="60" cy="60" r="52"/><circle class="ob-clock-fill" id="ob-clock-fill" cx="60" cy="60" r="52"/></svg>
                                 <div class="ob-clock-center"><span class="ob-big-number" id="ob-duration-value">${answers.duration}</span><span class="ob-big-unit">min</span></div>
                             </div>
-                            <input type="range" class="ob-range" id="ob-duration" min="30" max="120" step="15" value="${answers.duration}" aria-label="Durée d'une séance">
+                            <input type="range" class="ob-range" id="ob-duration" min="30" max="120" step="15" value="${answers.duration}" aria-label="${t('onboarding.duration.aria')}">
                             <div class="ob-range-scale"><span>30 min</span><span>2 h</span></div>
                             <p class="ob-caption" id="ob-duration-caption"></p>
                         </div>
@@ -542,19 +538,19 @@
 
                 case 'equipment':
                     return `
-                        ${this.getOnboardingHeadHtml('🏠', 'Tu t\'entraînes où ?', 'On choisit les exercices avec le matériel que tu as.')}
+                        ${this.getOnboardingHeadHtml('🏠', t('onboarding.equipment.title'), t('onboarding.equipment.sub'))}
                         <div class="ob-options">
-                            ${EQUIPMENT.map((item, index) => this.getOnboardingOptionHtml('equipment', item, answers.equipment === item.id, index)).join('')}
+                            ${EQUIPMENT.map((item, index) => this.getOnboardingOptionHtml('equipment', withCopy('equipment', item), answers.equipment === item.id, index)).join('')}
                         </div>
                     `;
 
                 case 'focus':
                     return `
-                        ${this.getOnboardingHeadHtml('✨', 'Des zones à travailler en priorité ?', 'Optionnel. Choisis-en autant que tu veux, ou aucune pour un programme équilibré.')}
+                        ${this.getOnboardingHeadHtml('✨', t('onboarding.focus.title'), t('onboarding.focus.sub'))}
                         <div class="ob-chips">
                             ${FOCUS.map((item, index) => `
                                 <button type="button" class="ob-chip ${answers.focus.has(item.id) ? 'is-selected' : ''}" data-ob-focus="${item.id}" style="--i:${index}" aria-pressed="${answers.focus.has(item.id)}">
-                                    <img class="ob-chip-icon" src="icons/muscles/${item.icon}.png" alt="">${item.label}
+                                    <img class="ob-chip-icon" src="icons/muscles/${item.icon}.png" alt="">${t(`onboarding.focus.${item.id}`)}
                                 </button>
                             `).join('')}
                         </div>
@@ -566,10 +562,10 @@
                             <div class="ob-meter" id="ob-meter" style="--p:0">
                                 <div class="ob-meter-inner"><span id="ob-meter-value">0</span><small>%</small></div>
                             </div>
-                            <h2 class="ob-title">On prépare ton programme${firstName}…</h2>
+                            <h2 class="ob-title">${t('onboarding.build.title')}</h2>
                             <ul class="ob-build-list" id="ob-build-list">
-                                ${BUILD_STEPS.map((item, index) => `
-                                    <li data-build="${index}"><span class="ob-build-icon">${item.emoji}</span><span class="ob-build-text">${item.text}</span><span class="ob-build-check">${CHECK_SVG}</span></li>
+                                ${BUILD_STEPS.map((emoji, index) => `
+                                    <li data-build="${index}"><span class="ob-build-icon">${emoji}</span><span class="ob-build-text">${t(`onboarding.build.step${index + 1}`)}</span><span class="ob-build-check">${CHECK_SVG}</span></li>
                                 `).join('')}
                             </ul>
                         </div>
@@ -583,19 +579,19 @@
 
                 case 'own':
                     return `
-                        ${this.getOnboardingHeadHtml('📂', 'Tu as déjà ton programme ?', 'Choisis comment l\'ajouter. Tu pourras tout modifier ensuite.')}
+                        ${this.getOnboardingHeadHtml('📂', t('onboarding.own.title'), t('onboarding.own.sub'))}
                         <div class="ob-options">
                             <button type="button" class="ob-option" data-ob-action="own-import" style="--i:0">
                                 <span class="ob-option-emoji">📥</span>
-                                <span class="ob-option-copy"><strong>Importer un fichier</strong><small>Un programme ou une sauvegarde de l'app</small></span>
+                                <span class="ob-option-copy"><strong>${t('onboarding.own.import.title')}</strong><small>${t('onboarding.own.import.desc')}</small></span>
                             </button>
                             <button type="button" class="ob-option" data-ob-action="own-manual" style="--i:1">
                                 <span class="ob-option-emoji">✍️</span>
-                                <span class="ob-option-copy"><strong>Le créer moi-même</strong><small>Séance par séance, exercice par exercice</small></span>
+                                <span class="ob-option-copy"><strong>${t('onboarding.own.manual.title')}</strong><small>${t('onboarding.own.manual.desc')}</small></span>
                             </button>
                             <button type="button" class="ob-option" data-ob-action="own-chat" style="--i:2">
                                 <span class="ob-option-emoji">🤖</span>
-                                <span class="ob-option-copy"><strong>Le faire avec ChatGPT</strong><small>On copie un message à coller, il te crée un fichier à importer</small></span>
+                                <span class="ob-option-copy"><strong>${t('onboarding.own.chat.title')}</strong><small>${t('onboarding.own.chat.desc')}</small></span>
                             </button>
                         </div>
                     `;
@@ -628,17 +624,17 @@
         getOnboardingHowHtml() {
             const faces = [6, 7, 8, 9, 10].map(rpe => ({ rpe, ...this.getRpeFace(rpe) }));
             return `
-                ${this.getOnboardingHeadHtml('🧠', 'Comment ça marche ?', 'Essaie : tu viens de finir une série. Comment c\'était ?')}
+                ${this.getOnboardingHeadHtml('🧠', t('onboarding.how.title'), t('onboarding.how.sub'))}
                 <div class="ob-demo">
                     <div class="ob-demo-set">
                         <span class="ob-demo-badge">${CHECK_SVG}</span>
                         <div class="ob-demo-set-copy">
-                            <small>Développé couché · série 1</small>
+                            <small>${t('onboarding.how.demoSet')}</small>
                             <strong>60 kg × 8</strong>
                         </div>
                         <span class="ob-demo-xp">+10 XP</span>
                     </div>
-                    <div class="ob-demo-faces" role="group" aria-label="Ressenti de la série">
+                    <div class="ob-demo-faces" role="group" aria-label="${t('onboarding.how.facesAria')}">
                         ${faces.map(face => `
                             <button type="button" class="ob-face" data-ob-face="${face.rpe}" aria-pressed="false">
                                 <span class="ob-face-emoji">${face.emoji}</span>
@@ -648,12 +644,12 @@
                     </div>
                     <div class="ob-demo-coach" id="ob-demo-coach">
                         <span class="ob-demo-avatar">🤖</span>
-                        <p id="ob-demo-coach-text">Touche un smiley pour voir ce que ton coach te répond.</p>
+                        <p id="ob-demo-coach-text">${t('onboarding.how.prompt')}</p>
                     </div>
                     <ol class="ob-demo-steps">
-                        <li><span>1</span>Tu notes ton poids et tes reps</li>
-                        <li><span>2</span>Tu dis comment c'était (si tu veux)</li>
-                        <li><span>3</span>Le coach règle ta prochaine séance</li>
+                        <li><span>1</span>${t('onboarding.how.step1')}</li>
+                        <li><span>2</span>${t('onboarding.how.step2')}</li>
+                        <li><span>3</span>${t('onboarding.how.step3')}</li>
                     </ol>
                 </div>
             `;
@@ -666,18 +662,19 @@
             const totalExercises = program.sessions.reduce((sum, session) => sum + session.slots.length, 0);
             const muscleLabel = (id) => (typeof MUSCLE_GROUPS !== 'undefined' ? MUSCLE_GROUPS.find(group => group.id === id)?.name : '') || id;
             const muscleIcon = (id) => `icons/muscles/${String(id).normalize('NFD').replace(/[̀-ͯ]/g, '')}.png`;
-            const title = answers.name ? `${esc(answers.name)}, ton programme est prêt` : 'Ton programme est prêt';
+            const title = answers.name ? t('onboarding.plan.titleName', { name: esc(answers.name) }) : t('onboarding.plan.title');
+            const goalTitle = answers.goal ? t(`onboarding.goal.${answers.goal}.title`) : '';
 
             return `
                 <div class="ob-plan">
                     <div class="ob-plan-badge" aria-hidden="true">🎉</div>
                     <h2 class="ob-title">${title}</h2>
-                    <p class="ob-sub">${esc(program.splitLabel)} · pensé pour « ${esc(program.profile.objective.toLowerCase())} »</p>
+                    <p class="ob-sub">${esc(program.splitLabel)}${goalTitle ? ` · ${esc(goalTitle)}` : ''}</p>
 
                     <div class="ob-plan-stats">
-                        <div style="--i:0"><strong data-ob-count="${answers.days}">0</strong><span>séances / sem.</span></div>
-                        <div style="--i:1"><strong data-ob-count="${totalExercises}">0</strong><span>exercices</span></div>
-                        <div style="--i:2"><strong>~<b data-ob-count="${answers.duration}">0</b></strong><span>min / séance</span></div>
+                        <div style="--i:0"><strong data-ob-count="${answers.days}">0</strong><span>${t('onboarding.plan.perWeek')}</span></div>
+                        <div style="--i:1"><strong data-ob-count="${totalExercises}">0</strong><span>${t('onboarding.plan.exercises')}</span></div>
+                        <div style="--i:2"><strong>~<b data-ob-count="${answers.duration}">0</b></strong><span>${t('onboarding.plan.minutes')}</span></div>
                     </div>
 
                     <div class="ob-plan-sessions">
@@ -689,7 +686,7 @@
                                         <span class="ob-plan-session-index">${index + 1}</span>
                                         <span class="ob-plan-session-copy">
                                             <strong>${esc(session.name)}</strong>
-                                            <small>${session.slots.length} exercices · ${muscles.map(muscleLabel).join(', ')}</small>
+                                            <small>${t('common.exercises', { count: session.slots.length })} · ${muscles.map(muscleLabel).join(', ')}</small>
                                         </span>
                                         <span class="ob-plan-session-icons" aria-hidden="true">
                                             ${muscles.slice(0, 3).map(id => `<img src="${muscleIcon(id)}" alt="" loading="lazy">`).join('')}
@@ -705,7 +702,7 @@
                         }).join('')}
                     </div>
 
-                    <p class="ob-plan-note">✏️ Tout reste modifiable : exercices, séries, ordre. Le coach ajuste les charges après chaque séance.</p>
+                    <p class="ob-plan-note">✏️ ${t('onboarding.plan.note')}</p>
                 </div>
             `;
         },
@@ -714,18 +711,18 @@
             const platform = this.getInstallPlatform();
             const steps = platform === 'ios'
                 ? [
-                    { icon: SHARE_SVG, text: 'Touche <strong>Partager</strong> en bas de Safari' },
-                    { icon: '<b>＋</b>', text: 'Choisis <strong>Sur l\'écran d\'accueil</strong> (fais défiler si besoin)' },
-                    { icon: CHECK_SVG, text: 'Touche <strong>Ajouter</strong>, c\'est tout' }
+                    { icon: SHARE_SVG, text: t('onboarding.install.ios1') },
+                    { icon: '<b>＋</b>', text: t('onboarding.install.ios2') },
+                    { icon: CHECK_SVG, text: t('onboarding.install.ios3') }
                 ]
                 : [
-                    { icon: DOTS_SVG, text: 'Ouvre le <strong>menu ⋮</strong> du navigateur' },
-                    { icon: '<b>＋</b>', text: 'Choisis <strong>Installer l\'application</strong> ou <strong>Ajouter à l\'écran d\'accueil</strong>' },
-                    { icon: CHECK_SVG, text: 'Confirme, l\'icône apparaît sur ton téléphone' }
+                    { icon: DOTS_SVG, text: t('onboarding.install.android1') },
+                    { icon: '<b>＋</b>', text: t('onboarding.install.android2') },
+                    { icon: CHECK_SVG, text: t('onboarding.install.android3') }
                 ];
 
             return `
-                ${this.getOnboardingHeadHtml('📲', 'Dernière étape : garde l\'app sous la main', 'Installée, elle s\'ouvre en plein écran et marche même sans réseau à la salle.')}
+                ${this.getOnboardingHeadHtml('📲', t('onboarding.install.title'), t('onboarding.install.sub'))}
                 <div class="ob-install-phone" aria-hidden="true">
                     <div class="ob-install-screen">
                         <span class="ob-install-app"><img src="icons/icon-192.png" alt=""></span>
@@ -771,9 +768,8 @@
                 valueEl.textContent = days;
                 if (withFeedback) this.popOnboardingElement(valueEl);
             }
-            if (unitEl) unitEl.textContent = days > 1 ? 'séances' : 'séance';
-            const captionData = DAY_CAPTIONS[days - 1];
-            if (caption) caption.innerHTML = `<span>${captionData.emoji}</span> ${captionData.text}`;
+            if (unitEl) unitEl.textContent = t('onboarding.days.unit', { count: days });
+            if (caption) caption.innerHTML = `<span>${DAY_EMOJIS[days - 1]}</span> ${t(`onboarding.days.caption${days}`)}`;
             const pattern = WEEK_PATTERNS[days];
             document.querySelectorAll('#ob-week .ob-day').forEach((dayEl, index) => {
                 dayEl.classList.toggle('is-on', pattern[index] === 1);
@@ -792,7 +788,7 @@
                 if (withFeedback) this.popOnboardingElement(valueEl);
             }
             const count = exerciseCountForDuration(minutes);
-            if (caption) caption.innerHTML = `<span>🏋️</span> Environ <strong>${count} exercices</strong> par séance`;
+            if (caption) caption.innerHTML = `<span>🏋️</span> ${t('onboarding.duration.caption', { count })}`;
             if (fill) {
                 const circumference = 2 * Math.PI * 52;
                 fill.style.strokeDasharray = `${circumference}`;
@@ -920,11 +916,11 @@
 
         reactOnboardingDemo(rpe) {
             const replies = {
-                6: 'Trop facile ? Prochaine série : <strong>62,5 kg</strong>. On monte ! 🚀',
-                7: 'Ça passe bien. On garde <strong>60 kg</strong> et on vise <strong>9 reps</strong>.',
-                8: 'Pile dans la zone qui fait progresser. On garde <strong>60 kg</strong>. 👌',
-                9: 'Dur mais propre. On garde <strong>60 kg</strong>, les reps viendront.',
-                10: 'À fond ! Prends un peu plus de repos, on reste à <strong>60 kg</strong>. 🛟'
+                6: t('onboarding.how.reply6'),
+                7: t('onboarding.how.reply7'),
+                8: t('onboarding.how.reply8'),
+                9: t('onboarding.how.reply9'),
+                10: t('onboarding.how.reply10')
             };
             this.onboarding.answers.demoFace = rpe;
             document.querySelectorAll('.ob-face').forEach((face) => {
@@ -987,7 +983,7 @@
             state.busy = false;
 
             if (result instanceof Error) {
-                this.showCoachToast('Oups, la création a échoué. Réessaie ou crée tes séances toi-même.', 'warning', '⚠️');
+                this.showCoachToast(t('onboarding.toast.buildFailed'), 'warning', '⚠️');
                 state.step = 'focus';
                 state.history.pop();
                 this.renderOnboardingScreen('back');
@@ -1026,11 +1022,7 @@
                 if (button) {
                     gamification.burstFromElement(button, { count: 60, spread: 160, power: 13 });
                 }
-                this.showCoachToast(
-                    name ? `Ta première séance t'attend, ${name}. Touche « Commencer » quand tu es à la salle !` : 'Ta première séance t\'attend. Touche « Commencer » quand tu es à la salle !',
-                    'hot',
-                    '🔥'
-                );
+                this.showCoachToast(t('onboarding.toast.ready'), 'hot', '✅');
             }
             this.onboarding = null;
         },
@@ -1055,75 +1047,38 @@
             const prompt = this.buildChatProgramPrompt(profile);
             const copied = await this.copyTextToClipboard(prompt);
             if (copied) {
-                this.showCoachToast('Message copié ! Colle-le dans ChatGPT, réponds à ses questions, puis reviens ici et touche « Importer un fichier ».', 'hot', '📋');
+                this.showCoachToast(t('onboarding.toast.promptCopied'), 'hot', '📋');
             } else {
-                this.showCoachToast('Copie impossible. Réessaie dans quelques secondes.', 'warning', '📋');
+                this.showCoachToast(t('onboarding.toast.copyFailed'), 'warning', '📋');
             }
         }
     };
 
     // ===== Help bubbles =====
     // Any element with data-help="key" opens a short plain-language explanation.
+    // Text lives in locales: help.<key>.title and help.<key>.body1…bodyN.
     const HELP_TOPICS = {
-        deload: {
-            emoji: '🔋',
-            title: 'C\'est quoi un deload ?',
-            body: [
-                'Une <strong>séance (ou semaine) plus légère</strong> : moins de séries et des charges un peu plus basses.',
-                'Tes muscles et tes articulations récupèrent, et tu repars <strong>plus fort</strong> la semaine d\'après.',
-                'C\'est prévu et normal : ce n\'est <strong>pas un recul</strong>. Tu choisis toujours oui ou non.'
-            ]
-        },
-        cycle: {
-            emoji: '🔁',
-            title: 'Comment marche le cycle ?',
-            body: [
-                '<strong>Accumulation</strong> : les semaines où tu pousses normalement pour progresser.',
-                'Après quelques semaines, l\'app te propose une <strong>semaine de deload</strong> pour récupérer.',
-                'Puis un nouveau cycle recommence. Tu règles la durée dans les paramètres.'
-            ]
-        },
-        ressenti: {
-            emoji: '😤',
-            title: 'À quoi sert le smiley ?',
-            body: [
-                'Tu dis comment était ta série, en un tap :',
-                '😌 Facile · 🙂 Ça va · 😤 Dur · 🥵 Très dur · 💀 À fond',
-                'Le coach s\'en sert pour régler ta <strong>prochaine charge</strong>. Si tu ne touches rien, pas de souci : il estime tout seul avec tes reps.',
-                'Touche à nouveau un smiley pour le retirer.'
-            ]
-        },
-        exercise: {
-            title: 'Comment ça marche ?',
-            body: [
-                '<strong>Charge</strong> et <strong>reps</strong> sont pré-remplies par le coach. Ajuste si besoin.',
-                '<strong>RIR</strong> (« reps en réserve ») : arrête la série quand il te reste ce nombre de reps dans le réservoir. Pas besoin d\'aller à l\'échec.',
-                'Touche <strong>Série terminée</strong> : le repos se lance tout seul et le coach adapte la suite.',
-                'Le résumé sous le titre se lit ainsi : <strong>4 × 6-10 · 150s</strong> = 4 séries de 6 à 10 reps, 150 s de repos.'
-            ]
-        },
-        targets: {
-            title: 'Comment lire ces objectifs ?',
-            body: [
-                '<strong>4 × 6-10</strong> = 4 séries de 6 à 10 répétitions.',
-                '<strong>150s</strong> = le temps de repos entre deux séries.',
-                '<strong>RIR 2</strong> = « reps en réserve » : arrête la série quand tu sens qu\'il t\'en reste <strong>encore 2</strong> dans le réservoir. Pas besoin d\'aller jusqu\'à l\'échec.'
-            ]
-        },
-        e1rm: {
-            emoji: '👑',
-            title: 'C\'est quoi « e1RM » ?',
-            body: [
-                'La charge que tu pourrais soulever <strong>une seule fois</strong>, estimée à partir de tes séries.',
-                'Ça permet de comparer des séries différentes : 80 kg × 8 et 90 kg × 5, laquelle est la meilleure ?',
-                'Pas besoin de tester ton max : l\'app le calcule pour toi.'
-            ]
-        }
+        deload: { emoji: '🔋', lines: 3 },
+        cycle: { emoji: '🔁', lines: 3 },
+        ressenti: { emoji: '😤', lines: 4 },
+        exercise: { lines: 4 },
+        targets: { lines: 3 },
+        e1rm: { emoji: '👑', lines: 3 }
+    };
+
+    const getHelpTopic = (key) => {
+        const topic = HELP_TOPICS[key];
+        if (!topic) return null;
+        return {
+            ...topic,
+            title: t(`help.${key}.title`),
+            body: Array.from({ length: topic.lines }, (_, index) => t(`help.${key}.body${index + 1}`))
+        };
     };
 
     const HelpBubbles = {
         showHelpTopic(key) {
-            const topic = HELP_TOPICS[key];
+            const topic = getHelpTopic(key);
             if (!topic) return;
             let sheet = document.getElementById('help-sheet');
             if (!sheet) {
@@ -1132,7 +1087,7 @@
                 sheet.className = 'help-sheet';
                 sheet.setAttribute('role', 'dialog');
                 sheet.setAttribute('aria-modal', 'true');
-                sheet.innerHTML = '<div class="help-sheet-backdrop" data-help-close></div><div class="help-sheet-card"><div class="help-sheet-body"></div><button type="button" class="help-sheet-ok" data-help-close>J\'ai compris</button></div>';
+                sheet.innerHTML = `<div class="help-sheet-backdrop" data-help-close></div><div class="help-sheet-card"><div class="help-sheet-body"></div><button type="button" class="help-sheet-ok" data-help-close>${t('help.ok')}</button></div>`;
                 document.body.appendChild(sheet);
                 sheet.addEventListener('click', (event) => {
                     if (event.target.closest('[data-help-close]')) this.hideHelpTopic();

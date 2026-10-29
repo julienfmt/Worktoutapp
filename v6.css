@@ -135,6 +135,14 @@
     justify-content: center;
 }
 
+.pz-card-note {
+    margin-top: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
 .backup-card .backup-actions {
     justify-content: stretch;
     gap: 10px;
@@ -4707,13 +4715,6 @@ html[data-theme="dark"] .btn-unilateral-validate {
 
 .sf-launch {
     margin-top: 4px;
-}
-
-.sf-note {
-    margin: -6px 0 0;
-    font-size: 13px;
-    text-align: center;
-    color: var(--text-muted);
 }
 
 /* Session screen: friend's live progress */

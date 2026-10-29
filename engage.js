@@ -5,20 +5,8 @@
 // - A "Partager" button on the end-of-workout screen that renders the
 //   session as an image (Web Share API, download as a fallback).
 (() => {
-    const MONTHS = [
-        { emoji: '🎆', name: 'janvier', title: year => `Résolution ${year}`, pitch: 'Tiens ta résolution dès le premier mois.' },
-        { emoji: '❄️', name: 'février', title: () => 'Février de glace', pitch: 'Le mois le plus court, aucune excuse.' },
-        { emoji: '🌱', name: 'mars', title: () => 'Mars en force', pitch: 'Le printemps se prépare maintenant.' },
-        { emoji: '🌸', name: 'avril', title: () => 'Avril en fleurs', pitch: 'La régularité fait éclore les résultats.' },
-        { emoji: '☀️', name: 'mai', title: () => 'Mai solaire', pitch: 'L’été approche : on accélère.' },
-        { emoji: '🏖️', name: 'juin', title: () => 'Juin d’acier', pitch: 'Dernière ligne droite avant l’été.' },
-        { emoji: '🔥', name: 'juillet', title: () => 'Juillet brûlant', pitch: 'Les vacances ne cassent pas la série.' },
-        { emoji: '🌊', name: 'août', title: () => 'Août en vagues', pitch: 'Même en été, on garde le rythme.' },
-        { emoji: '🍂', name: 'septembre', title: () => 'La rentrée', pitch: 'Nouvelle saison, nouvelles charges.' },
-        { emoji: '🎃', name: 'octobre', title: () => 'Octobre monstre', pitch: 'Deviens le monstre de la salle.' },
-        { emoji: '🌧️', name: 'novembre', title: () => 'Novembre tenace', pitch: 'Quand il pleut dehors, on brille dedans.' },
-        { emoji: '🎄', name: 'décembre', title: () => 'Décembre de légende', pitch: 'Finis l’année plus fort qu’elle n’a commencé.' }
-    ];
+    const MONTH_EMOJIS = ['🎆', '❄️', '🌱', '🌸', '☀️', '🏖️', '🔥', '🌊', '🍂', '🎃', '🌧️', '🎄'];
+    const monthName = date => date.toLocaleDateString(window.i18n?.intlLocale?.() || 'fr-FR', { month: 'long' });
 
     const baseRenderStats = App.prototype.renderStats;
     const baseBuildTrophies = App.prototype.buildTrophies;
@@ -30,7 +18,6 @@
         getMonthlyChallenge(date = new Date()) {
             const year = date.getFullYear();
             const month = date.getMonth();
-            const theme = MONTHS[month];
             const weeklyGoal = Math.max(1, Number(this.progressContext?.snapshot?.weeklyGoal) || 3);
             const start = new Date(year, month, 1);
             const end = new Date(year, month + 1, 1);
@@ -46,10 +33,9 @@
             const daysLeft = isCurrent ? Math.max(0, Math.ceil((end - today) / 86400000)) : 0;
             return {
                 key: `${year}-${String(month + 1).padStart(2, '0')}`,
-                emoji: theme.emoji,
-                title: theme.title(year),
-                monthName: theme.name,
-                pitch: theme.pitch,
+                emoji: MONTH_EMOJIS[month],
+                title: month === 0 ? t('month.resolution', { year }) : t('month.title', { month: monthName(start) }),
+                monthName: monthName(start),
                 isResolution: month === 0,
                 target,
                 current: workouts,
@@ -83,10 +69,10 @@
             const radius = 26;
             const circumference = 2 * Math.PI * radius;
             let status;
-            if (claimed) status = 'Défi relevé, bravo !';
-            else if (challenge.done) status = 'Objectif atteint : récupère ta récompense !';
-            else if (challenge.daysLeft <= 1) status = 'Dernier jour du mois : fonce !';
-            else status = `Encore ${remaining} séance${remaining > 1 ? 's' : ''} · ~${String(pace).replace('.', ',')} / sem. · ${challenge.daysLeft} j restants`;
+            if (claimed) status = t('month.claimed');
+            else if (challenge.done) status = t('month.done');
+            else if (challenge.daysLeft <= 1) status = t('month.lastDay', { count: remaining });
+            else status = t('month.status', { count: remaining, pace: String(pace).replace('.', ','), days: challenge.daysLeft });
 
             card.hidden = false;
             card.className = `month-challenge ${challenge.isResolution ? 'is-resolution' : ''} ${challenge.done ? 'is-done' : ''} ${claimed ? 'is-claimed' : ''}`;
@@ -99,8 +85,8 @@
                     <span>${challenge.emoji}</span>
                 </div>
                 <div class="month-main">
-                    <span class="month-kicker">${challenge.isResolution ? 'Défi du Nouvel An' : `Défi de ${challenge.monthName}`}</span>
-                    <strong>${this.escapeHtml(challenge.title)} · ${challenge.current}/${challenge.target}</strong>
+                    <span class="month-kicker">${challenge.isResolution ? t('month.kickerNewYear') : t('month.kicker')}</span>
+                    <strong>${this.escapeHtml(t('month.progress', { current: challenge.current, count: challenge.target }))}</strong>
                     <small>${this.escapeHtml(status)}</small>
                 </div>
                 ${challenge.done && !claimed
@@ -131,12 +117,12 @@
             gamification.triggerConfetti('heavy');
             gamification.showAchievement(
                 challenge.emoji,
-                challenge.isResolution ? 'Résolution tenue !' : 'Défi du mois relevé !',
+                challenge.isResolution ? t('month.celebrateResolution') : t('month.celebrate'),
                 `${challenge.title} · +${challenge.xp} XP`,
                 challenge.xp
             );
             if (this.progressContext.player.level > previousLevel) {
-                setTimeout(() => gamification.showAchievement('⬆️', `Niveau ${this.progressContext.player.level} !`, `Tu passes ${this.progressContext.player.title.name}.`), 3200);
+                setTimeout(() => gamification.showAchievement('⬆️', t('celebrate.levelUp.title', { level: this.progressContext.player.level }), t('celebrate.levelUp.body', { title: this.progressContext.player.title.name })), 3200);
             }
             this.renderPlayerCard();
             await this.renderMonthlyChallenge();
@@ -182,7 +168,7 @@
                 button.className = 'fin-share';
                 button.innerHTML = `
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
-                    Partager ma séance
+                    ${t('share.button')}
                 `;
                 button.addEventListener('click', async () => {
                     button.disabled = true;
@@ -288,7 +274,7 @@
             ctx.fillText(stats.date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase(), 90, 150);
             ctx.fillStyle = '#ffffff';
             ctx.font = `900 78px ${display}`;
-            ctx.fillText('Séance terminée', 90, 255);
+            ctx.fillText(t('recap.kicker'), 90, 255);
             ctx.font = `800 54px ${text}`;
             ctx.fillStyle = 'rgba(255,255,255,0.82)';
             ctx.fillText(`💪 ${stats.sessionName}`.slice(0, 34), 90, 340);
@@ -357,7 +343,7 @@
 
             ctx.fillStyle = 'rgba(255,255,255,0.55)';
             ctx.font = `800 30px ${text}`;
-            ctx.fillText('Muscu · la salle comme un jeu', width / 2, 1270);
+            ctx.fillText('Muscu', width / 2, 1270);
 
             return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         },
@@ -367,12 +353,12 @@
             if (!stats) return;
             const blob = await this.renderShareCanvas(stats);
             if (!blob) {
-                this.showCoachToast('Image impossible à créer sur cet appareil.', 'warning', '⚠️');
+                this.showCoachToast(t('toast.shareImageFailed'), 'warning', '⚠️');
                 return;
             }
             const fileName = `seance-${stats.date.toISOString().slice(0, 10)}.png`;
             const file = typeof File === 'function' ? new File([blob], fileName, { type: 'image/png' }) : null;
-            const shareText = `${stats.sessionName} bouclée 💪 ${stats.workSets} séries en ${stats.minutes} min.`;
+            const shareText = t('share.text', { name: stats.sessionName, sets: t('common.sets', { count: stats.workSets }), minutes: stats.minutes });
             try {
                 if (file && navigator.canShare?.({ files: [file] })) {
                     await navigator.share({ files: [file], text: shareText });
@@ -389,7 +375,7 @@
             link.click();
             link.remove();
             setTimeout(() => URL.revokeObjectURL(url), 2000);
-            this.showCoachToast('Image enregistrée : partage-la où tu veux !', 'hot', '📸');
+            this.showCoachToast(t('toast.shareImageSaved'), 'hot', '📸');
         }
     });
 })();

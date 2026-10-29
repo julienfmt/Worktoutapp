@@ -251,7 +251,7 @@
                     <div class="ai-hero-top">
                         ${markHtml}
                         <div class="ai-hero-heading">
-                            <span class="ai-kicker">${this.escapeHtml(kicker)}</span>
+                            ${kicker ? `<span class="ai-kicker">${this.escapeHtml(kicker)}</span>` : ''}
                             <h3 id="ai-coach-title">${this.escapeHtml(title)}</h3>
                         </div>
                         <button type="button" class="ai-close" data-ai-action="close" aria-label="Fermer">${CLOSE_SVG}</button>
@@ -275,8 +275,8 @@
             return `
                 ${this.renderAiHero({
                     kicker: 'Coach IA',
-                    title: 'Fais bosser l’IA pour toi',
-                    text: 'Tes stats, ton programme et les consignes partent en un tap. Tu reviens ici avec la réponse, l’app applique les changements.'
+                    title: 'Analyser ou ajuster ton programme',
+                    text: 'Envoie tes stats et ton programme à une IA, puis colle sa réponse ici pour appliquer les changements.'
                 })}
                 <ol class="ai-track" aria-label="Étapes">
                     <li class="is-current"><span>1</span>Choisis</li>
@@ -362,8 +362,7 @@
                 <section class="ai-payload">
                     <div class="ai-payload-head">
                         <div>
-                            <span class="pz-kicker">Ce qui part vers l’IA</span>
-                            <h4>Ton dossier d’entraînement</h4>
+                            <h4>Données envoyées à l’IA</h4>
                         </div>
                         <span class="pz-chip" id="ai-payload-meter">${this.formatAiPromptSize(state.prompt)}</span>
                     </div>
@@ -503,8 +502,7 @@
 
             return `
                 ${this.renderAiHero({
-                    kicker: 'Coach IA',
-                    title: `Direction ${provider.name}`,
+                    title: `Envoyer à ${provider.name}`,
                     text: 'Discute avec l’IA, puis reviens coller sa réponse : l’app te montre les changements avant de les appliquer.',
                     mark: this.renderProviderMark(provider, 'is-hero'),
                     compact: true
@@ -561,7 +559,6 @@
         renderAiPaste() {
             return `
                 ${this.renderAiHero({
-                    kicker: 'Coach IA',
                     title: 'Colle la réponse de l’IA',
                     text: 'Tout le message, tel quel : l’app retrouve le programme toute seule.',
                     compact: true
@@ -613,13 +610,12 @@
             const state = this.aiState;
             const reasons = {
                 empty: 'Le texte collé est vide.',
-                'no-json': 'L’IA n’a pas encore donné de programme dans ce message. Normal si elle a seulement fait une analyse !',
+                'no-json': 'L’IA n’a pas encore donné de programme dans ce message. C’est normal si elle a seulement fait une analyse.',
                 'no-program': 'Il y a bien du JSON, mais pas un programme Worktout.',
                 invalid: `Le programme est incomplet : ${state.invalidMessage || 'format inattendu'}.`
             };
             return `
                 ${this.renderAiHero({
-                    kicker: 'Coach IA',
                     title: 'Pas de programme à appliquer',
                     text: this.escapeHtml(reasons[state.missingReason] || reasons['no-json']),
                     mark: '<span class="ai-orb is-muted" aria-hidden="true">🤔</span>',
@@ -668,7 +664,7 @@
             return `
                 ${this.renderAiHero({
                     kicker: 'Proposition de l’IA',
-                    title: diff.hasChanges ? 'Voici ce qui change' : 'Aucun changement',
+                    title: diff.hasChanges ? 'Changements proposés' : 'Aucun changement',
                     text: diff.hasChanges
                         ? `${sessionCount} séance${sessionCount > 1 ? 's' : ''} · vérifie puis applique en un tap.`
                         : 'Ce programme est identique à ton programme actuel.',
@@ -796,9 +792,8 @@
                 <div class="ai-applied">
                     <button type="button" class="ai-close is-light" data-ai-action="close" aria-label="Fermer">${CLOSE_SVG}</button>
                     <div class="ai-applied-medal">${CHECK_SVG}</div>
-                    <span class="ai-kicker">Coach IA</span>
-                    <h3 id="ai-coach-title">Programme appliqué !</h3>
-                    <p>${counts.sessions || 0} séance${counts.sessions > 1 ? 's' : ''} · ${counts.slots || 0} exercices. Le coach utilise déjà tes nouveaux objectifs, ton historique est intact.</p>
+                    <h3 id="ai-coach-title">Programme appliqué</h3>
+                    <p>${counts.sessions || 0} séance${counts.sessions > 1 ? 's' : ''} · ${counts.slots || 0} exercices. Ton historique est conservé.</p>
                 </div>
                 <div class="ai-actions">
                     <button type="button" class="btn btn-primary btn-large" data-ai-action="open-sessions">Voir mes séances</button>
@@ -865,8 +860,7 @@
                 <div class="ai-card-top">
                     <span class="ai-orb">${SPARKLE_SVG}</span>
                     <div>
-                        <span class="ai-kicker">Coach IA</span>
-                        <strong>Ton coach perso, boosté à l’IA</strong>
+                        <strong>Coach IA</strong>
                     </div>
                 </div>
                 <p>Envoie tes stats et ton programme à ChatGPT, Claude ou Gemini en un tap, puis applique ses conseils ici.</p>

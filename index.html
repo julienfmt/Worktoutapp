@@ -32,6 +32,21 @@
             var dark = choice === 'dark' || (choice === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         })();
+        // Language before first paint (same rules as i18n.js: ?lang, saved choice, phone, French).
+        (function () {
+            var supported = ['fr', 'en'];
+            var pick = function (value) { var code = String(value || '').toLowerCase().split(/[-_]/)[0]; return supported.indexOf(code) >= 0 ? code : null; };
+            var lang = null;
+            try { lang = pick(new URLSearchParams(location.search).get('lang')); } catch (e) {}
+            if (!lang) {
+                var choice = null;
+                try { choice = localStorage.getItem('locale'); } catch (e) {}
+                lang = choice && choice !== 'auto' ? pick(choice) : null;
+                var languages = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+                for (var i = 0; !lang && i < languages.length; i += 1) lang = pick(languages[i]);
+            }
+            document.documentElement.setAttribute('lang', lang || 'fr');
+        })();
     </script>
 </head>
 <body>
@@ -56,14 +71,14 @@
                         <header class="pane-header">
                             <div class="pane-header-text">
                                 <span class="home-date-kicker" id="home-date-kicker"></span>
-                                <h1 id="home-title">Prêt pour ta séance ?</h1>
+                                <h1 id="home-title" data-i18n="home.titleNoName">Bonjour</h1>
                             </div>
                             <div class="pane-header-actions">
-                            <button type="button" class="pane-header-btn friends-btn" id="btn-friends" aria-label="Amis" title="Amis" hidden>
+                            <button type="button" class="pane-header-btn friends-btn" id="btn-friends" aria-label="Amis" title="Amis" data-i18n-aria-label="home.friends" data-i18n-title="home.friends" hidden>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                 <span class="friends-badge" id="friends-badge" hidden></span>
                             </button>
-                            <button type="button" class="pane-header-btn" id="btn-settings" aria-label="Paramètres" title="Paramètres">
+                            <button type="button" class="pane-header-btn" id="btn-settings" aria-label="Réglages" title="Réglages" data-i18n-aria-label="home.settings" data-i18n-title="home.settings">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"/>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -81,12 +96,12 @@
                         <div class="suggested-session-card next-quest" id="suggested-session">
                     <div class="next-quest-head">
                         <div class="next-quest-heading">
-                            <span class="next-quest-tag" id="session-tag">Prochaine séance</span>
-                            <h2 class="session-name" id="session-name">Chargement...</h2>
+                            <span class="next-quest-tag" id="session-tag" data-i18n="home.nextSession">Prochaine séance</span>
+                            <h2 class="session-name" id="session-name" data-i18n="common.loading">Chargement…</h2>
                             <div class="next-quest-muscles" id="session-muscles"></div>
                         </div>
                     </div>
-                    <div class="last-session next-quest-last" id="last-session-info">Dernière séance : --</div>
+                    <div class="last-session next-quest-last" id="last-session-info"></div>
                     <!-- Kept for the session data hooks, not displayed on the card -->
                     <div class="next-quest-data" hidden>
                         <span id="session-duration">~45 min</span>
@@ -99,13 +114,13 @@
                             <span class="next-quest-play" aria-hidden="true">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.8 5.14v13.72a1 1 0 0 0 1.52.85l10.8-6.86a1 1 0 0 0 0-1.7L8.32 4.29A1 1 0 0 0 6.8 5.14z"/></svg>
                             </span>
-                            Démarrer la séance
+                            <span data-i18n="home.startSession">Démarrer la séance</span>
                         </button>
                         <button class="btn btn-secondary next-quest-change" id="btn-change-session">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M17 3l4 4-4 4M3 7h18M7 21l-4-4 4-4M21 17H3"/>
                             </svg>
-                            Changer de séance
+                            <span data-i18n="home.changeSession">Changer de séance</span>
                         </button>
                     </div>
                 </div>
@@ -124,14 +139,14 @@
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                 </svg>
-                                Mes séances
+                                <span data-i18n="home.mySessions">Mes séances</span>
                             </button>
                             <button class="btn btn-outline btn-ai-coach" type="button" data-ai-open>
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                     <path d="M10 2.5l1.7 5.1 5.1 1.7-5.1 1.7L10 16.1l-1.7-5.1-5.1-1.7 5.1-1.7z"/>
                                     <path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" opacity=".75"/>
                                 </svg>
-                                Coach IA
+                                <span data-i18n="home.aiCoach">Coach IA</span>
                             </button>
                         </div>
                     </div>
@@ -142,8 +157,7 @@
                     <div class="home-content pane-scroll progress-zone" id="stats-section">
                         <header class="pane-header">
                             <div class="pane-header-text">
-                                <span class="home-date-kicker">Ton parcours</span>
-                                <h1>Deviens une machine</h1>
+                                <h1 data-i18n="journey.title">Parcours</h1>
                             </div>
                         </header>
 
@@ -168,8 +182,7 @@
                     <div class="home-content pane-scroll">
                         <header class="pane-header">
                             <div class="pane-header-text">
-                                <span class="home-date-kicker">Tes stats</span>
-                                <h1>Tes chiffres</h1>
+                                <h1 data-i18n="stats.title">Stats</h1>
                             </div>
                         </header>
 
@@ -179,16 +192,16 @@
                     <div class="history-calendar-header">
                         <div class="history-calendar-heading">
                             <div class="history-calendar-meta">
-                                <span class="history-calendar-kicker" id="history-calendar-kicker">Mois en cours</span>
+                                <span class="history-calendar-kicker" id="history-calendar-kicker" data-i18n="stats.history">Historique</span>
                                 <span class="history-calendar-summary" id="history-calendar-summary">0 séance</span>
                             </div>
-                            <h3 id="history-calendar-title">Historique du mois</h3>
+                            <h3 id="history-calendar-title"></h3>
                         </div>
                         <div class="history-calendar-nav">
-                            <button class="calendar-nav-btn" id="history-calendar-prev" type="button" aria-label="Mois précédent">
+                            <button class="calendar-nav-btn" id="history-calendar-prev" type="button" aria-label="Mois précédent" data-i18n-aria-label="stats.prevMonth">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
                             </button>
-                            <button class="calendar-nav-btn" id="history-calendar-next" type="button" aria-label="Mois suivant">
+                            <button class="calendar-nav-btn" id="history-calendar-next" type="button" aria-label="Mois suivant" data-i18n-aria-label="stats.nextMonth">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
                             </button>
                         </div>
@@ -206,9 +219,7 @@
                         <!-- Calendrier généré dynamiquement -->
                     </div>
                     <div class="history-calendar-legend" id="history-calendar-legend"></div>
-                    <div class="history-calendar-empty" id="history-calendar-empty" style="display: none;">
-                        Aucune séance sur ce mois.
-                    </div>
+                    <div class="history-calendar-empty" id="history-calendar-empty" style="display: none;" data-i18n="stats.calendarEmpty">Aucune séance ce mois-ci.</div>
                 </section>
 
                         <div class="pz-card activity-card" id="activity-card"></div>
@@ -226,8 +237,8 @@
                         <div class="pz-card backup-card">
                             <div class="pz-card-head">
                                 <div>
-                                    <span class="pz-kicker">Sauvegarde</span>
-                                    <h4>Tes données restent sur ton téléphone</h4>
+                                    <h4 data-i18n="stats.backup.title">Sauvegarde</h4>
+                                    <p class="pz-card-note" data-i18n="stats.backup.note">Tes données sont stockées uniquement sur cet appareil.</p>
                                 </div>
                             </div>
                             <div class="backup-actions">
@@ -237,7 +248,7 @@
                                 <polyline points="7 10 12 15 17 10"/>
                                 <line x1="12" y1="15" x2="12" y2="3"/>
                             </svg>
-                            Exporter
+                            <span data-i18n="stats.backup.export">Exporter</span>
                         </button>
                         <button class="btn btn-ghost" id="btn-import">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -245,7 +256,7 @@
                                 <polyline points="17 8 12 3 7 8"/>
                                 <line x1="12" y1="3" x2="12" y2="15"/>
                             </svg>
-                            Importer
+                            <span data-i18n="stats.backup.import">Importer</span>
                         </button>
                         <input type="file" id="import-file" accept=".json,.txt" hidden>
                     </div>
@@ -259,19 +270,19 @@
                 </section>
             </div>
 
-            <nav class="tabbar" role="tablist" aria-label="Navigation principale">
+            <nav class="tabbar" role="tablist" aria-label="Navigation principale" data-i18n-aria-label="nav.label">
                 <button type="button" class="tabbar-btn active" role="tab" id="home-tab-session" data-home-tab="session" aria-selected="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
-                    <span>Accueil</span>
+                    <span data-i18n="nav.home">Accueil</span>
                 </button>
                 <button type="button" class="tabbar-btn" role="tab" id="home-tab-progress" data-home-tab="progress" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
-                    <span>Parcours</span>
+                    <span data-i18n="nav.journey">Parcours</span>
                     <span class="home-tab-dot" id="home-tab-progress-dot" hidden></span>
                 </button>
                 <button type="button" class="tabbar-btn" role="tab" id="home-tab-stats" data-home-tab="stats" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-                    <span>Stats</span>
+                    <span data-i18n="nav.stats">Stats</span>
                 </button>
                 <span class="tabbar-indicator" aria-hidden="true"></span>
             </nav>
@@ -280,18 +291,16 @@
         <!-- Écran Séance -->
         <div id="screen-session" class="screen">
             <header class="header-session">
-                <button class="btn-back" id="btn-back-home">
+                <button class="btn-back" id="btn-back-home" aria-label="Retour" data-i18n-aria-label="common.back">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M15 18l-6-6 6-6"/>
                     </svg>
                 </button>
                 <div class="header-center">
-                    <h1 id="current-session-name">Séance</h1>
+                    <h1 id="current-session-name" data-i18n="session.title">Séance</h1>
                     <div class="session-timer" id="session-timer">00:00</div>
                 </div>
-                <button class="btn btn-finish" id="btn-finish-session">
-                    Terminer
-                </button>
+                <button class="btn btn-finish" id="btn-finish-session" data-i18n="session.finish">Terminer</button>
             </header>
 
             <!-- Progress Bar -->
@@ -313,23 +322,21 @@
                 <div class="modal-backdrop"></div>
                 <div class="modal-content finish-modal-content">
                     <div class="finish-modal-glow" aria-hidden="true"></div>
-                    <div class="finish-modal-badge" id="finish-badge">Finisher mode</div>
-
                     <div class="finish-modal-hero">
                         <div class="finish-modal-icon-wrap" aria-hidden="true">
                             <div class="finish-modal-icon-ring"></div>
                             <div class="finish-modal-icon" id="finish-hero-icon">✨</div>
                         </div>
                         <div class="finish-modal-copy">
-                            <h3 id="finish-title">Terminer la séance ?</h3>
-                            <p id="finish-message">Tu as complété tous les exercices !</p>
+                            <h3 id="finish-title" data-i18n="finish.title">Terminer la séance&nbsp;?</h3>
+                            <p id="finish-message"></p>
                         </div>
                     </div>
 
                     <div class="finish-modal-summary">
                         <div class="finish-modal-progress-block">
                             <div class="finish-modal-progress-header">
-                                <span id="finish-progress-label">Progression</span>
+                                <span id="finish-progress-label" data-i18n="finish.progress">Progression</span>
                                 <span id="finish-progress-value">0%</span>
                             </div>
                             <div class="finish-modal-progress-track" aria-hidden="true">
@@ -339,25 +346,25 @@
 
                         <div class="finish-modal-quick-stats">
                             <div class="finish-quick-stat">
-                                <span class="finish-quick-stat-label">Exercices</span>
+                                <span class="finish-quick-stat-label" data-i18n="finish.exercises">Exercices</span>
                                 <span class="finish-quick-stat-value" id="finish-stat-exercises">0/0</span>
                             </div>
                             <div class="finish-quick-stat">
-                                <span class="finish-quick-stat-label">Séries</span>
+                                <span class="finish-quick-stat-label" data-i18n="finish.sets">Séries</span>
                                 <span class="finish-quick-stat-value" id="finish-stat-sets">0</span>
                             </div>
                             <div class="finish-quick-stat">
-                                <span class="finish-quick-stat-label">Temps</span>
+                                <span class="finish-quick-stat-label" data-i18n="finish.duration">Durée</span>
                                 <span class="finish-quick-stat-value" id="finish-stat-duration">0 min</span>
                             </div>
                         </div>
 
-                        <div class="finish-modal-helper" id="finish-note">Tu peux encore faire un tour, ou valider maintenant.</div>
+                        <div class="finish-modal-helper" id="finish-note"></div>
                     </div>
 
                     <div class="modal-actions finish-modal-actions">
-                        <button class="btn btn-secondary" id="btn-cancel-finish">Continuer</button>
-                        <button class="btn btn-primary" id="btn-confirm-finish">Terminer la séance</button>
+                        <button class="btn btn-secondary" id="btn-cancel-finish" data-i18n="finish.continue">Continuer la séance</button>
+                        <button class="btn btn-primary" id="btn-confirm-finish" data-i18n="finish.confirm">Terminer la séance</button>
                     </div>
                 </div>
             </div>
@@ -366,7 +373,7 @@
         <!-- Écran Exercice -->
         <div id="screen-exercise" class="screen">
             <header class="header-exercise">
-                <button class="btn-back" id="btn-back-session">
+                <button class="btn-back" id="btn-back-session" aria-label="Retour à la séance" data-i18n-aria-label="exercise.backToSession">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M15 18l-6-6 6-6"/>
                     </svg>
@@ -421,7 +428,7 @@
                                 <div class="exercise-challenge-bar"><span id="exercise-challenge-bar-fill"></span></div>
                                 <strong id="exercise-challenge-count">0/0</strong>
                             </div>
-                            <div class="exercise-challenge-progress" id="exercise-challenge-progress">Garde-le en tête sur chaque série.</div>
+                            <div class="exercise-challenge-progress" id="exercise-challenge-progress"></div>
                         </div>
                     </div>
                     <!-- Coaching Advice Card: "mission du jour" -->
@@ -440,7 +447,6 @@
                                     </svg>
                                 </span>
                                 <div class="coaching-advice-heading-copy">
-                                    <span class="coaching-advice-eyebrow">Mission du jour</span>
                                     <span class="coaching-advice-title" id="coaching-advice-title">Conseil du coach</span>
                                 </div>
                             </div>
@@ -522,7 +528,6 @@
                                 </svg>
                             </span>
                             <div class="coaching-advice-heading-copy">
-                                <span class="coaching-advice-eyebrow">Coach</span>
                                 <span class="coaching-advice-title">Conseils superset</span>
                             </div>
                         </div>
@@ -579,11 +584,9 @@
                         <div class="coaching-advice-heading">
                             <span class="coaching-advice-icon" aria-hidden="true">↔</span>
                             <div class="coaching-advice-heading-copy">
-                                <span class="coaching-advice-eyebrow">Coach</span>
-                                <span class="coaching-advice-title">Lecture gauche / droite</span>
+                                <span class="coaching-advice-title">Gauche / droite</span>
                             </div>
                         </div>
-                        <span class="coaching-advice-chip">Optionnel</span>
                     </div>
                     <div class="coaching-advice-summary" id="unilateral-coach-summary">Chaque côté est suivi séparément.</div>
                     <div class="uni-coach-grid" id="unilateral-coach-grid" aria-live="polite"></div>
@@ -593,11 +596,10 @@
                     <!-- Séries générées dynamiquement -->
                 </div>
 
-                <section class="exercise-control-card" id="exercise-control-card" aria-label="Contrôle libre de l'exercice" hidden>
+                <section class="exercise-control-card" id="exercise-control-card" aria-label="Nombre de séries" hidden>
                     <div class="exercise-control-copy">
-                        <span class="exercise-control-eyebrow">Contrôle libre</span>
                         <strong id="exercise-volume-value">3 séries programmées</strong>
-                        <small id="exercise-volume-note">Le plan est une suggestion : tu gardes toujours la main.</small>
+                        <small id="exercise-volume-note"></small>
                     </div>
                     <div class="exercise-control-actions">
                         <div class="exercise-control-stepper" role="group" aria-label="Nombre de séries">
@@ -612,7 +614,6 @@
                 <section class="live-adaptation-card" id="live-adaptation-card" aria-live="polite" hidden>
                     <div class="live-adaptation-header">
                         <div>
-                            <span class="live-adaptation-eyebrow">Lecture en séance</span>
                             <strong id="live-adaptation-title">Signal détecté</strong>
                         </div>
                         <span class="live-adaptation-badge" id="live-adaptation-badge">Suggestion</span>
@@ -625,15 +626,13 @@
                         <button type="button" class="btn btn-secondary" id="btn-live-open-substitution" hidden>Voir les variantes</button>
                         <button type="button" class="btn btn-ghost" id="btn-live-dismiss">Ignorer</button>
                     </div>
-                    <small class="live-adaptation-footnote">Aucune modification n’est appliquée sans ton accord.</small>
                 </section>
 
                 <!-- Logbook - Dernière séance -->
                 <div class="exercise-progress-card exercise-stats-card" id="exercise-progress-card" style="display: none;">
                     <div class="exercise-progress-header">
                         <div>
-                            <div class="exercise-progress-kicker">Stats de l’exo</div>
-                            <div class="exercise-progress-title">Ta progression</div>
+                            <div class="exercise-progress-title">Progression</div>
                         </div>
                         <div class="exercise-progress-badge" id="exercise-progress-badge">Stable</div>
                     </div>
@@ -672,7 +671,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            Historique SuperSet
+                            Historique superset
                         </div>
                     </div>
                     
@@ -734,7 +733,6 @@
                 <div class="coach-decision-card coach-decision-card-superset" id="superset-decision-card" style="display: none;">
                     <div class="coach-decision-header">
                         <div>
-                            <span class="coach-decision-kicker">Coulisses du coach</span>
                             <h4>Pourquoi ces conseils</h4>
                         </div>
                         <span class="coach-decision-confidence" id="superset-decision-confidence">2 lectures coach</span>
@@ -749,7 +747,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            Historique Unilatéral
+                            Historique gauche / droite
                         </div>
                     </div>
                     
@@ -757,7 +755,7 @@
                     <div class="unilateral-logbook-exercise side-left">
                         <div class="unilateral-logbook-exercise-header">
                             <span class="unilateral-exercise-dot dot-left"></span>
-                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-left">Côté Gauche</span>
+                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-left">Côté gauche</span>
                             <span class="unilateral-logbook-date" id="unilateral-logbook-date-left">--</span>
                         </div>
                         <div class="unilateral-logbook-content" id="unilateral-logbook-content-left">
@@ -769,7 +767,7 @@
                     <div class="unilateral-logbook-exercise side-right">
                         <div class="unilateral-logbook-exercise-header">
                             <span class="unilateral-exercise-dot dot-right"></span>
-                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-right">Côté Droit</span>
+                            <span class="unilateral-logbook-exercise-name" id="unilateral-logbook-name-right">Côté droit</span>
                             <span class="unilateral-logbook-date" id="unilateral-logbook-date-right">--</span>
                         </div>
                         <div class="unilateral-logbook-content" id="unilateral-logbook-content-right">
@@ -807,14 +805,13 @@
                     </button>
                     <div class="exercise-note-editor">
                         <label for="exercise-note-input">Note de l'exercice</label>
-                        <textarea id="exercise-note-input" class="exercise-note-input" rows="3" placeholder="Machine bizarre, douleur coude, très facile, meilleure amplitude..."></textarea>
+                        <textarea id="exercise-note-input" class="exercise-note-input" rows="3" placeholder="Réglage machine, gêne, sensations…"></textarea>
                     </div>
                 </div>
 
                 <div class="coach-decision-card" id="coach-decision-card" style="display: none;">
                     <div class="coach-decision-header">
                         <div>
-                            <span class="coach-decision-kicker">Coulisses du coach</span>
                             <h4>Pourquoi ce conseil</h4>
                         </div>
                         <span class="coach-decision-confidence" id="coach-decision-confidence">Confiance --</span>
@@ -902,7 +899,7 @@
                             </button>
                         </div>
                         <div class="rpe-feedback" id="rpe-feedback">
-                            <span class="rpe-description">Optionnel · touche un smiley</span>
+                            <span class="rpe-description">Facultatif</span>
                         </div>
                     </div>
                     
@@ -915,7 +912,7 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                             <rect x="6" y="6" width="12" height="12" rx="2"/>
                         </svg>
-                        <span id="btn-timer-stop-label">Arrêter le timer</span>
+                        <span id="btn-timer-stop-label">Arrêter le repos</span>
                     </button>
                 </div>
             </div>
@@ -928,7 +925,7 @@
                         <div class="summary-icon" id="summary-icon">✅</div>
                     </div>
                     <div class="summary-kicker" id="summary-exercise-name"></div>
-                    <h3 id="summary-title">Exercice terminé !</h3>
+                    <h3 id="summary-title">Exercice terminé</h3>
                     <div class="summary-xp" id="summary-xp" hidden></div>
                     <div class="summary-stats">
                         <div class="stat">
@@ -958,8 +955,7 @@
             <div class="sheet-backdrop"></div>
             <div class="sheet-content">
                 <div class="sheet-handle"></div>
-                <h3>Choisir une séance</h3>
-                <p class="session-options-hint">Une couleur par séance, comme dans le calendrier.</p>
+                <h3 data-i18n="changeSession.title">Choisir une séance</h3>
                 <div class="session-options" id="session-options">
                     <!-- Options générées dynamiquement -->
                 </div>
@@ -1024,7 +1020,6 @@
                 </div>
                 <div class="exercise-library-toolbar">
                     <input type="text" id="exercise-library-search" class="form-input" placeholder="Rechercher : curl, presse, poulie…">
-                    <p class="exercise-library-helper">Choisis dans la liste, ou tape le nom de ton exercice s’il n’y est pas.</p>
                 </div>
                 <div class="exercise-library-filters" id="exercise-library-filters">
                     <!-- Catégories générées dynamiquement -->
@@ -1049,7 +1044,7 @@
                     <!-- Message de stagnation si applicable -->
                 </div>
                 <h3 id="pool-title">Choisir une variante</h3>
-                <p class="pool-subtitle" id="pool-subtitle">Remplace l'exercice actuel par une variante de la pool</p>
+                <p class="pool-subtitle" id="pool-subtitle"></p>
                 <div class="pool-list" id="pool-list">
                     <!-- Exercices de la pool générés dynamiquement -->
                 </div>
@@ -1067,8 +1062,7 @@
                 <div class="sheet-titlebar exercise-insights-titlebar">
                     <div class="sheet-titlebar-spacer"></div>
                     <div class="exercise-insights-heading">
-                        <span class="exercise-insights-eyebrow">Fiche perso</span>
-                        <h3>Tes stats sur l'exo</h3>
+                        <h3>Statistiques de l’exercice</h3>
                     </div>
                     <button type="button" class="btn-icon-small exercise-insights-close" id="btn-close-exo-profile" aria-label="Fermer la fiche">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
@@ -1146,28 +1140,25 @@
                         </svg>
                     </button>
                 </div>
-                <p class="exercise-insights-subtitle">Facultatif : rien ne modifie ton plan sans ton accord.</p>
 
                 <section class="optional-insight-card warmup-card" id="warmup-card" aria-label="Échauffement optionnel" hidden>
                     <div class="optional-insight-header">
                         <div>
-                            <span class="optional-insight-eyebrow">Optionnel · hors statistiques</span>
-                            <strong>Échauffement intelligent</strong>
-                            <small>Quelques rampes proposées selon ta charge. Tu peux les ignorer ou cocher uniquement les étapes utiles.</small>
+                            <strong>Échauffement</strong>
+                            <small>Montée en charge calculée sur ta charge de travail. Coche les étapes que tu fais.</small>
                         </div>
                     </div>
                     <div class="optional-insight-body" id="warmup-body">
                         <div class="warmup-list" id="warmup-list"></div>
-                        <small class="optional-insight-footnote">Ces étapes ne comptent jamais comme séries de travail.</small>
+                        <small class="optional-insight-footnote">Non comptées dans les statistiques.</small>
                     </div>
                 </section>
 
                 <section class="optional-insight-card recovery-map-card" id="recovery-map-card" aria-label="Carte de récupération" hidden>
                     <div class="optional-insight-header">
                         <div>
-                            <span class="optional-insight-eyebrow">Lecture indicative</span>
-                            <strong>Carte de récupération</strong>
-                            <small>Expositions récentes, séries effectives estimées et recouvrements secondaires.</small>
+                            <strong>Récupération</strong>
+                            <small>Séries récentes par muscle, muscles secondaires compris.</small>
                         </div>
                     </div>
                     <div class="optional-insight-body" id="recovery-map-body">
@@ -1183,8 +1174,8 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content">
                 <div class="resume-icon">🏋️</div>
-                <h3>Séance en cours détectée</h3>
-                <p id="resume-session-info">Tu avais une séance en cours. Veux-tu la reprendre ?</p>
+                <h3 data-i18n="resume.title">Séance en cours</h3>
+                <p id="resume-session-info"></p>
                 <div class="resume-progress">
                     <span id="resume-progress-text">0/0 exercices complétés</span>
                     <div class="resume-progress-bar">
@@ -1192,12 +1183,12 @@
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-secondary" id="btn-discard-session">Abandonner</button>
+                    <button class="btn btn-secondary" id="btn-discard-session" data-i18n="resume.discard">Abandonner</button>
                     <button class="btn btn-primary" id="btn-resume-session">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="5 3 19 12 5 21 5 3"/>
                         </svg>
-                        Reprendre
+                        <span data-i18n="resume.resume">Reprendre</span>
                     </button>
                 </div>
             </div>
@@ -1208,11 +1199,11 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content">
                 <div class="quit-icon">⚠️</div>
-                <h3>Quitter la séance ?</h3>
-                <p>Ta progression sera perdue si tu quittes maintenant.</p>
+                <h3 data-i18n="quit.title">Quitter la séance&nbsp;?</h3>
+                <p data-i18n="quit.body">Les séries de cette séance seront perdues.</p>
                 <div class="modal-actions">
-                    <button class="btn btn-secondary" id="btn-cancel-quit">Continuer la séance</button>
-                    <button class="btn btn-danger" id="btn-confirm-quit">Quitter</button>
+                    <button class="btn btn-secondary" id="btn-cancel-quit" data-i18n="quit.cancel">Continuer la séance</button>
+                    <button class="btn btn-danger" id="btn-confirm-quit" data-i18n="quit.confirm">Quitter</button>
                 </div>
             </div>
         </div>
@@ -1227,8 +1218,7 @@
                     <!-- Raison générée dynamiquement -->
                 </div>
                 <div class="deload-explanation">
-                    <p><strong>Qu'est-ce qu'un deload ?</strong></p>
-                    <p>Une semaine allégée permet à ton corps de récupérer et de surcompenser. C'est scientifiquement prouvé : après 4-6 semaines d'entraînement intensif, une phase de récupération optimise les gains musculaires.</p>
+                    <p>Une semaine plus légère pour récupérer. Après 4 à 6 semaines d’entraînement soutenu, elle aide à repartir plus fort.</p>
                     <div class="deload-changes">
                         <div class="deload-change">
                             <span class="change-icon">📉</span>
@@ -1530,8 +1520,8 @@
             <div class="sheet-content sheet-content-large">
                 <div class="sheet-handle"></div>
                 <div class="lms-header">
-                    <h3><span class="lms-title-icon"></span>Check-in Récupération</h3>
-                    <p class="lms-subtitle">Touche l’état de chaque muscle, puis lance ta séance.</p>
+                    <h3><span class="lms-title-icon"></span>Récupération</h3>
+                    <p class="lms-subtitle">Indique l’état de chaque muscle.</p>
                 </div>
 
                 <div class="cycle-checkin-card" id="cycle-checkin-card">
@@ -1559,14 +1549,6 @@
                 
                 <div class="lms-muscle-list" id="lms-muscle-list">
                     <!-- Generated dynamically based on session's muscle groups -->
-                </div>
-                
-                <div class="lms-info-card">
-                    <div class="lms-info-icon"></div>
-                    <div class="lms-info-text">
-                        <strong>À quoi ça sert ?</strong>
-                        <p>Le coach adapte surtout ses suggestions selon ta récupération. Le plan de base de la séance reste ta référence.</p>
-                    </div>
                 </div>
                 
                 <button class="btn btn-primary btn-large" id="btn-confirm-lms">
@@ -1608,13 +1590,11 @@
                         <span>Prêt</span>
                     </div>
                 </div>
-                <div class="adaptation-message" id="adaptation-message">
-                    Tes muscles sont bien récupérés. C'est le moment idéal !
-                </div>
+                <div class="adaptation-message" id="adaptation-message"></div>
                 <div class="adaptation-recommendation" id="adaptation-recommendation">
                     <!-- Volume recommendation based on LMS -->
                 </div>
-                <button class="btn btn-primary" id="btn-close-adaptation">C'est parti !</button>
+                <button class="btn btn-primary" id="btn-close-adaptation">Commencer</button>
             </div>
         </div>
 
@@ -1628,7 +1608,7 @@
                 <div class="challenge-modal-kicker">Défi de la séance</div>
                 <h3 id="challenge-modal-title">Objectif du jour</h3>
                 <div class="challenge-modal-target" id="challenge-modal-target">--</div>
-                <p id="challenge-modal-message">Le coach a choisi un défi adapté à ton historique.</p>
+                <p id="challenge-modal-message"></p>
                 <div class="challenge-modal-reward">
                     <span class="challenge-modal-reward-xp" id="challenge-modal-reward">+0 XP</span>
                     <span class="challenge-modal-reward-label">Bonus si tu le valides</span>
@@ -1638,6 +1618,9 @@
         </div>
     </div>
 
+    <script defer src="locales/fr.js?v=6.3.0"></script>
+    <script defer src="locales/en.js?v=6.3.0"></script>
+    <script defer src="i18n.js?v=6.3.0"></script>
     <script defer src="db.js?v=6.3.0"></script>
     <script defer src="data.js?v=6.3.0"></script>
     <script defer src="exercise-db.js?v=6.3.0"></script>

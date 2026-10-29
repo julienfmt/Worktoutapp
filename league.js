@@ -114,7 +114,7 @@
                     </div>
                     <span class="pz-chip">${daysLeft <= 1 ? 'Dernier jour' : `${daysLeft} j`}</span>
                 </div>
-                <p class="league-rule">${state.tier < LEAGUES.length - 1 ? `Top ${PROMOTE} : montée en ${LEAGUES[state.tier + 1].name}.` : 'Ligue maximale : défends ta place.'}${state.tier > 0 ? ` Les ${DEMOTE} derniers redescendent.` : ''}</p>
+                <p class="league-rule">${state.tier < LEAGUES.length - 1 ? `Top ${PROMOTE} : montée en ${LEAGUES[state.tier + 1].name}.` : 'Ligue maximale.'}${state.tier > 0 ? ` Les ${DEMOTE} derniers redescendent.` : ''}</p>
                 <ol class="league-list">
                     ${around.map(({ row, index }) => {
                         const gap = lastIndex >= 0 && index - lastIndex > 1 ? '<li class="league-gap" aria-hidden="true">⋯</li>' : '';
@@ -129,7 +129,7 @@
                     }).join('')}
                 </ol>
                 <button type="button" class="pz-more" data-league-toggle>${expanded ? 'Réduire' : 'Voir tout le classement'}</button>
-                <small class="league-note">Rivaux simulés en attendant les ligues en ligne. Ton score = l’XP gagnée depuis lundi.</small>
+                <small class="league-note">Rivaux simulés pour l’instant. Score : XP gagnée depuis lundi.</small>
             `;
             card.querySelector('[data-league-toggle]')?.addEventListener('click', () => {
                 this.leagueExpanded = !this.leagueExpanded;
