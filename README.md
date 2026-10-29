@@ -22,6 +22,17 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
+### Nouveautés v6.3
+- 🏃 **Cardio sans friction** : par défaut, juste le chrono, l'objectif et « Démarrer ». Mode (continu / fractionné / libre), durée visée, vitesse, pente, résistance… sont rangés dans le tiroir **Réglages** (son état est retenu). En fin de bloc : durée + ressenti ; distance et calories derrière « Distance, calories (facultatif) ».
+- 👥 **Amis** (`social.js`) : bouton « potes » dans l'en-tête de l'accueil (pastille verte = invitation reçue).
+  - Inviter un pote : lien de partage (feuille de partage native sur iOS/Android via Capacitor, sinon Web Share / copie) avec un **code ami** à 6 caractères ; « Ajouter avec un code » pour l'autre sens.
+  - **Séance à deux** : choisis le pote et la séance (celle du jour en premier), la séance démarre et ton pote reçoit l'invitation. S'il a une séance du même nom il la fait, sinon elle est ajoutée en séance invitée, hors de son programme.
+  - Pendant la séance : bandeau « Avec Léa · 2/5 exos · 9 séries » sous la progression, et un toast quand il finit un exercice ou sa séance.
+  - À la fin : comparatif **Toi vs Léa** (séries, volume, exercices) dans le récap, mis à jour en direct s'il est encore en séance.
+  - **Classement de la semaine** entre potes (XP de la semaine, séances, « En séance »).
+  - Serveur : `workers/social-api.js` (Cloudflare Worker + KV, comptes anonymes par installation). Tant que `API_URL` n'est pas renseignée dans `social.js`, le bouton reste masqué. Aperçu complet sans serveur : ouvrir l'app avec `?social=demo` (amis simulés), `?social=off` pour revenir.
+- 🦏 **Nouvelle icône** (rhino) : PWA (192 / 512, maskable), `apple-touch-icon` 180, favicons 32 / 48, et pour les stores `icons/store/app-icon-1024.png` (App Store) et `icons/store/play-icon-512.png` (Google Play).
+
 ### Nouveautés v6.2
 - 🏃 **Console cardio épurée** : carte claire sans dégradés ni émojis, chrono sur un anneau fin, stats en direct sur une ligne, réglages (vitesse, pente, durée visée) en lignes simples, ressenti en sélecteur texte.
 - ⋯ **En-tête d'exercice simplifié** : un seul bouton « ⋯ » ouvre une liste claire (fiche technique, changer d'exercice, disques à charger, échauffement & récupération, comment ça marche). Icônes SVG au trait, plus de pastille « ? » sous le titre.

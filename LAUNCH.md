@@ -72,3 +72,14 @@ Aujourd'hui (`ai-coach.js` + `ai-coach-ui.js`) : l'app prépare un résumé de t
 4. **Photos de progression** (stockage local chiffré, comparaison avant/après).
 5. **Widgets** iOS/Android : série en cours, prochaine séance.
 6. **Apple Watch / Wear OS** : chrono de repos et validation de série au poignet.
+
+
+## Amis et séances à deux
+
+Client : `social.js`. Serveur : `workers/social-api.js` (Cloudflare Worker + KV `SOCIAL`, déploiement décrit en tête du fichier), puis renseigner `API_URL` dans `social.js`. Sans serveur configuré, la fonctionnalité est masquée ; `?social=demo` montre tout le parcours avec des amis simulés.
+
+Pour la version store :
+- Notifications push pour les invitations (aujourd'hui : relève toutes les 45 s app ouverte, toutes les 8 s pendant une séance à deux).
+- Lien d'invitation en *universal link* / *app link* pour ouvrir l'app directement (`?ami=CODE` est déjà géré au lancement).
+- Rattacher le compte anonyme à Sign in with Apple / Google pour garder ses amis en changeant de téléphone.
+- Illustration mascotte des amis (rhinos qui tapent dans la main) : remplacer `MASCOT_SRC` dans `social.js`.

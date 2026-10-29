@@ -1969,3 +1969,44 @@
 :where(html[data-theme="dark"]) .league-row {
     background: var(--bg-tertiary, #221d3d);
 }
+
+:where(html[data-theme="dark"]) .sf-mascot {
+    box-shadow: 0 4px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .sf-invite {
+    background: #2a2350;
+    border: 2px solid #2e2850;
+}
+
+:where(html[data-theme="dark"]) .sf-input {
+    border: 2px solid #2a2448;
+}
+
+:where(html[data-theme="dark"]) .sf-code-card {
+    background: #2a2350;
+    border: 2px solid #2e2850;
+}
+
+:where(html[data-theme="dark"]) .sf-choice {
+    border: 2px solid #2a2448;
+    box-shadow: 0 3px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .sf-session {
+    border: 2px solid #2a2448;
+    box-shadow: 0 3px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .sf-radio {
+    border: 2px solid #2a2448;
+}
+
+:where(html[data-theme="dark"]) .duo-strip {
+    border: 2px solid #2e2850;
+    box-shadow: 0 3px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .duo-strip-bar {
+    background: #2a2448;
+}
