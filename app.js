@@ -8040,7 +8040,6 @@ class App {
         this.slotsRenderToken = renderToken;
         const slots = await this.normalizeStoredSlots(await db.getSlotsBySession(this.currentSession.id));
         const container = document.getElementById('slots-list');
-        const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
 
         // Build superset map (firstSlotId -> secondSlotId)
         const supersetMap = {};
@@ -8079,7 +8078,7 @@ class App {
             // Get superset color
             const supersetColor = supersetColors[slot.id] !== undefined ? supersetColors[slot.id] : 0;
             
-            return this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor, { failureThreshold, isSkipped });
+            return this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor, { isSkipped });
         }));
 
         if (renderToken !== this.slotsRenderToken) return;
@@ -8104,113 +8103,6 @@ class App {
             : `${completed}/${total} exercices`;
     }
     
-    // ===== Performance Status (RPE-aware) =====
-    async getExerciseStatus(slot, failureThreshold = null) {
-        if (this.isTimedSlot(slot)) return { class: '', title: 'Suivi chronométré' };
-        const exerciseId = slot.activeExercise || slot.name;
-        const resolvedFailureThreshold = failureThreshold ?? ((await db.getSetting('failureCount')) ?? 3);
-        
-        // Get all set history for this exercise
-        const allSetHistory = (await this.getSetHistoryForExercise(exerciseId))
-            .filter(set => !set.isDeload);
-        
-        if (allSetHistory.length === 0) {
-            return { class: '', title: 'Nouveau' };
-        }
-        
-        // Group by workout
-        const workoutGroups = {};
-        for (const set of allSetHistory) {
-            if (!workoutGroups[set.workoutId]) {
-                workoutGroups[set.workoutId] = {
-                    date: set.date,
-                    sets: [],
-                    totalReps: 0,
-                    maxWeight: 0
-                };
-            }
-            workoutGroups[set.workoutId].sets.push(set);
-            workoutGroups[set.workoutId].totalReps += set.reps || 0;
-            workoutGroups[set.workoutId].maxWeight = Math.max(workoutGroups[set.workoutId].maxWeight, set.weight || 0);
-        }
-        
-        // Calculate avgRpe only from real data
-        for (const wId of Object.keys(workoutGroups)) {
-            const sets = workoutGroups[wId].sets;
-            const setsWithRpe = sets.filter(s => s.rpe != null);
-            workoutGroups[wId].hasRealRpe = setsWithRpe.length > 0;
-            workoutGroups[wId].avgRpe = setsWithRpe.length > 0 
-                ? setsWithRpe.reduce((sum, s) => sum + s.rpe, 0) / setsWithRpe.length 
-                : null;
-            workoutGroups[wId].sets.sort((a, b) => a.setNumber - b.setNumber);
-        }
-        
-        // Sort workouts by date (most recent first)
-        const workouts = Object.values(workoutGroups).sort((a, b) => 
-            new Date(b.date) - new Date(a.date)
-        );
-        
-        if (workouts.length < 2) {
-            return { class: '', title: 'Continue !' };
-        }
-        
-        // Smart progression check (Double Progression Dynamique)
-        const current = workouts[0];
-        const previous = workouts[1];
-        
-        // Check first set progression specifically
-        const currFirst = current.sets[0];
-        const prevFirst = previous.sets[0];
-        const firstSetImproved = (currFirst?.reps || 0) > (prevFirst?.reps || 0) || 
-                                  (currFirst?.weight || 0) > (prevFirst?.weight || 0);
-        
-        const repsImproved = current.totalReps > previous.totalReps;
-        const weightImproved = current.maxWeight > previous.maxWeight;
-        const hasProgression = firstSetImproved || repsImproved || weightImproved;
-        
-        if (hasProgression) {
-            return { class: 'success', title: 'Progression !' };
-        }
-        
-        // Count consecutive stagnation with RPE awareness (only if real RPE data exists)
-        let consecutiveStagnation = 1;
-        let lowEffortCount = (current.hasRealRpe && current.avgRpe !== null && current.avgRpe < 8) ? 1 : 0;
-        
-        for (let i = 1; i < Math.min(workouts.length - 1, resolvedFailureThreshold + 1); i++) {
-            const curr = workouts[i];
-            const prev = workouts[i + 1];
-            const currFirst = curr.sets[0];
-            const prevFirst = prev.sets[0];
-            
-            const noProgress = 
-                (currFirst?.reps || 0) <= (prevFirst?.reps || 0) && 
-                (currFirst?.weight || 0) <= (prevFirst?.weight || 0) &&
-                curr.totalReps <= prev.totalReps;
-            
-            if (noProgress) {
-                consecutiveStagnation++;
-                if (curr.hasRealRpe && curr.avgRpe !== null && curr.avgRpe < 8) lowEffortCount++;
-            } else {
-                break;
-            }
-        }
-        
-        // Intelligent status based on stagnation count and effort
-        if (consecutiveStagnation >= resolvedFailureThreshold) {
-            return { class: 'danger', title: `Plateau (${consecutiveStagnation}x)` };
-        } else if (consecutiveStagnation >= 2) {
-            if (lowEffortCount >= 2) {
-                return { class: 'warning', title: 'Effort insuffisant' };
-            }
-            return { class: 'warning', title: 'Deload suggéré' };
-        } else {
-            if (current.hasRealRpe && current.avgRpe !== null && current.avgRpe < 7.5) {
-                return { class: 'warning', title: 'Pousse plus !' };
-            }
-            return { class: 'warning', title: 'Persévère' };
-        }
-    }
-
     async createSlotCard(slot, isCompleted, isFirstInSuperset = false, isSecondInSuperset = false, firstSlotId = null, supersetColor = 0, renderOptions = {}) {
         const card = document.createElement('div');
         const isSkipped = Boolean(renderOptions.isSkipped);
@@ -8246,8 +8138,6 @@ class App {
             ? `<span class="slot-format-tag slot-substitution-tag">Variante ${substitutionCount > 1 ? `×${substitutionCount}` : ''}</span>`
             : '';
         
-        // Calculate performance status from history
-        const status = await this.getExerciseStatus(slot, renderOptions.failureThreshold);
         const isInSuperset = isFirstInSuperset || isSecondInSuperset;
         
         // Superset badge (only show when not completed)
@@ -8303,7 +8193,6 @@ class App {
                         ${formatBadge}
                         ${substitutionBadge}
                     </div>
-                    <span class="slot-status skipped" title="Exercice ignoré pour cette séance"></span>
                 </div>
                 <div class="slot-skipped-note">Exercice ignoré pour cette séance. Tu peux le reprendre quand tu veux.</div>
                 <div class="slot-actions">
@@ -8376,7 +8265,6 @@ class App {
                         ${supersetBadge}
                         ${challengeBadge}
                     </div>
-                    <div class="slot-status ${status.class}" title="${status.title}"></div>
                 </div>
                 <div class="slot-details">
                     ${this.getSlotSummaryMetrics(slot)

@@ -1145,17 +1145,14 @@
             const sets = theirs[name];
             if (!sets?.length) return;
             const friend = this.duo.friend;
-            const mine = this.currentWorkout?.slots?.[this.currentSlot.id]?.sets || [];
+            const [, deep] = BUDDY_COLORS[lookFor(friend).color] || BUDDY_COLORS[0];
             list.querySelectorAll('.series-card[data-set-index]').forEach(card => {
                 const index = Number(card.dataset.setIndex);
                 const theirSet = sets[index];
                 if (!theirSet) return;
-                const mySet = mine[index];
-                const myScore = mySet?.completed ? (Number(mySet.weight) || 0) * (1 + (Number(mySet.reps) || 0) / 30) : null;
-                const theirScore = theirSet.w * (1 + theirSet.r / 30);
-                const tone = myScore == null ? '' : myScore >= theirScore ? 'is-behind' : 'is-ahead';
                 const pill = document.createElement('span');
-                pill.className = `duo-set-pill ${tone}`;
+                pill.className = 'duo-set-pill';
+                pill.style.setProperty('--pill', deep);
                 pill.title = `${friend.name}, série ${index + 1}`;
                 pill.innerHTML = `${avatar(friend, 'xs')}<span>${String(theirSet.w).replace('.', ',')} kg × ${theirSet.r}</span>`;
                 card.appendChild(pill);

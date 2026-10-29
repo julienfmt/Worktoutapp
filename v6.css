@@ -4726,9 +4726,6 @@ html[data-theme="dark"] .btn-unilateral-validate {
     order: 4;
 }
 
-#screen-session .slot-status {
-    margin-top: 9px;
-}
 
 /* Session challenge: one gold banner, clearly labelled */
 #screen-session .slot-challenge-note,
@@ -4769,60 +4766,53 @@ html[data-theme="dark"] .slot-challenge-kicker {
     color: #fbbf24;
 }
 
-/* Session recap: estimated calories */
+/* Session recap: estimated calories, one quiet line */
 .fin-calories {
     display: flex;
-    align-items: center;
-    gap: 14px;
-    margin: 16px 0 0;
-    padding: 14px 16px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(236, 72, 153, 0.12));
-    border: 1px solid rgba(251, 146, 60, 0.35);
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--fin-line);
+    text-align: center;
     animation: finCaloriesIn 0.5s 0.8s both;
 }
 
 .fin-calories-icon {
-    flex: none;
-    width: 44px;
-    height: 44px;
+    align-self: center;
     display: grid;
-    place-items: center;
-    border-radius: 14px;
-    color: #fff;
-    background: linear-gradient(135deg, #fb923c, #f43f5e);
-    box-shadow: 0 3px 0 #be123c;
+    color: #fb923c;
+    filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.6));
 }
 
 .fin-calories-icon svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
 }
 
 .fin-calories-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
+    display: contents;
 }
 
 .fin-calories-copy strong {
     font-family: 'Nunito', 'Inter', sans-serif;
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     font-weight: 900;
     line-height: 1;
     color: #fff;
 }
 
 .fin-calories-copy strong small {
-    font-size: 0.8rem;
-    color: #fdba74;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--fin-muted);
 }
 
 .fin-calories-copy span {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fin-muted);
 }
 
 @keyframes finCaloriesIn {
@@ -5145,6 +5135,7 @@ html[data-theme="dark"] .slot-challenge-kicker {
 }
 
 .duo-set-pill {
+    --pill: #8b5cf6;
     position: absolute;
     top: 10px;
     right: 10px;
@@ -5154,9 +5145,8 @@ html[data-theme="dark"] .slot-challenge-kicker {
     gap: 5px;
     padding: 2px 9px 2px 2px;
     border-radius: 999px;
-    background: var(--bg-tertiary, #f1f5f9);
-    border: 1.5px solid #e4e4f7;
-    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--pill) 18%, transparent);
+    color: color-mix(in srgb, var(--pill) 60%, #1e1b4b);
     font-size: 11.5px;
     font-weight: 800;
     white-space: nowrap;
@@ -5164,19 +5154,9 @@ html[data-theme="dark"] .slot-challenge-kicker {
     animation: checkPop 0.35s var(--ease-spring, ease) both;
 }
 
-.duo-set-pill.is-ahead {
-    border-color: #f9a8d4;
-    color: #be185d;
-}
-
-.duo-set-pill.is-behind {
-    border-color: #86efac;
-    color: #15803d;
-}
-
 html[data-theme="dark"] .duo-set-pill {
-    background: #221d3d;
-    border-color: #2e2850;
+    background: color-mix(in srgb, var(--pill) 26%, transparent);
+    color: color-mix(in srgb, var(--pill) 45%, #fff);
 }
 
 /* ---------- Profile (Réglages) ---------- */

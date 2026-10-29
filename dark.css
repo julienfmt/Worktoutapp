@@ -666,11 +666,6 @@
     box-shadow: 0 2px 0 #2a2448;
 }
 
-:where(html[data-theme="dark"]) #screen-session .slot-status {
-    border: 2px solid #1b1733;
-    box-shadow: 0 0 0 2px #2e2850;
-}
-
 :where(html[data-theme="dark"]) #screen-session .slot-detail {
     background: #221d3d;
 }
@@ -2015,6 +2010,5 @@
 }
 
 :where(html[data-theme="dark"]) .duo-set-pill {
-    background: var(--bg-tertiary, #221d3d);
-    border: 1.5px solid #2a2448;
+    color: color-mix(in srgb, var(--pill) 60%, #f1f0ff);
 }

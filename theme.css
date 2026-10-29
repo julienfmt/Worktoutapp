@@ -2759,18 +2759,7 @@
     line-height: 1.25;
 }
 
-#screen-session .slot-status {
-    flex: 0 0 auto;
-    width: 12px;
-    height: 12px;
-    margin-top: 8px;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 2px #ececfb;
-}
 
-#screen-session .slot-status.success { box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25), 0 0 10px rgba(34, 197, 94, 0.5); }
-#screen-session .slot-status.warning { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25), 0 0 10px rgba(245, 158, 11, 0.5); }
-#screen-session .slot-status.danger { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25), 0 0 10px rgba(239, 68, 68, 0.5); }
 
 #screen-session .slot-details {
     display: grid;

@@ -665,29 +665,9 @@ body {
     flex-shrink: 1;
 }
 
-.slot-status {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--border);
-    transition: all 0.3s ease;
-}
 
-.slot-status.success { 
-    background: var(--success); 
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-}
 
-.slot-status.warning { 
-    background: var(--warning); 
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
-}
 
-.slot-status.danger { 
-    background: var(--danger); 
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-    animation: statusPulse 2s ease infinite;
-}
 
 @keyframes statusPulse {
     0%, 100% { transform: scale(1); opacity: 1; }
@@ -10213,10 +10193,6 @@ body {
     background: #94a3b8;
 }
 
-.slot-status.skipped {
-    background: #94a3b8;
-    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.14);
-}
 
 .slot-skipped-note {
     margin-bottom: 12px;
