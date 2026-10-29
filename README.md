@@ -160,6 +160,16 @@ Appli 100% statique : dépose le contenu du dossier sur n’importe quel héberg
 - `index.html` est servi à la racine.
 - Le scope du service worker reste `./` (chemins relatifs déjà configurés).
 
+## Traductions (i18n)
+Sans build : `locales/fr.js` (source de vérité) et `locales/en.js` remplissent `window.I18N_LOCALES`, `i18n.js` expose `window.t(key, params)` et `window.i18n` (chargés en `defer` avant `db.js`, précachés par le service worker).
+- **Langue** : choix `'auto' | 'fr' | 'en'` (défaut `auto` = langue du téléphone, français si non gérée), stocké dans `localStorage.locale` et recopié dans le réglage `locale` (suit les sauvegardes). `i18n.setLocale(choice)` enregistre et recharge ; `i18n.getChoice()`, `i18n.locale`, `i18n.supported`. `?lang=en` force une langue pour tester, sans l’enregistrer.
+- **Ajouter un texte** : ajoute la clé dans `locales/fr.js` puis `locales/en.js` (mêmes clés, espaces fines insécables ` ` avant `: ? ! ;` en français). Clés par écran : `home.*`, `onboarding.*`, `social.*`, `recap.*`, `finish.*`, `toast.*`, `help.*`, `common.*`…
+  - JS : `t('home.title', { name })` ; pluriel : entrée `{ one, other }` et `t('common.sets', { count })`.
+  - HTML statique : garde le texte français dans la balise et ajoute `data-i18n="clé"` (texte), `data-i18n-placeholder`, `data-i18n-aria-label` ou `data-i18n-title`. Sur un bouton avec icône, mets le texte dans un `<span data-i18n>`. Après un rendu dynamique de HTML statique, `applyI18n(element)`.
+  - Une clé absente en anglais retombe sur le français ; une clé absente partout s’affiche telle quelle (facile à repérer).
+- **Déjà migré** : navigation, accueil (titre, carte séance, streak, muscles, défi du mois), onboarding complet et bulles d’aide, amis et séance à deux, modale de fin et récap de séance, reprise/abandon de séance, toasts réécrits.
+- **Reste en français** : écran exercice et coach (messages du moteur de progression, testés), éditeur de séances et bibliothèque d’exercices, Parcours (chapitres, quêtes, trophées, ligue), cartes Stats, outils, cardio, Coach IA, réglages, notifications, noms de niveaux/paliers et données (noms d’exercices, muscles de `data.js`). Les noms d’exercices sont des identifiants : ne pas les traduire dans les données, seulement à l’affichage.
+
 ## Notes d’usage
 - Les timers de repos se restaurent après un retour depuis l’arrière-plan.
 - Le maintien d’écran actif est demandé automatiquement pendant un exercice quand le navigateur le permet ; il reste désactivable et sans impact sur les données.
