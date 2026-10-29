@@ -130,3 +130,8 @@ Appli 100% statique : dépose le contenu du dossier sur n’importe quel héberg
 
 ## Licence
 Non spécifiée. À définir selon tes besoins.
+
+### Nouveautés v5.7
+- 👋 Onboarding refait façon apps grand public : une question par écran, barre de progression animée, grandes cartes qui avancent toutes seules, sliders (séances/semaine avec les jours qui s'allument, durée sur cadran), mini-démo interactive du ressenti, écran « on prépare ton programme » puis programme **généré automatiquement** (objectif, niveau, jours, durée, matériel, zones prioritaires) avec confettis. Import / création manuelle / ChatGPT restent dispo via « J'ai déjà un programme ». Installation PWA en dernière étape.
+- 😤 Écran de repos : le RPE devient des smileys (😌 Facile → 💀 À fond). Aucun coché = pas de ressenti enregistré ; retoucher un smiley le décoche. Les séries validées affichent le smiley.
+- ❓ Petites bulles d'aide « ? » : deload, cycle, ressenti, objectifs de l'exercice (RIR), e1RM.

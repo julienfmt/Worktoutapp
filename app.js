@@ -704,8 +704,6 @@ class App {
         this.challengeRevealTimeout = null;
         this.pendingImportContext = 'default';
         this.onboardingVisible = false;
-        this.onboardingStepOrder = ['install', 'profile', 'program'];
-        this.currentOnboardingStepIndex = 0;
         this.storageInfoRefreshIntervalMs = 60000;
         this.storageInfoRefreshTimer = null;
         this.activeAppDialogResolver = null;
@@ -979,256 +977,6 @@ class App {
         if (/iphone|ipad|ipod/i.test(ua)) return 'ios';
         if (/android/i.test(ua)) return 'android';
         return 'desktop';
-    }
-
-    getOnboardingStepMeta(stepId) {
-        const labels = {
-            install: {
-                title: 'Installe l\'app',
-                nextLabel: 'Suivant'
-            },
-            profile: {
-                title: 'Crée ton programme',
-                nextLabel: 'Suivant'
-            },
-            program: {
-                title: 'Créer ta première séance',
-                nextLabel: ''
-            }
-        };
-
-        return labels[stepId] || labels.profile;
-    }
-
-    async showOnboarding() {
-        const goal = (await db.getSetting('weeklyGoal')) ?? 3;
-        const objective = (await db.getSetting('trainingObjective')) ?? '';
-        const installed = this.isAppInstalled();
-        const stepOrder = installed ? ['profile', 'program'] : ['install', 'profile', 'program'];
-        const modal = document.getElementById('modal-onboarding');
-
-        this.onboardingVisible = true;
-        this.onboardingStepOrder = stepOrder;
-        this.currentOnboardingStepIndex = 0;
-
-        const goalInput = document.getElementById('onboarding-weekly-goal');
-        const goalValue = document.getElementById('onboarding-weekly-goal-value');
-        const objectiveInput = document.getElementById('onboarding-objective');
-
-        if (goalInput) goalInput.value = goal;
-        if (goalValue) goalValue.textContent = goal;
-        if (objectiveInput) objectiveInput.value = objective;
-
-        this.updateOnboardingGoalChips(objective);
-        this.updateInstallInstructions();
-        this.updateOnboardingWeeklyGoalUI(goal);
-        this.renderOnboardingStep();
-
-        modal.classList.add('active');
-    }
-
-    hideOnboarding() {
-        this.onboardingVisible = false;
-        document.getElementById('modal-onboarding').classList.remove('active');
-    }
-
-    updateInstallInstructions() {
-        const platform = this.getInstallPlatform();
-        const grid = document.getElementById('onboarding-install-grid');
-
-        if (!grid) return;
-
-        const iosCard = grid.querySelector('.onboarding-install-card-ios');
-        const androidCard = grid.querySelector('.onboarding-install-card-android');
-
-        grid.querySelectorAll('.onboarding-install-card').forEach((card) => {
-            card.style.order = '';
-            card.classList.remove('is-priority');
-        });
-
-        if (platform === 'android') {
-            if (androidCard) {
-                androidCard.style.order = '-1';
-                androidCard.classList.add('is-priority');
-            }
-        } else if (platform === 'ios') {
-            iosCard?.classList.add('is-priority');
-        }
-    }
-
-    updateOnboardingWeeklyGoalUI(value) {
-        const goal = Math.max(1, Math.min(7, parseInt(value, 10) || 3));
-        const progress = (goal - 1) / 6;
-        const lightness = 88 - (progress * 36);
-        const saturation = 52 + (progress * 28);
-        const accent = `hsl(244 ${saturation}% ${lightness}%)`;
-        const accentMid = `hsl(246 ${Math.max(44, saturation - 8)}% ${Math.min(94, lightness + 12)}%)`;
-        const accentSoft = `hsl(248 100% ${Math.min(98, lightness + 15)}%)`;
-        const accentGlow = `hsl(244 ${Math.min(96, saturation + 6)}% ${Math.max(40, lightness - 4)}% / ${0.14 + (progress * 0.22)})`;
-        const accentBorder = `hsl(244 ${Math.min(92, saturation + 4)}% ${Math.max(46, lightness - 2)}% / 0.24)`;
-        const captions = [
-            'Départ en douceur',
-            'Rythme tranquille',
-            'Bon rythme',
-            'Très solide',
-            'Ça monte fort',
-            'Gros rythme',
-            'Mode machine'
-        ];
-
-        const card = document.getElementById('onboarding-weekly-card');
-        const valueBadge = document.getElementById('onboarding-weekly-goal-value');
-        const caption = document.getElementById('onboarding-weekly-goal-caption');
-        const meter = document.getElementById('onboarding-weekly-meter');
-
-        if (valueBadge) valueBadge.textContent = goal;
-        if (caption) caption.textContent = captions[goal - 1] || captions[2];
-
-        if (card) {
-            card.style.setProperty('--onboarding-goal-accent', accent);
-            card.style.setProperty('--onboarding-goal-mid', accentMid);
-            card.style.setProperty('--onboarding-goal-soft', accentSoft);
-            card.style.setProperty('--onboarding-goal-glow', accentGlow);
-            card.style.setProperty('--onboarding-goal-border', accentBorder);
-        }
-
-        if (meter) {
-            meter.querySelectorAll('span').forEach((dot, index) => {
-                dot.classList.toggle('active', index < goal);
-            });
-        }
-    }
-
-    renderOnboardingStep() {
-        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex] || 'profile';
-        const meta = this.getOnboardingStepMeta(currentStep);
-        const total = this.onboardingStepOrder.length;
-
-        document.querySelectorAll('.onboarding-panel').forEach((panel) => {
-            panel.classList.toggle('active', panel.dataset.step === currentStep);
-        });
-
-        const title = document.getElementById('onboarding-title');
-        if (title) title.textContent = meta.title;
-
-        const badge = document.getElementById('onboarding-step-badge');
-        if (badge) badge.textContent = `Étape ${this.currentOnboardingStepIndex + 1}/${total}`;
-
-        const backBtn = document.getElementById('btn-onboarding-back');
-        if (backBtn) {
-            backBtn.style.visibility = this.currentOnboardingStepIndex === 0 ? 'hidden' : 'visible';
-        }
-
-        const skipBtn = document.getElementById('btn-onboarding-skip');
-        if (skipBtn) {
-            const isProgramStep = currentStep === 'program';
-            skipBtn.style.display = isProgramStep ? 'inline-flex' : 'none';
-        }
-
-        const nextBtn = document.getElementById('btn-onboarding-next');
-        if (nextBtn) {
-            const isProgramStep = currentStep === 'program';
-            nextBtn.style.display = isProgramStep ? 'none' : 'inline-flex';
-            nextBtn.textContent = meta.nextLabel;
-        }
-
-        const stepper = document.getElementById('onboarding-stepper');
-        if (stepper) {
-            stepper.style.gridTemplateColumns = `repeat(${Math.max(total, 1)}, minmax(0, 1fr))`;
-            stepper.innerHTML = this.onboardingStepOrder.map((stepId, index) => `
-                <span class="onboarding-stepper-dot ${index === this.currentOnboardingStepIndex ? 'active' : ''}" data-step="${stepId}"></span>
-            `).join('');
-        }
-    }
-
-    updateOnboardingGoalChips(activeValue = '') {
-        const normalized = (activeValue || '').trim().toLowerCase();
-        document.querySelectorAll('#onboarding-goal-chips .onboarding-chip').forEach((chip) => {
-            chip.classList.toggle('active', chip.dataset.value.trim().toLowerCase() === normalized);
-        });
-    }
-
-    getOnboardingProfileValues() {
-        const weeklyGoalValue = parseInt(document.getElementById('onboarding-weekly-goal')?.value || '3', 10);
-        return {
-            objective: (document.getElementById('onboarding-objective')?.value || '').trim(),
-            weeklyGoal: Number.isFinite(weeklyGoalValue) ? weeklyGoalValue : 3
-        };
-    }
-
-    async saveOnboardingProfile() {
-        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
-
-        if (!objective) {
-            document.getElementById('onboarding-objective')?.focus();
-            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
-            return false;
-        }
-
-        await db.setSetting('trainingObjective', objective);
-        await db.setSetting('weeklyGoal', weeklyGoal);
-        return true;
-    }
-
-    async nextOnboardingStep() {
-        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex];
-        if (currentStep === 'profile') {
-            const saved = await this.saveOnboardingProfile();
-            if (!saved) return;
-        }
-
-        if (this.currentOnboardingStepIndex < this.onboardingStepOrder.length - 1) {
-            this.currentOnboardingStepIndex += 1;
-            this.renderOnboardingStep();
-        }
-    }
-
-    previousOnboardingStep() {
-        if (this.currentOnboardingStepIndex === 0) return;
-        this.currentOnboardingStepIndex -= 1;
-        this.renderOnboardingStep();
-    }
-
-    async completeOnboarding({ refreshHome = true } = {}) {
-        await db.setSetting('onboardingCompleted', true);
-        this.hideOnboarding();
-
-        if (refreshHome) {
-            await this.renderHome();
-        }
-    }
-
-    async skipOnboardingProgramStep() {
-        await this.completeOnboarding({ refreshHome: true });
-    }
-
-    async startOnboardingManualCreation() {
-        const saved = await this.saveOnboardingProfile();
-        if (!saved) return;
-
-        await this.completeOnboarding({ refreshHome: true });
-        await this.showEditSessionsSheet();
-        this.showNewSessionView();
-    }
-
-    async copyOnboardingPrompt() {
-        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
-        if (!objective) {
-            document.getElementById('onboarding-objective')?.focus();
-            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
-            return;
-        }
-
-        const prompt = this.buildChatProgramPrompt({ objective, weeklyGoal });
-        const copied = await this.copyTextToClipboard(prompt);
-
-        if (copied) {
-            await db.setSetting('trainingObjective', objective);
-            await db.setSetting('weeklyGoal', weeklyGoal);
-            this.showCoachToast('Prompt copié. Colle-le dans ChatGPT, réponds aux questions, puis importe le fichier.', 'hot', '📋');
-        } else {
-            this.showCoachToast('Copie impossible. Réessaie en restant appuyé puis colle dans ChatGPT.', 'warning', '📋');
-        }
     }
 
     buildChatProgramPrompt(profile = null) {
@@ -3523,7 +3271,7 @@ class App {
                 </div>
                 <div class="lift-crown-value">
                     <strong>${Math.round(best.e1rm)}</strong>
-                    <span>kg e1RM</span>
+                    <span>kg e1RM <button type="button" class="help-dot" data-help="e1rm" aria-label="C'est quoi e1RM ?">?</button></span>
                 </div>
             </button>
             ${progressRows.length ? `
@@ -6493,7 +6241,10 @@ class App {
         }
 
         // Light header: only the targets chip (sets × reps · rest · RIR) under the title.
-        const tags = ['<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>'];
+        const tags = [
+            '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>',
+            '<button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>'
+        ];
 
         container.innerHTML = tags.join('');
         this.syncExerciseTargetsChip();
@@ -6503,7 +6254,7 @@ class App {
     renderSupersetHeaderMeta() {
         const container = document.getElementById('exercise-header-meta');
         if (!container || !this.currentSlot || !this.supersetSlot) return;
-        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>';
+        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span><button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>';
         this.syncExerciseTargetsChip();
         this.updateTechniqueButton(this.currentSlot);
     }
@@ -13318,7 +13069,8 @@ class App {
             chips.push(`<span class="series-done-chip is-${versus.tone}">${this.escapeHtml(shortText)}</span>`);
         }
         if (setData.rpe != null && this.hasExplicitRpe(setData)) {
-            chips.push(`<span class="series-done-chip">RPE ${this.escapeHtml(String(setData.rpe))}</span>`);
+            const face = this.getRpeFace(setData.rpe);
+            chips.push(`<span class="series-done-chip is-face" title="${this.escapeHtml(face.label)}">${face.emoji} ${this.escapeHtml(face.label)}</span>`);
         }
         return `
             <div class="series-header series-done-row">
@@ -15346,18 +15098,23 @@ class App {
     }
     
     // ===== RPE Management =====
-    updateRpeDisplay(rpe) {
-        const rpeDescriptions = {
-            6: { text: 'Facile' },
-            7: { text: 'OK' },
-            8: { text: 'Propre' },
-            9: { text: 'Dur' },
-            10: { text: 'Échec' }
+    // The rest screen shows faces instead of RPE numbers; the value stored stays RPE 6-10.
+    getRpeFace(rpe) {
+        const faces = {
+            6: { emoji: '😌', label: 'Facile', reserve: 'il t\'en restait 4 ou plus' },
+            7: { emoji: '🙂', label: 'Ça va', reserve: 'il t\'en restait 3' },
+            8: { emoji: '😤', label: 'Dur', reserve: 'il t\'en restait 2' },
+            9: { emoji: '🥵', label: 'Très dur', reserve: 'il t\'en restait 1' },
+            10: { emoji: '💀', label: 'À fond', reserve: 'plus rien dans le réservoir' }
         };
-        
-        const desc = rpeDescriptions[rpe] || rpeDescriptions[8];
+        const rounded = Math.max(6, Math.min(10, Math.round(Number(rpe) || 8)));
+        return faces[rounded];
+    }
+
+    updateRpeDisplay(rpe) {
+        const face = this.getRpeFace(rpe);
         document.getElementById('rpe-feedback').innerHTML = `
-            <span class="rpe-description">RPE ${rpe} · ${desc.text}</span>
+            <span class="rpe-description"><strong>${face.emoji} ${face.label}</strong> · ${face.reserve}</span>
         `;
         
         // Update active quick choice
@@ -15382,7 +15139,7 @@ class App {
             chip.setAttribute('aria-pressed', 'false');
         });
         document.getElementById('rpe-feedback').innerHTML = `
-            <span class="rpe-description">Optionnel</span>
+            <span class="rpe-description">Optionnel · touche un smiley</span>
         `;
     }
     
@@ -19626,43 +19383,6 @@ class App {
             e.target.value = '';
         };
 
-        document.getElementById('btn-onboarding-next').onclick = () => this.nextOnboardingStep();
-        document.getElementById('btn-onboarding-back').onclick = () => this.previousOnboardingStep();
-        document.getElementById('btn-onboarding-skip').onclick = () => this.skipOnboardingProgramStep();
-        document.getElementById('btn-onboarding-import').onclick = async () => {
-            const saved = await this.saveOnboardingProfile();
-            if (!saved) return;
-            this.pendingImportContext = 'onboarding';
-            document.getElementById('import-file').click();
-        };
-        document.getElementById('btn-onboarding-manual').onclick = () => this.startOnboardingManualCreation();
-        document.getElementById('btn-onboarding-chat').onclick = () => this.copyOnboardingPrompt();
-
-        const onboardingGoalInput = document.getElementById('onboarding-weekly-goal');
-        if (onboardingGoalInput) {
-            onboardingGoalInput.oninput = (e) => {
-                this.updateOnboardingWeeklyGoalUI(e.target.value);
-            };
-        }
-
-        const onboardingObjectiveInput = document.getElementById('onboarding-objective');
-        if (onboardingObjectiveInput) {
-            onboardingObjectiveInput.oninput = (e) => this.updateOnboardingGoalChips(e.target.value);
-        }
-
-        const onboardingGoalChips = document.getElementById('onboarding-goal-chips');
-        if (onboardingGoalChips) {
-            onboardingGoalChips.onclick = (e) => {
-                const chip = e.target.closest('.onboarding-chip');
-                if (!chip) return;
-                const objectiveInput = document.getElementById('onboarding-objective');
-                if (objectiveInput) {
-                    objectiveInput.value = chip.dataset.value || '';
-                    this.updateOnboardingGoalChips(objectiveInput.value);
-                }
-            };
-        }
-
         // Session screen
         document.getElementById('btn-back-home').onclick = () => this.showQuitSessionModal();
         document.getElementById('btn-finish-session').onclick = () => this.showFinishModal();
@@ -20069,6 +19789,12 @@ class App {
         document.querySelectorAll('.rpe-chip').forEach(chip => {
             chip.onclick = () => {
                 const rpe = parseInt(chip.dataset.rpe);
+                // Tapping the selected face again clears it: no feeling recorded.
+                if (rpeSlider.dataset.touched === 'true' && parseInt(rpeSlider.value) === rpe) {
+                    this.resetRpeSlider();
+                    return;
+                }
+                this.hapticTap(10);
                 rpeSlider.value = rpe;
                 rpeSlider.dataset.touched = 'true';
                 const rpeSection = document.getElementById('rpe-section');
