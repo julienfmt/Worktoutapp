@@ -80,7 +80,7 @@
                 button.setAttribute('aria-selected', String(active));
             });
             document.querySelectorAll('#home-pager .home-pane').forEach((pane, paneIndex) => {
-                pane.toggleAttribute('inert', paneIndex !== index && this.homePaneSettledOnce === true);
+                pane.toggleAttribute('inert', paneIndex !== index);
                 pane.setAttribute('aria-hidden', String(paneIndex !== index));
             });
         },
@@ -105,9 +105,10 @@
         },
 
         async renderStats(homeData = null) {
-            await baseRenderStats.call(this, homeData);
+            // Trophies and quests rendered by the base read these metrics.
             const snapshotData = await this.resolveHomeDataSnapshot(homeData);
             this.gameMetrics = this.buildGameMetrics(snapshotData);
+            await baseRenderStats.call(this, homeData);
             this.renderStatsOverview();
             this.renderCardioStatsCard();
             this.renderJourneyPath?.();

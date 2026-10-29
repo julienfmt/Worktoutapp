@@ -144,12 +144,16 @@
         },
 
         hideOnboarding() {
+            clearTimeout(this.onboardingAdvanceTimer);
+            clearTimeout(this.onboardingBuildTimer);
             this.onboardingVisible = false;
             document.getElementById('modal-onboarding')?.classList.remove('active');
             document.body.classList.remove('onboarding-open');
         },
 
         previousOnboardingStep() {
+            clearTimeout(this.onboardingAdvanceTimer);
+            clearTimeout(this.onboardingBuildTimer);
             if (!this.onboardingIndex) {
                 if (this.onboardingMode === 'wizard') this.hideOnboarding();
                 return;
@@ -313,7 +317,8 @@
                             </ul>
                         </div>
                     `;
-                    setTimeout(() => {
+                    clearTimeout(this.onboardingBuildTimer);
+                    this.onboardingBuildTimer = setTimeout(() => {
                         if (this.onboardingSteps[this.onboardingIndex] === 'building') this.nextOnboardingStep();
                     }, 2300);
                     break;
@@ -459,10 +464,17 @@
                     document.getElementById('import-file')?.click();
                     break;
                 case 'accept-program':
-                    await this.saveOnboardingAnswers();
-                    await this.createOnboardingProgram(this.onboardingProgram);
-                    this.onboardingProgramCreated = true;
-                    gamification.burstFromElement?.(event.target, { count: 40, spread: 170, power: 12, shapes: ['star', 'circle', 'rect'] });
+                    if (this.onboardingAccepting) return;
+                    this.onboardingAccepting = true;
+                    event.target.closest('button')?.setAttribute('disabled', '');
+                    try {
+                        await this.saveOnboardingAnswers();
+                        await this.createOnboardingProgram(this.onboardingProgram);
+                        this.onboardingProgramCreated = true;
+                        gamification.burstFromElement?.(event.target, { count: 40, spread: 170, power: 12, shapes: ['star', 'circle', 'rect'] });
+                    } finally {
+                        this.onboardingAccepting = false;
+                    }
                     this.nextOnboardingStep();
                     break;
                 case 'manual':
@@ -480,7 +492,7 @@
             const answers = this.onboardingAnswers;
             const goal = GOALS.find(item => item.id === answers.goal);
             await db.setSetting('trainingObjective', goal?.objective || '');
-            await db.setSetting('weeklyGoal', answers.frequency || 3);
+            await db.setSetting('weeklyGoal', Math.min(7, (answers.frequency || 3) + (answers.cardio === 'dedicated' ? 1 : 0)));
             await db.setSetting('trainingProfile', {
                 goal: answers.goal,
                 level: answers.level,
@@ -589,16 +601,24 @@
                     if (strength.length >= 3 && this.estimateSessionDuration(draft) > duration + 12) break;
                     strength.push(candidate);
                 }
+                // Still over the time budget: shorter finisher, one set less on
+                // the 4-set lifts, and finally no finisher at all.
+                const estimate = () => this.estimateSessionDuration([...before, ...strength, ...after]
+                    .map(item => ({ ...this.resolveTemplateDefinition(item.name), ...item })));
+                if (after.length && estimate() > duration + 8) after[0] = { ...after[0], repsMin: 5, repsMax: 8 };
+                if (estimate() > duration + 8) strength.forEach(item => { if (item.sets > 3) item.sets = 3; });
+                if (after.length && estimate() > duration + 10) after.length = 0;
                 return { name: blueprint.name, emoji: blueprint.emoji, slots: [...before, ...strength, ...after] };
             });
             if (cardio === 'dedicated') {
+                const long = duration >= 60;
                 sessions.push({
                     name: 'Cardio',
                     emoji: '🏃',
                     slots: [
-                        { name: 'Tapis de course', sets: 1, repsMin: 20, repsMax: 35, rest: 0 },
-                        { name: 'Rameur', sets: 1, repsMin: 8, repsMax: 15, rest: 0 },
-                        { name: 'Gainage', sets: 3, repsMin: 30, repsMax: 60, rest: 45 }
+                        { name: 'Tapis de course', sets: 1, repsMin: duration <= 30 ? 15 : 20, repsMax: duration <= 30 ? 20 : (long ? 35 : 25), rest: 0 },
+                        { name: 'Rameur', sets: 1, repsMin: duration <= 30 ? 5 : 8, repsMax: long ? 15 : 10, rest: 0 },
+                        ...(duration > 30 ? [{ name: 'Gainage', sets: 3, repsMin: 30, repsMax: 60, rest: 45 }] : [])
                     ]
                 });
             }
