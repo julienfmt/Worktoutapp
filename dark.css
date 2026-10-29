@@ -2004,11 +2004,6 @@
     border: 5px solid #1b1733;
 }
 
-:where(html[data-theme="dark"]) .buddy-reveal-card em {
-    color: #f1f0ff;
-    background: #221d3d;
-}
-
 :where(html[data-theme="dark"]) .duo-set-pill {
     color: color-mix(in srgb, var(--pill) 60%, #f1f0ff);
 }

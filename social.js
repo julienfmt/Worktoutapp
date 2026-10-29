@@ -34,7 +34,6 @@
         ['#fecdd3', '#f43f5e']  // corail
     ];
     const BUDDY_PATTERNS = ['studio', 'starburst', 'dots', 'stripes', 'halo'];
-    const PATTERN_LABELS = { studio: 'Studio', starburst: 'Starburst', dots: 'Pois', stripes: 'Rayures', halo: 'Halo' };
     let looks = {};
 
     const svg = (body, size = 20) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -786,7 +785,6 @@
                             ${buddyArt(look, 'buddy-reveal-art')}
                             <strong>${escape(friend.name)}</strong>
                             <span>${escape(displayHandle(friend.handle))}</span>
-                            <em>Fond ${escape(PATTERN_LABELS[look.pattern] || '')}</em>
                         </div>
                         <p class="buddy-reveal-hint">Touche la boîte</p>
                         <button type="button" class="btn btn-primary btn-large buddy-reveal-ok">Trop bien</button>
