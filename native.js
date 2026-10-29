@@ -100,25 +100,6 @@
         en: { next: 'Next', today: 'today', tomorrow: 'tomorrow', none: 'Nothing planned, the rhino is resting', mobile: 'in the mobile app' }
     };
 
-    // Small rhino moments live in their own tiny stylesheet (no heavy boxes).
-    const injectRhinoStyles = () => {
-        if (document.getElementById('rhino-notif-style')) return;
-        const style = document.createElement('style');
-        style.id = 'rhino-notif-style';
-        style.textContent = `
-            .rhino-line { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; padding: 8px 14px 8px 8px; border-radius: 18px; background: color-mix(in srgb, var(--violet, #8b5cf6) 8%, transparent); }
-            .rhino-line img, .rhino-bubble img { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
-            .rhino-line-copy, .rhino-bubble-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-            .rhino-line-title, .rhino-bubble-title { font-size: 13.5px; font-weight: 700; color: var(--text-primary, #0f172a); line-height: 1.25; }
-            .rhino-line-body, .rhino-bubble-body { font-size: 12.5px; color: var(--text-secondary, #475569); line-height: 1.35; }
-            .rhino-bubble { position: fixed; left: 50%; bottom: calc(96px + var(--safe-bottom, 0px)); width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 22px; background: var(--card-bg, #fff); border: 1.5px solid color-mix(in srgb, var(--violet, #8b5cf6) 28%, transparent); box-shadow: 0 10px 28px color-mix(in srgb, var(--violet, #8b5cf6) 18%, transparent); z-index: 10001; opacity: 0; transform: translateX(-50%) translateY(14px); transition: opacity .3s ease, transform .3s ease; cursor: pointer; }
-            .rhino-bubble img { width: 46px; height: 46px; }
-            .rhino-bubble.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
-            @media (prefers-reduced-motion: reduce) { .rhino-bubble { transition: opacity .15s linear; transform: translateX(-50%); } }
-        `;
-        document.head.appendChild(style);
-    };
-
     Object.assign(App.prototype, {
         async getReminderPreferences() {
             const stored = (await db.getSetting('reminders')) || {};
@@ -234,94 +215,6 @@
             const dayLabel = diff === 0 ? text.today : diff === 1 ? text.tomorrow : at.toLocaleDateString(tag, { weekday: 'long' });
             const time = at.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit', hour12: locale === 'en' });
             return `${text.next} : ${dayLabel} ${time}`;
-        },
-
-        // ---------- In-app rhino moments (never a push) ----------
-        showRhinoBubble({ title, body, image = 'pouces' }) {
-            injectRhinoStyles();
-            document.querySelectorAll('.rhino-bubble').forEach(item => item.remove());
-            const bubble = document.createElement('div');
-            bubble.className = 'rhino-bubble';
-            bubble.setAttribute('role', 'status');
-            const img = document.createElement('img');
-            img.src = `icons/buddies/${image}.webp`;
-            img.alt = '';
-            const copy = document.createElement('div');
-            copy.className = 'rhino-bubble-copy';
-            const titleEl = document.createElement('span');
-            titleEl.className = 'rhino-bubble-title';
-            titleEl.textContent = title;
-            const bodyEl = document.createElement('span');
-            bodyEl.className = 'rhino-bubble-body';
-            bodyEl.textContent = body;
-            copy.append(titleEl, bodyEl);
-            bubble.append(img, copy);
-            document.body.appendChild(bubble);
-            const close = () => {
-                bubble.classList.remove('visible');
-                setTimeout(() => bubble.remove(), 350);
-            };
-            bubble.addEventListener('click', close);
-            setTimeout(() => bubble.classList.add('visible'), 50);
-            setTimeout(close, 6500);
-        },
-
-        // After the recap: the weekly goal wins over a record (one bubble only).
-        async showRhinoSessionMoment(recap) {
-            const streak = await streakEngine.getStreakData();
-            const locale = this.getRhinoLocale();
-            const goal = Math.max(1, Number(streak.weeklyGoal) || 3);
-            const goalJustMet = streak.currentWeekSessions === goal;
-            const recordCount = Number(recap?.recordCount) || 0;
-            if (!goalJustMet && recordCount < 1) return;
-            const now = new Date();
-            const moment = await this.withRhinoState(state => {
-                const lastRecord = state.lastRecordAt ? now - Date.parse(state.lastRecordAt) : Infinity;
-                const result = goalJustMet
-                    ? RN().inAppMoment('weekDone', { goal, streak2: (Number(streak.displayStreakCount) || 0) >= 2 }, state, now, locale)
-                    : RN().inAppMoment('record', { count: recordCount, many: recordCount >= 3, again: lastRecord < 10 * 86400000 }, state, now, locale);
-                if (result) Object.assign(state, result.state);
-                return result;
-            });
-            if (!moment) return;
-            // The goal moment waits for the "Objectif atteint" achievement to clear.
-            setTimeout(() => this.showRhinoBubble({ title: moment.title, body: moment.body, image: goalJustMet ? 'flex' : 'pouces' }), goalJustMet ? 3800 : 700);
-        },
-
-        // Rest-day line under the streak card on home (non-training days).
-        async renderRhinoRestLine() {
-            injectRhinoStyles();
-            const anchor = document.getElementById('week-prediction');
-            if (!anchor) return;
-            document.getElementById('rhino-line')?.remove();
-            const now = new Date();
-            const [history, streak] = await Promise.all([db.getAll('workoutHistory'), streakEngine.getStreakData()]);
-            const workouts = history.map(item => new Date(item.date)).filter(date => !Number.isNaN(date.getTime()));
-            if (!RN().isRestDay({ now, workouts, goal: streak.weeklyGoal })) return;
-            const locale = this.getRhinoLocale();
-            const moment = await this.withRhinoState(state => {
-                const result = RN().inAppMoment('rest', {}, state, now, locale);
-                if (result) Object.assign(state, result.state);
-                return result;
-            });
-            if (!moment || document.getElementById('rhino-line')) return;
-            const line = document.createElement('div');
-            line.id = 'rhino-line';
-            line.className = 'rhino-line';
-            const img = document.createElement('img');
-            img.src = 'icons/buddies/serviette.webp';
-            img.alt = '';
-            const copy = document.createElement('div');
-            copy.className = 'rhino-line-copy';
-            const title = document.createElement('span');
-            title.className = 'rhino-line-title';
-            title.textContent = moment.title;
-            const body = document.createElement('span');
-            body.className = 'rhino-line-body';
-            body.textContent = moment.body;
-            copy.append(title, body);
-            line.append(img, copy);
-            anchor.insertAdjacentElement('afterend', line);
         },
 
         // After each saved workout: health sync + refreshed reminders.
@@ -492,17 +385,7 @@
     App.prototype.showStimulusScoreAnimation = function showRecapThenSync(...args) {
         // The workout is saved at this point; run native follow-ups in the background.
         void this.onWorkoutSavedNative?.();
-        const result = baseShowStimulusScoreAnimation.apply(this, args);
-        // Once the recap is closed: the rhino reacts to a record / the weekly goal.
-        Promise.resolve(result).then(() => this.showRhinoSessionMoment(args[1])).catch(() => {});
-        return result;
-    };
-
-    const baseRenderHome = App.prototype.renderHome;
-    App.prototype.renderHome = async function renderHomeWithRhino(...args) {
-        const result = await baseRenderHome.apply(this, args);
-        await this.renderRhinoRestLine().catch(() => {});
-        return result;
+        return baseShowStimulusScoreAnimation.apply(this, args);
     };
 
     // Dev helper: logs the next reminders, the stored log and its stats.

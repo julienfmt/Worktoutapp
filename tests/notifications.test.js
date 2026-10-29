@@ -67,7 +67,6 @@ for (const trigger of Object.keys(RN.COPY.fr)) {
 }
 // Conditional lines are skipped when false.
 assert.notEqual(RN.pickMessage('session', { legs: false }, { locale: 'fr', used: {} }).id, 'session-jambes');
-assert.ok(!RN.pickMessage('record', { many: false, again: false }, { locale: 'fr', used: {} }).id.match(/progres|compte|encore/));
 
 // --- Legs line only when the next session is legs. ---
 const legsPlan = RN.buildPlan(base({ nextSession: { name: 'Legs', muscles: ['quadriceps', 'fessiers'] }, workouts: [], state: { ...RN.emptyState(), startedAt: NOW.toISOString() } }));
@@ -182,20 +181,6 @@ assert.equal(afterLog.history[0].followed, true);
 assert.equal(afterLog.pending.length, 0);
 assert.ok(afterLog.used['session-banc'], 'sent line is remembered');
 
-// --- In-app moments. ---
-const moment = RN.inAppMoment('record', { count: 4, many: true, again: false }, RN.emptyState(), NOW, 'fr');
-assert.ok(moment.title && moment.state.used[moment.id] && moment.state.lastRecordAt);
-const moment2 = RN.inAppMoment('record', { count: 4, many: true, again: false }, moment.state, NOW, 'fr');
-assert.notEqual(moment2.id, moment.id, 'record lines do not repeat');
-const restA = RN.inAppMoment('rest', {}, RN.emptyState(), NOW, 'fr');
-const restB = RN.inAppMoment('rest', {}, restA.state, NOW, 'fr');
-assert.equal(restA.id, restB.id, 'the rest-day line is stable for the day');
-// Rest days: only for an active user, never right after a workout today, never while away.
-assert.equal(RN.isRestDay({ now: NOW, workouts: [], goal: 3 }), false, 'new user: no rest-day line');
-assert.equal(RN.isRestDay({ now: at(2026, 10, 28, 10), workouts: [daysAgo(0, 8)], goal: 3 }), false, 'trained today');
-assert.equal(RN.isRestDay({ now: at(2026, 10, 28, 10), workouts: [daysAgo(6), daysAgo(8)], goal: 3 }), false, 'away: comeback territory, not rest');
-assert.equal(RN.isRestDay({ now: at(2026, 10, 30, 10), workouts: [at(2026, 10, 26, 18), at(2026, 10, 27, 18), at(2026, 10, 29, 18)], goal: 3 }), true, 'week done: rest');
-
 // --- Locale helper. ---
 assert.equal(RN.getLocale('auto', 'en-GB'), 'en');
 assert.equal(RN.getLocale('auto', 'fr-FR'), 'fr');
@@ -212,6 +197,6 @@ for (const locale of ['fr', 'en']) {
     }
 }
 const total = Object.values(RN.COPY.fr).reduce((sum, list) => sum + list.length, 0);
-assert.ok(total >= 40, `library has ${total} lines`);
+assert.ok(total >= 35, `library has ${total} lines`);
 
 console.log('notifications tests passed');

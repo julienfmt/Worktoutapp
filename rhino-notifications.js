@@ -7,7 +7,7 @@
 //      session, friends, past notifications) into the next reminders,
 //   3. the bookkeeping: resolveLog() (was a workout done after a reminder?),
 //      detectFriendEvents(), pickMessage() (never the same line twice in a
-//      row), inAppMoment() (records, goal done, rest day).
+//      row).
 // native.js gathers the data and schedules the result; the rules live here so
 // they can be tested in Node.
 (function (root, factory) {
@@ -48,13 +48,6 @@
                 { id: 'weeklast-appel', title: 'Dimanche. Dernier appel.', body: 'Je dis pas que je panique. Je panique un peu.' },
                 { id: 'weeklast-fin', title: 'La semaine se termine.', body: 'Pas de pression. Enfin, un peu. Moi j’en ai déjà beaucoup.' }
             ],
-            // Weekly goal reached (in-app, after the last session).
-            weekDone: [
-                { id: 'weekdone-propre', title: '{goal} sur {goal}. Propre.', body: 'J’ai fait trois tours de la salle pour fêter ça.' },
-                { id: 'weekdone-regulier', title: 'T’es régulier, toi.', body: 'Ça commence à me mettre la pression.', when: 'streak2' },
-                { id: 'weekdone-bouclee', title: 'Semaine bouclée.', body: 'J’ai sorti mon pompon. Je l’ai fabriqué moi-même.' },
-                { id: 'weekdone-repos', title: 'Objectif atteint.', body: 'Maintenant tu peux te reposer. C’est ma spécialité.' }
-            ],
             // Friends (only with real data).
             friendPassed: [
                 { id: 'fpassed-depasse', title: '{name} vient de te dépasser.', body: 'Je dis ça. Je dis rien.' },
@@ -94,22 +87,6 @@
                 { id: 'reward-attend', title: 'Il y a un truc qui t’attend.', body: 'Je l’ai pas ouvert. Je te jure.' },
                 { id: 'reward-coffre', title: 'Un coffre traîne dans l’app.', body: 'Je l’ai regardé. Il m’a regardé. On s’est rien dit.' }
             ],
-            // In-app only: records at the end of a session.
-            record: [
-                { id: 'record-serieux', title: 'Nouveau record. Sérieusement ?', body: 'Je vais devoir commencer à m’entraîner aussi.' },
-                { id: 'record-encore', title: 'Encore un record ?', body: 'Tu pourrais m’en laisser un de temps en temps.', when: 'again' },
-                { id: 'record-force', title: 'T’as gagné en force.', body: 'Moi j’ai gagné en confiance. Sans raison.' },
-                { id: 'record-progres', title: 'Regarde tes progrès.', body: 'Bon. Là, je suis un peu impressionné.', when: 'many' },
-                { id: 'record-compte', title: 'Ça fait {count} records.', body: 'Je demande un contrôle.', when: 'many' }
-            ],
-            // In-app only: planned rest day on home.
-            rest: [
-                { id: 'rest-repos', title: 'Aujourd’hui, repos.', body: 'C’est le seul exercice où je suis vraiment bon.' },
-                { id: 'rest-rien', title: 'On soulève rien aujourd’hui.', body: 'À part la télécommande.' },
-                { id: 'rest-recup', title: 'Récupération en cours.', body: 'J’ai pris un jour d’avance. Par sécurité.' },
-                { id: 'rest-off', title: 'Jour off.', body: 'Les muscles poussent pendant que tu fais rien. Moi je fais ça depuis des années, sans résultat.' },
-                { id: 'rest-immobile', title: 'Rien au programme.', body: 'Je m’entraîne à rester immobile. Niveau avancé.' }
-            ]
         },
         en: {
             session: [
@@ -134,12 +111,6 @@
                 { id: 'weeklast-serie', title: 'Last day of the week.', body: 'Your {streak}-week streak is counting on you. So am I, a bit.', when: 'streakMany' },
                 { id: 'weeklast-appel', title: 'Sunday. Last call.', body: 'I’m not saying I’m panicking. I’m panicking a little.' },
                 { id: 'weeklast-fin', title: 'The week is almost over.', body: 'No pressure. Well, some. I already have plenty.' }
-            ],
-            weekDone: [
-                { id: 'weekdone-propre', title: '{goal} out of {goal}. Clean.', body: 'I ran three laps around the gym to celebrate.' },
-                { id: 'weekdone-regulier', title: 'You’re consistent, you.', body: 'It’s starting to put pressure on me.', when: 'streak2' },
-                { id: 'weekdone-bouclee', title: 'Week wrapped.', body: 'I got my pom-pom out. I made it myself.' },
-                { id: 'weekdone-repos', title: 'Goal reached.', body: 'Now you can rest. It’s my specialty.' }
             ],
             friendPassed: [
                 { id: 'fpassed-depasse', title: '{name} just passed you.', body: 'I’m just saying. I’m saying nothing.' },
@@ -176,29 +147,15 @@
                 { id: 'reward-attend', title: 'Something’s waiting for you.', body: 'I didn’t open it. I swear.' },
                 { id: 'reward-coffre', title: 'A chest is lying around.', body: 'I looked at it. It looked at me. We said nothing.' }
             ],
-            record: [
-                { id: 'record-serieux', title: 'New record. Seriously?', body: 'I’m going to have to start training too.' },
-                { id: 'record-encore', title: 'Another record?', body: 'You could leave me one once in a while.', when: 'again' },
-                { id: 'record-force', title: 'You got stronger.', body: 'I got more confident. For no reason.' },
-                { id: 'record-progres', title: 'Look at your progress.', body: 'Okay. Now I’m a little impressed.', when: 'many' },
-                { id: 'record-compte', title: 'That’s {count} records.', body: 'I’m asking for a drug test.', when: 'many' }
-            ],
-            rest: [
-                { id: 'rest-repos', title: 'Rest day today.', body: 'It’s the only exercise I’m actually good at.' },
-                { id: 'rest-rien', title: 'We lift nothing today.', body: 'Except the remote.' },
-                { id: 'rest-recup', title: 'Recovery in progress.', body: 'I took a day in advance. Just in case.' },
-                { id: 'rest-off', title: 'Day off.', body: 'Muscles grow while you do nothing. I’ve done that for years, no results.' },
-                { id: 'rest-immobile', title: 'Nothing planned.', body: 'I’m training to stay still. Advanced level.' }
-            ]
         }
     };
 
     // Which preference chip gates which trigger.
     const TRIGGER_GROUP = {
-        session: 'streak', weekOne: 'streak', weekLast: 'streak', weekDone: 'streak',
+        session: 'streak', weekOne: 'streak', weekLast: 'streak',
         friendPassed: 'friends', friendFinished: 'friends', friendGap: 'friends', friendFirst: 'friends',
         comeback: 'comeback', farewell: 'comeback',
-        reward: 'rewards', record: 'rewards', rest: 'streak'
+        reward: 'rewards'
     };
 
     const QUIET_START = 22; // nothing from 22:00 ...
@@ -308,7 +265,7 @@
     }
 
     function emptyState() {
-        return { startedAt: null, used: {}, history: [], pending: [], ignored: 0, socialSnap: null, friendEvents: [], lastRecordAt: null, restToday: null, version: 1 };
+        return { startedAt: null, used: {}, history: [], pending: [], ignored: 0, socialSnap: null, friendEvents: [], version: 1 };
     }
 
     function normalizeState(raw) {
@@ -538,46 +495,10 @@
         return plan;
     }
 
-    // ---------- in-app moments ----------
-    // Returns { id, trigger, title, body, state } with the line marked as used,
-    // or null. kind: 'record' | 'weekDone' | 'rest'.
-    function inAppMoment(kind, ctx, rawState, now, locale) {
-        const state = normalizeState(rawState);
-        const when = now || new Date();
-        if (kind === 'rest') {
-            const today = dayKey(when);
-            if (state.restToday && state.restToday.day === today) {
-                const list = (COPY[locale] || COPY.fr).rest;
-                const known = list.find(item => item.id === state.restToday.id);
-                if (known) return { id: known.id, trigger: 'rest', title: known.title, body: known.body, state };
-            }
-        }
-        const message = pickMessage(kind, ctx || {}, { locale, used: state.used, seed: when.getDate() });
-        if (!message) return null;
-        state.used[message.id] = when.toISOString();
-        if (kind === 'record') state.lastRecordAt = when.toISOString();
-        if (kind === 'rest') state.restToday = { day: dayKey(when), id: message.id };
-        return { ...message, state };
-    }
-
-    // Is today a rest day worth a rhino line? Only for an active user: they
-    // trained recently and today is off-pattern, or the week is already done.
-    function isRestDay({ now, workouts, goal }) {
-        const dates = (workouts || []).filter(date => date <= now);
-        if (!dates.length) return false;
-        const last = dates.reduce((best, date) => (date > best ? date : best), dates[0]);
-        if (dayDiff(now, last) >= COMEBACK_FIRST_DAY) return false;
-        if (dates.some(date => dayKey(date) === dayKey(now))) return false;
-        const thisWeek = weekStart(now).getTime();
-        const done = dates.filter(date => date.getTime() >= thisWeek).length;
-        if (done >= Math.max(1, Number(goal) || 3)) return true;
-        return !getTrainingWeekdays(dates, goal, now).includes(now.getDay());
-    }
-
     return {
         COPY, TRIGGER_GROUP, LEG_MUSCLES,
         getLocale, pickMessage, getTrainingWeekdays, emptyState, normalizeState,
         resolveLog, getStats, buildSocialSnapshot, detectFriendEvents,
-        buildPlan, inAppMoment, isRestDay, weekStart, dayKey
+        buildPlan, weekStart, dayKey
     };
 });
