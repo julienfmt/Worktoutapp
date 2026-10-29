@@ -5805,13 +5805,6 @@ body {
 }
 
 /* ===== Settings Sheet ===== */
-.settings-section {
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    margin-bottom: 16px;
-}
-
 .session-cycle-preview {
     margin-top: 8px;
     margin-bottom: 16px;
@@ -5819,161 +5812,6 @@ body {
     font-size: 11px;
     line-height: 1.35;
     letter-spacing: 0.01em;
-}
-
-.settings-section-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.settings-section-title svg {
-    color: var(--primary);
-    flex-shrink: 0;
-}
-
-.settings-description {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
-    line-height: 1.4;
-}
-
-.settings-slider-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.settings-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    outline: none;
-}
-
-.settings-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 24px;
-    height: 24px;
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-    transition: transform 0.2s;
-}
-
-.settings-slider::-webkit-slider-thumb:active {
-    transform: scale(1.1);
-}
-
-.settings-slider::-moz-range-thumb {
-    width: 24px;
-    height: 24px;
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-}
-
-.settings-slider-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-align: center;
-}
-
-.settings-slider-value span {
-    font-size: 20px;
-    font-weight: 800;
-    color: var(--primary);
-}
-
-.settings-section-cheat {
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), var(--bg-tertiary));
-}
-
-.settings-section-cheat .settings-section-title svg {
-    color: var(--danger);
-}
-
-.settings-section-cycle-note {
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02));
-    border: 1px solid rgba(99, 102, 241, 0.12);
-}
-
-.settings-cheat-input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.settings-number-input {
-    width: 100%;
-    padding: 14px 16px;
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    font-size: 24px;
-    font-weight: 800;
-    line-height: 1;
-    text-align: center;
-}
-
-.settings-number-input:focus {
-    outline: none;
-    border-color: rgba(239, 68, 68, 0.45);
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
-}
-
-.settings-number-meta {
-    font-size: 13px;
-    color: var(--text-muted);
-    text-align: right;
-}
-
-.settings-number-meta span {
-    color: var(--danger);
-    font-weight: 700;
-}
-
-.storage-bar-container {
-    width: 100%;
-}
-
-.storage-bar {
-    width: 100%;
-    height: 12px;
-    background: var(--bg-primary);
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.storage-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--success), var(--primary));
-    border-radius: 6px;
-    transition: width 0.3s ease, background 0.3s ease;
-}
-
-.storage-bar-fill.warning {
-    background: linear-gradient(90deg, var(--warning), var(--warning-light));
-}
-
-.storage-bar-fill.danger {
-    background: linear-gradient(90deg, var(--error), var(--error-light));
 }
 
 /* ===== Coaching Advice Card ===== */
@@ -7971,19 +7809,6 @@ body {
 }
 
 /* ===== Settings Additions ===== */
-.settings-divider {
-    height: 1px;
-    background: var(--border-light);
-    margin: 24px 0 20px;
-}
-
-.settings-group-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 16px;
-}
-
 .settings-toggle-container {
     display: flex;
     align-items: center;

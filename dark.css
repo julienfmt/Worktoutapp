@@ -1897,22 +1897,6 @@
     background: #2a2350;
 }
 
-:where(html[data-theme="dark"]) .settings-plus-crown {
-    background: linear-gradient(135deg, #221d3d, #fbbf24);
-}
-
-:where(html[data-theme="dark"]) .settings-card {
-    border: 2px solid #2e2850;
-}
-
-:where(html[data-theme="dark"]) .settings-chip span {
-    border: 2px solid #2a2448;
-}
-
-:where(html[data-theme="dark"]) .settings-advanced {
-    border: 2px solid #2e2850;
-}
-
 :where(html[data-theme="dark"]) .tools-tab.active {
     box-shadow: 0 2px 0 #2a2448;
 }

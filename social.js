@@ -834,43 +834,48 @@
             return result;
         },
 
+        // Rows of the "Toi" group: prénom, plus @pseudo and email when the
+        // friends backend is on. Saved as soon as a field is left.
         async renderProfileSettings() {
             const block = document.getElementById('settings-profile-block');
-            if (!block) return;
+            const form = block?.closest('form');
+            if (!block || !form) return;
             const identity = await this.getSocialIdentity();
             const hasSocial = Boolean(this.social?.backend);
             block.innerHTML = `
-                <form class="settings-card profile-card" data-profile-form>
-                    <div class="settings-card-row">
-                        ${avatar({ id: 'me', name: identity.name })}
-                        <span class="settings-card-main"><strong>Profil</strong><small>${hasSocial ? 'Comment tes potes te voient et te trouvent' : 'Comment l’app t’appelle'}</small></span>
-                    </div>
-                    <label class="profile-field">
-                        <span>Prénom</span>
-                        <input class="form-input" name="name" maxlength="24" autocomplete="given-name" value="${escape(identity.name)}" placeholder="Ton prénom">
+                <label class="set-row">
+                    <span class="set-label">Prénom</span>
+                    <input class="set-input" name="name" maxlength="24" autocomplete="given-name" enterkeyhint="done" value="${escape(identity.name)}" placeholder="Ton prénom">
+                </label>
+                ${hasSocial ? `
+                    <label class="set-row">
+                        <span class="set-label">Pseudo</span>
+                        <input class="set-input" name="handle" maxlength="21" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" value="${identity.handle ? `@${escape(identity.handle)}` : ''}" placeholder="@pseudo">
                     </label>
-                    ${hasSocial ? `
-                        <label class="profile-field">
-                            <span>Pseudo</span>
-                            <span class="profile-handle"><b>@</b><input class="form-input" name="handle" maxlength="20" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" value="${escape(identity.handle)}" placeholder="pseudo"></span>
-                        </label>
-                        <label class="profile-field">
-                            <span>Email</span>
-                            <input class="form-input" name="email" type="email" inputmode="email" maxlength="80" autocomplete="email" value="${escape(identity.email)}" placeholder="ton@email.com">
-                        </label>
-                        <small class="profile-note">Tes potes peuvent t’ajouter avec ton @pseudo ou ton email. Ton email n’est jamais affiché.</small>
-                    ` : ''}
-                    <button type="submit" class="btn btn-secondary profile-save">Enregistrer le profil</button>
-                </form>
+                    <label class="set-row">
+                        <span class="set-label">Email</span>
+                        <input class="set-input" name="email" type="email" inputmode="email" maxlength="80" autocomplete="email" enterkeyhint="done" value="${escape(identity.email)}" placeholder="ton@email.com">
+                    </label>
+                ` : ''}
             `;
-            const form = block.querySelector('[data-profile-form]');
-            form.onsubmit = (event) => {
-                event.preventDefault();
-                void this.saveProfileSettings(form);
-            };
+            if (!form.dataset.profileBound) {
+                form.dataset.profileBound = 'true';
+                const save = (input) => {
+                    // One save at a time: a blur right after Enter must not race.
+                    this.profileSaveChain = (this.profileSaveChain || Promise.resolve())
+                        .then(() => this.saveProfileSettings(form, input))
+                        .catch(() => {});
+                };
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    const input = document.activeElement;
+                    if (input?.closest?.('#settings-profile-block')) input.blur();
+                });
+                block.addEventListener('change', (event) => save(event.target));
+            }
         },
 
-        async saveProfileSettings(form) {
+        async saveProfileSettings(form, changedInput = null) {
             const name = String(form.elements.name.value || '').trim().slice(0, 24);
             const email = String(form.elements.email?.value ?? (await db.getSetting('userEmail')) ?? '').trim().slice(0, 80);
             const typedHandle = form.elements.handle ? cleanHandle(form.elements.handle.value) : null;
@@ -887,7 +892,7 @@
             if (this.social?.me && (handle !== previous.handle || email !== previous.email || name !== previous.name)) {
                 try {
                     const saved = await this.social.backend.syncProfile({ name, email, handle });
-                    if (saved?.handle && saved.handle !== handle) form.elements.handle.value = saved.handle;
+                    if (saved?.handle && saved.handle !== handle) form.elements.handle.value = `@${saved.handle}`;
                 } catch (error) {
                     const messages = {
                         'handle-taken': `@${handle} est déjà pris. Essaie une variante.`,
@@ -902,7 +907,7 @@
             await db.setSetting('userName', name);
             await db.setSetting('userEmail', email);
             await db.setSetting('userHandle', handle);
-            this.showCoachToast('Profil enregistré', 'hot');
+            this.flashSettingSaved?.(changedInput || form.elements.name);
             void this.renderStreakSystem?.();
         },
 

@@ -20118,9 +20118,7 @@ class App {
         
         // Settings sheet
         document.querySelector('#sheet-settings .sheet-backdrop').onclick = () => this.hideSettingsSheet();
-        document.getElementById('btn-save-settings').onclick = () => this.saveSettings();
-        document.getElementById('btn-manual-cleanup').onclick = () => this.manualCleanup();
-        this.bindSettingsSliders();
+        this.bindSettingsSheet();
         
         document.getElementById('pool-list').onclick = (e) => {
             const selectBtn = e.target.closest('.btn-pool-select');
@@ -20476,116 +20474,256 @@ class App {
         }
     }
     
-    // ===== Settings Management =====
+    // ===== Settings (Réglages) =====
+    // One flat list. Every control saves as soon as it changes: no save button.
+    // Number fields: input id -> settings key, default shown when unset, and
+    // the side effects to run after a change.
+    getSettingsNumberFields() {
+        return {
+            'setting-body-weight': { key: 'bodyWeight', fallback: 75 },
+            'setting-body-height': { key: 'bodyHeight', fallback: null, start: 170 },
+            'setting-weekly-goal': { key: 'weeklyGoal', fallback: 3, refresh: true },
+            'setting-weight-increment': { key: 'weightIncrement', fallback: 2, coach: true },
+            'setting-deload-percent': { key: 'deloadPercent', fallback: 10, coach: true },
+            'setting-failure-count': { key: 'failureCount', fallback: 3, coach: true },
+            'setting-lock-weeks': { key: 'lockWeeks', fallback: 4, coach: true },
+            'setting-accumulation-weeks': { key: 'accumulationWeeks', fallback: 4, coach: true },
+            'setting-deload-volume': { key: 'deloadVolumeReduction', fallback: 50, coach: true },
+            'setting-cheat-streak': { key: 'streakCount', fallback: 0, confirm: true, refresh: true }
+        };
+    }
+
+    readSettingsNumberBounds(input) {
+        const min = parseFloat(input.min);
+        const max = parseFloat(input.max);
+        const step = parseFloat(input.step) || 1;
+        return {
+            min: Number.isFinite(min) ? min : -Infinity,
+            max: Number.isFinite(max) ? max : Infinity,
+            step
+        };
+    }
+
+    clampSettingsNumber(input, value) {
+        const { min, max, step } = this.readSettingsNumberBounds(input);
+        const base = Number.isFinite(min) ? min : 0;
+        const snapped = base + Math.round((value - base) / step) * step;
+        return Math.round(Math.min(max, Math.max(min, snapped)) * 100) / 100;
+    }
+
+    formatSettingsNumber(value) {
+        return String(value).replace('.', ',');
+    }
+
     async showSettingsSheet() {
-        // Load current settings
-        const weeklyGoal = (await db.getSetting('weeklyGoal')) ?? 3;
-        const failureCount = (await db.getSetting('failureCount')) ?? 5;
-        const deloadPercent = (await db.getSetting('deloadPercent')) ?? 10;
-        const weightIncrement = (await db.getSetting('weightIncrement')) ?? 2;
-        const lockWeeks = (await db.getSetting('lockWeeks')) ?? 4;
-        const streakCount = (await db.getSetting('streakCount')) ?? 0;
-        
-        // Periodization settings
-        const accumulationWeeks = (await db.getSetting('accumulationWeeks')) ?? 4;
-        const autoDeloadEnabled = (await db.getSetting('autoDeloadEnabled')) ?? true;
-        const deloadVolumeReduction = (await db.getSetting('deloadVolumeReduction')) ?? 50;
+        this.bindSettingsSheet();
+        const fields = this.getSettingsNumberFields();
+        for (const [id, field] of Object.entries(fields)) {
+            const input = document.getElementById(id);
+            if (!input) continue;
+            const stored = await db.getSetting(field.key);
+            const value = Number(stored);
+            const { min, max } = this.readSettingsNumberBounds(input);
+            const valid = stored != null && stored !== '' && Number.isFinite(value) && value >= min && value <= max;
+            const shown = valid ? value : field.fallback;
+            input.value = shown == null ? '' : this.formatSettingsNumber(shown);
+            input.dataset.saved = shown == null ? '' : String(shown);
+        }
+
+        const autoDeloadInput = document.getElementById('setting-auto-deload');
+        if (autoDeloadInput) autoDeloadInput.checked = ((await db.getSetting('autoDeloadEnabled')) ?? true) !== false;
+
         const storedWakeLockPreference = await db.getSetting('wakeLockEnabled');
         const wakeLockEnabled = storedWakeLockPreference == null
             ? (typeof localStorage === 'undefined' || localStorage.getItem('wakeLockEnabled') !== 'disabled')
             : storedWakeLockPreference !== false;
-        
-        // Set slider values
-        document.getElementById('setting-weekly-goal').value = weeklyGoal;
-        const bodyWeightInput = document.getElementById('setting-body-weight');
-        if (bodyWeightInput) {
-            const bodyWeight = (await db.getSetting('bodyWeight')) || 75;
-            bodyWeightInput.value = bodyWeight;
-            document.getElementById('setting-body-weight-value').textContent = bodyWeight;
-            bodyWeightInput.oninput = () => {
-                document.getElementById('setting-body-weight-value').textContent = bodyWeightInput.value;
-            };
-        }
-        document.getElementById('setting-weekly-goal-value').textContent = weeklyGoal;
-        
-        document.getElementById('setting-failure-count').value = failureCount;
-        document.getElementById('setting-failure-count-value').textContent = failureCount;
-        
-        document.getElementById('setting-deload-percent').value = deloadPercent;
-        document.getElementById('setting-deload-percent-value').textContent = deloadPercent;
-        
-        document.getElementById('setting-weight-increment').value = weightIncrement;
-        document.getElementById('setting-weight-increment-value').textContent = weightIncrement;
-        
-        document.getElementById('setting-lock-weeks').value = lockWeeks;
-        document.getElementById('setting-lock-weeks-value').textContent = lockWeeks;
-        
-        // Periodization settings
-        document.getElementById('setting-accumulation-weeks').value = accumulationWeeks;
-        document.getElementById('setting-accumulation-weeks-value').textContent = accumulationWeeks;
-        
-        document.getElementById('setting-auto-deload').checked = autoDeloadEnabled;
-        
-        document.getElementById('setting-deload-volume').value = deloadVolumeReduction;
-        document.getElementById('setting-deload-volume-value').textContent = deloadVolumeReduction;
         const wakeLockInput = document.getElementById('setting-wake-lock');
         if (wakeLockInput) wakeLockInput.checked = wakeLockEnabled;
 
-        const cheatStreakInput = document.getElementById('setting-cheat-streak');
-        cheatStreakInput.value = streakCount;
-        cheatStreakInput.dataset.currentValue = String(streakCount);
-        document.getElementById('setting-cheat-streak-current').textContent = streakCount;
-        
-        // Display storage information
+        document.querySelectorAll('#sheet-settings details.set-more').forEach(details => { details.open = false; });
+        const content = document.querySelector('#sheet-settings .sheet-content');
+        if (content) content.scrollTop = 0;
+
         await this.updateStorageStats();
-        
+
         document.getElementById('sheet-settings').classList.add('active');
     }
-    
+
+    bindSettingsSheet() {
+        const content = document.querySelector('#sheet-settings .sheet-content');
+        if (!content || content.dataset.settingsBound) return;
+        content.dataset.settingsBound = 'true';
+
+        content.addEventListener('click', (event) => {
+            const stepButton = event.target.closest('[data-step-dir]');
+            if (stepButton) {
+                event.preventDefault();
+                const input = stepButton.parentElement.querySelector('input');
+                const field = this.getSettingsNumberFields()[input?.id];
+                if (!input || !field) return;
+                const { step } = this.readSettingsNumberBounds(input);
+                const current = parseFloat(String(input.value).replace(',', '.'));
+                const next = Number.isFinite(current)
+                    ? current + step * Number(stepButton.dataset.stepDir)
+                    : (field.start ?? field.fallback ?? 0);
+                input.value = this.formatSettingsNumber(this.clampSettingsNumber(input, next));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                return;
+            }
+            if (event.target.closest('#btn-manual-cleanup')) {
+                void this.manualCleanup();
+            } else if (event.target.closest('#btn-settings-export')) {
+                void this.exportData();
+            } else if (event.target.closest('#btn-settings-import')) {
+                this.pendingImportContext = 'default';
+                document.getElementById('import-file')?.click();
+            }
+        });
+
+        content.addEventListener('change', (event) => {
+            void this.onSettingsInputChange(event.target);
+        });
+
+        // Enter on a number field commits it, like leaving the field.
+        content.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && event.target.matches?.('.set-stepper input')) {
+                event.preventDefault();
+                event.target.blur();
+            }
+        });
+    }
+
+    async onSettingsInputChange(input) {
+        if (!input?.id) return;
+
+        if (input.id === 'setting-auto-deload') {
+            await db.setSetting('autoDeloadEnabled', input.checked);
+            await this.ensureCycleStartDate();
+            this.flashSettingSaved(input);
+            return;
+        }
+
+        if (input.id === 'setting-wake-lock') {
+            const enabled = input.checked;
+            await db.setSetting('wakeLockEnabled', enabled);
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('wakeLockEnabled', enabled ? 'enabled' : 'disabled');
+            }
+            if (enabled) await this.syncScreenWakeLock();
+            else await this.releaseScreenWakeLock();
+            this.flashSettingSaved(input);
+            return;
+        }
+
+        const field = this.getSettingsNumberFields()[input.id];
+        if (!field) return;
+
+        const raw = String(input.value).trim().replace(',', '.');
+        if (raw === '' && field.fallback == null) {
+            // Optional value (height): clearing it forgets it.
+            if (input.dataset.saved !== '') {
+                await db.setSetting(field.key, null);
+                input.dataset.saved = '';
+                this.flashSettingSaved(input);
+            }
+            return;
+        }
+        const parsed = parseFloat(raw);
+        if (!Number.isFinite(parsed)) {
+            input.value = input.dataset.saved ? this.formatSettingsNumber(Number(input.dataset.saved)) : '';
+            return;
+        }
+        const value = this.clampSettingsNumber(input, parsed);
+        input.value = this.formatSettingsNumber(value);
+        if (String(value) === input.dataset.saved) return;
+
+        if (field.confirm) {
+            const previous = parseInt(input.dataset.saved ?? '0', 10) || 0;
+            const confirmed = await this.showAppConfirm(
+                value === 0
+                    ? `Ta série de ${previous} semaine${previous > 1 ? 's' : ''} repart de zéro.`
+                    : `Ta série passe de ${previous} à ${value} semaine${value > 1 ? 's' : ''}.`,
+                { title: 'Changer ta série ?', variant: 'warning', confirmText: 'Oui, changer', cancelText: 'Annuler' }
+            );
+            if (!confirmed) {
+                input.value = input.dataset.saved || '0';
+                return;
+            }
+        }
+
+        await db.setSetting(field.key, value);
+        input.dataset.saved = String(value);
+
+        if (field.key === 'accumulationWeeks') {
+            await db.setSetting('cycleLength', value + 1);
+            await db.setSetting('deloadWeek', value + 1);
+        }
+        if (field.key === 'bodyWeight') this.cachedBodyWeight = value;
+        if (field.coach || field.refresh) await this.ensureCycleStartDate();
+        if (field.refresh) this.scheduleSettingsRefresh();
+        this.flashSettingSaved(input);
+    }
+
+    async ensureCycleStartDate() {
+        if (!(await db.getSetting('cycleStartDate'))) {
+            await db.setSetting('cycleStartDate', new Date().toISOString());
+        }
+    }
+
+    // Weekly goal and streak feed the home streak and the reminders: refresh
+    // once the stepper settles instead of on every tap.
+    scheduleSettingsRefresh() {
+        clearTimeout(this.settingsRefreshTimer);
+        this.settingsRefreshTimer = setTimeout(() => {
+            void this.renderStreakSystem();
+            void this.syncReminders?.();
+        }, 500);
+    }
+
+    // Small check mark next to the label: the change is saved.
+    flashSettingSaved(element) {
+        const row = element?.closest?.('.set-row') || element?.closest?.('.set-more')?.querySelector('summary');
+        if (!row) return;
+        row.classList.remove('is-saved');
+        void row.offsetWidth;
+        row.classList.add('is-saved');
+        clearTimeout(row.savedTimer);
+        row.savedTimer = setTimeout(() => row.classList.remove('is-saved'), 1400);
+    }
+
     async updateStorageStats() {
         try {
             const storageInfo = await db.getStorageInfo();
             const oldWorkoutCount = await db.getOldWorkoutCount();
-            
-            if (storageInfo.quota && storageInfo.usage) {
-                const usedMB = (storageInfo.usage / 1024 / 1024).toFixed(2);
-                const quotaMB = (storageInfo.quota / 1024 / 1024).toFixed(2);
-                const percentUsed = Math.round((storageInfo.usage / storageInfo.quota) * 100);
-                
-                const infoElement = document.getElementById('storage-stats-info');
-                const barFill = document.getElementById('storage-bar-fill');
-                
-                infoElement.textContent = `${usedMB} MB utilisés sur ${quotaMB} MB disponibles (${percentUsed}%)`;
-                barFill.style.width = `${percentUsed}%`;
-                
-                // Color coding based on usage
-                barFill.classList.remove('warning', 'danger');
-                if (percentUsed >= 90) {
-                    barFill.classList.add('danger');
-                } else if (percentUsed >= 70) {
-                    barFill.classList.add('warning');
+            const infoElement = document.getElementById('storage-stats-info');
+
+            if (infoElement) {
+                if (storageInfo.quota && storageInfo.usage != null) {
+                    const usedMB = storageInfo.usage / 1024 / 1024;
+                    const percentUsed = Math.round((storageInfo.usage / storageInfo.quota) * 100);
+                    infoElement.textContent = `${usedMB.toLocaleString('fr-FR', { maximumFractionDigits: usedMB < 10 ? 1 : 0 })} Mo`;
+                    infoElement.classList.toggle('is-warn', percentUsed >= 70);
+                } else {
+                    infoElement.textContent = '—';
                 }
-            } else {
-                document.getElementById('storage-stats-info').textContent = 'Informations de stockage non disponibles';
             }
-            
-            // Update cleanup status
+
             const statusElement = document.getElementById('cleanup-status');
-            if (oldWorkoutCount > 0) {
-                statusElement.textContent = `${oldWorkoutCount} séance(s) de plus de 90 jours peuvent être nettoyées manuellement.`;
-                statusElement.style.color = '#f59e0b';
-            } else {
-                statusElement.textContent = 'Aucune donnée ancienne à nettoyer. Le nettoyage reste manuel par défaut.';
-                statusElement.style.color = '#22c55e';
+            const cleanupButton = document.getElementById('btn-manual-cleanup');
+            if (statusElement) {
+                statusElement.textContent = oldWorkoutCount > 0
+                    ? `${oldWorkoutCount} séance${oldWorkoutCount > 1 ? 's' : ''} de plus de 3 mois`
+                    : 'Rien à nettoyer pour l’instant';
             }
+            if (cleanupButton) cleanupButton.disabled = oldWorkoutCount === 0;
         } catch (error) {
             console.error('Erreur lors de la mise à jour des stats de stockage:', error);
         }
     }
-    
+
     async manualCleanup() {
         const oldWorkoutCount = await db.getOldWorkoutCount();
-        
+
         if (oldWorkoutCount === 0) {
             await this.showAppAlert('Aucune donnée ancienne à nettoyer.', {
                 title: 'Nettoyage',
@@ -20594,9 +20732,9 @@ class App {
             });
             return;
         }
-        
-        const confirmMsg = `Vous allez nettoyer ${oldWorkoutCount} séance(s) de plus de 90 jours.\n\nLes meilleures performances seront conservées pour les tendances.\n\nContinuer ?`;
-        
+
+        const confirmMsg = `Tu vas nettoyer ${oldWorkoutCount} séance(s) de plus de 90 jours.\n\nTes meilleures performances sont gardées pour les tendances.\n\nOn y va ?`;
+
         const confirmed = await this.showAppConfirm(confirmMsg, {
             title: 'Nettoyer les anciennes données ?',
             variant: 'warning',
@@ -20604,20 +20742,23 @@ class App {
             cancelText: 'Annuler'
         });
         if (!confirmed) return;
-        
+
+        const button = document.getElementById('btn-manual-cleanup');
         try {
-            document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyage en cours...';
-            document.getElementById('btn-manual-cleanup').disabled = true;
-            
+            if (button) {
+                button.textContent = 'Nettoyage…';
+                button.disabled = true;
+            }
+
             const result = await db.cleanupOldData();
-            
+
             await this.refreshStorageIndicators({ includeSettings: true });
-            
+
             const msg = `✅ Nettoyage terminé!\n\n` +
                 `• ${result.deletedWorkouts} séances supprimées\n` +
                 `• ${result.deletedSets} séries supprimées\n` +
                 `• ${result.preservedWorkouts} séances conservées (données essentielles)`;
-            
+
             await this.showAppAlert(msg, {
                 title: 'Nettoyage terminé',
                 variant: 'success',
@@ -20631,106 +20772,18 @@ class App {
                 confirmText: 'Fermer'
             });
         } finally {
-            document.getElementById('btn-manual-cleanup').textContent = '🧹 Nettoyer maintenant';
-            document.getElementById('btn-manual-cleanup').disabled = false;
+            if (button) button.textContent = 'Nettoyer';
+            await this.updateStorageStats();
         }
     }
-    
+
     hideSettingsSheet() {
-        document.getElementById('sheet-settings').classList.remove('active');
+        // Leaving a field commits it (its change event fires on blur).
+        const sheet = document.getElementById('sheet-settings');
+        if (sheet?.contains(document.activeElement)) document.activeElement.blur();
+        sheet?.classList.remove('active');
     }
-    
-    bindSettingsSliders() {
-        const sliders = [
-            { id: 'setting-weekly-goal', valueId: 'setting-weekly-goal-value' },
-            { id: 'setting-failure-count', valueId: 'setting-failure-count-value' },
-            { id: 'setting-deload-percent', valueId: 'setting-deload-percent-value' },
-            { id: 'setting-weight-increment', valueId: 'setting-weight-increment-value' },
-            { id: 'setting-lock-weeks', valueId: 'setting-lock-weeks-value' },
-            { id: 'setting-accumulation-weeks', valueId: 'setting-accumulation-weeks-value' },
-            { id: 'setting-deload-volume', valueId: 'setting-deload-volume-value' }
-        ];
-        
-        sliders.forEach(({ id, valueId }) => {
-            const slider = document.getElementById(id);
-            if (slider) {
-                slider.oninput = (e) => {
-                    document.getElementById(valueId).textContent = e.target.value;
-                };
-            }
-        });
-    }
-    
-    async saveSettings() {
-        const weeklyGoal = parseInt(document.getElementById('setting-weekly-goal').value);
-        const bodyWeightValue = parseInt(document.getElementById('setting-body-weight')?.value, 10);
-        if (Number.isFinite(bodyWeightValue) && bodyWeightValue >= 35) {
-            await db.setSetting('bodyWeight', bodyWeightValue);
-        }
-        const failureCount = parseInt(document.getElementById('setting-failure-count').value);
-        const deloadPercent = parseInt(document.getElementById('setting-deload-percent').value);
-        const weightIncrement = parseFloat(document.getElementById('setting-weight-increment').value);
-        const lockWeeks = parseInt(document.getElementById('setting-lock-weeks').value);
-        const cheatStreakInput = document.getElementById('setting-cheat-streak');
-        const currentStreakCount = parseInt(cheatStreakInput.dataset.currentValue ?? '0', 10) || 0;
-        const cheatStreakRaw = cheatStreakInput.value.trim();
-        const parsedCheatStreak = parseInt(cheatStreakRaw, 10);
-        const forcedStreakCount = cheatStreakRaw === ''
-            ? currentStreakCount
-            : (Number.isFinite(parsedCheatStreak) ? Math.max(0, parsedCheatStreak) : currentStreakCount);
-        
-        // Periodization settings
-        const accumulationWeeks = parseInt(document.getElementById('setting-accumulation-weeks').value);
-        const autoDeloadEnabled = document.getElementById('setting-auto-deload').checked;
-        const deloadVolumeReduction = parseInt(document.getElementById('setting-deload-volume').value);
-        const wakeLockEnabled = document.getElementById('setting-wake-lock')?.checked !== false;
 
-        cheatStreakInput.value = forcedStreakCount;
-
-        if (forcedStreakCount !== currentStreakCount) {
-            const targetLabel = forcedStreakCount === 0
-                ? '0 (reset du streak)'
-                : `${forcedStreakCount} semaine${forcedStreakCount > 1 ? 's' : ''}`;
-            const confirmCheat = confirm(
-                `Tu es sur de vouloir tricher et fixer le streak a ${targetLabel} ?\n\n` +
-                `Valeur actuelle : ${currentStreakCount}\n` +
-                `Cette action modifie directement le score streak.`
-            );
-            if (!confirmCheat) return;
-        }
-        
-        await db.setSetting('weeklyGoal', weeklyGoal);
-        await db.setSetting('failureCount', failureCount);
-        await db.setSetting('deloadPercent', deloadPercent);
-        await db.setSetting('weightIncrement', weightIncrement);
-        await db.setSetting('lockWeeks', lockWeeks);
-        
-        // Periodization settings
-        await db.setSetting('accumulationWeeks', accumulationWeeks);
-        await db.setSetting('cycleLength', accumulationWeeks + 1);
-        await db.setSetting('deloadWeek', accumulationWeeks + 1);
-        await db.setSetting('autoDeloadEnabled', autoDeloadEnabled);
-        await db.setSetting('deloadVolumeReduction', deloadVolumeReduction);
-        await db.setSetting('streakCount', forcedStreakCount);
-        await db.setSetting('wakeLockEnabled', wakeLockEnabled);
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('wakeLockEnabled', wakeLockEnabled ? 'enabled' : 'disabled');
-        }
-        if (wakeLockEnabled) await this.syncScreenWakeLock();
-        else await this.releaseScreenWakeLock();
-        
-        // Initialize cycle start date if not set
-        const cycleStartDate = await db.getSetting('cycleStartDate');
-        if (!cycleStartDate) {
-            await db.setSetting('cycleStartDate', new Date().toISOString());
-        }
-        
-        this.hideSettingsSheet();
-        
-        // Refresh streak system display with new goal
-        await this.renderStreakSystem();
-    }
-    
     // ===== ADVANCED HYPERTROPHY ENGINE =====
     // Bio-Algorithmic Coaching System based on:
     // - Beardsley Effective Reps Model
