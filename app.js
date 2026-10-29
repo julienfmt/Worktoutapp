@@ -22186,9 +22186,6 @@ class App {
 
     renderSessionFinishCalories(calories) {
         if (!(calories?.total > 0)) return '';
-        const detail = calories.cardio > 0 && calories.strength > 0
-            ? `${calories.strength} en muscu · ${calories.cardio} en cardio`
-            : calories.cardio > 0 ? 'en cardio' : 'en muscu';
         return `
             <div class="fin-calories" title="Estimation selon ton poids du corps (Réglages), la durée et le rythme de la séance">
                 <span class="fin-calories-icon" aria-hidden="true">
@@ -22196,7 +22193,7 @@ class App {
                 </span>
                 <span class="fin-calories-copy">
                     <strong>~${calories.total.toLocaleString('fr-FR')} <small>kcal</small></strong>
-                    <span>brûlées · ${detail}</span>
+                    <span>brûlées</span>
                 </span>
             </div>
         `;
