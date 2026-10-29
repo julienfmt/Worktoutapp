@@ -2974,6 +2974,7 @@ class App {
         this.progressContext = { snapshot, weekly, muscles, player, bestStreak, streakData };
 
         this.renderPlayerCard();
+        this.renderExoSearchCard?.();
         this.renderAiCoachCard();
         await this.renderQuestBoard();
         await this.renderTrophyCase();
@@ -3513,7 +3514,7 @@ class App {
                 </div>
                 <span class="pz-chip">${snapshot.prCount30} record${snapshot.prCount30 > 1 ? 's' : ''} / 30 j</span>
             </div>
-            <div class="lift-crown">
+            <button type="button" class="lift-crown" data-exo-open="${this.escapeHtml(best.exerciseId)}">
                 <span class="lift-crown-medal" aria-hidden="true">👑</span>
                 <div class="lift-crown-main">
                     <span>Ton lift le plus fort</span>
@@ -3524,12 +3525,12 @@ class App {
                     <strong>${Math.round(best.e1rm)}</strong>
                     <span>kg e1RM</span>
                 </div>
-            </div>
+            </button>
             ${progressRows.length ? `
                 <div class="lift-section-label">En progression</div>
                 <div class="lift-list">
                     ${progressRows.map(row => `
-                        <div class="lift-row">
+                        <div class="lift-row is-clickable" role="button" tabindex="0" data-exo-open="${this.escapeHtml(row.exerciseId)}">
                             <div class="lift-row-main">
                                 <strong>${this.escapeHtml(row.exerciseId)}</strong>
                                 <small>e1RM ${formatKg(row.latest.bestE1RM)} · ${row.sessions} séances</small>
@@ -3544,7 +3545,7 @@ class App {
                 <div class="lift-section-label">À surveiller</div>
                 <div class="lift-list">
                     ${watchRows.map(row => `
-                        <div class="lift-row">
+                        <div class="lift-row is-clickable" role="button" tabindex="0" data-exo-open="${this.escapeHtml(row.exerciseId)}">
                             <div class="lift-row-main">
                                 <strong>${this.escapeHtml(row.exerciseId)}</strong>
                                 <small>Sous ton meilleur niveau · ${row.sessions} séances</small>
@@ -19348,6 +19349,7 @@ class App {
         };
 
         this.bindTechniqueSheetEvents();
+        this.bindExoProfileEvents?.();
         const infoGrid = document.querySelector('#screen-exercise .info-grid');
         if (infoGrid) {
             new MutationObserver(() => this.syncExerciseTargetsChip())
@@ -24283,6 +24285,8 @@ class App {
     }
 
 }
+
+if (typeof ExoProfileMixin !== 'undefined') Object.assign(App.prototype, ExoProfileMixin);
 
 // Initialize app
 const app = new App();

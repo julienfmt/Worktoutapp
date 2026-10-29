@@ -19,6 +19,7 @@ const APP_SHELL_ASSETS = [
     './exercises-db.json?v=2',
     './data.js?v=5.5.22',
     './exercise-db.js?v=5.5.22',
+    './exo-profile.js?v=5.5.22',
     './app.js?v=5.5.22',
     './ai-coach.js?v=5.5.22',
     './ai-coach-ui.js?v=5.5.22',
