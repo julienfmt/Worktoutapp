@@ -68,6 +68,7 @@
     const baseOpenExercise = App.prototype.openExercise;
     const baseShowScreen = App.prototype.showScreen;
     const baseRenderSlots = App.prototype.renderSlots;
+    const baseConfirmFinishSession = App.prototype.confirmFinishSession;
 
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const pad = value => String(value).padStart(2, '0');
@@ -653,7 +654,9 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><polyline points="20 6 9 17 4 12"/></svg>
                         Valider le bloc
                     </button>
-                    <button type="button" class="cc-link" data-cc-action="${live.manual ? 'cancel-manual' : 'resume'}">${live.manual ? 'Annuler' : 'Reprendre le chrono'}</button>
+                    ${live.manual
+                        ? '<button type="button" class="cc-link" data-cc-action="cancel-manual">Annuler</button>'
+                        : (live.mode === 'intervals' ? '' : '<button type="button" class="cc-link" data-cc-action="resume">Reprendre le chrono</button>')}
                 </div>
             `;
         },
@@ -759,7 +762,10 @@
                 }
                 case 'start':
                 case 'resume': {
-                    if (!live) return;
+                    if (!live) {
+                        this.showCoachToast('Une seconde, le coach prépare ton bloc…', 'neutral', '⏳');
+                        return;
+                    }
                     this.unlockCardioAudio();
                     if (live.status === 'idle') live.accumulatedMs = 0;
                     if (live.status === 'finishing' && live.manual) return;
@@ -855,40 +861,26 @@
             live.lastSampleAt = null;
         },
 
-        async validateCardioBlock() {
-            const live = this.getCardioLive();
-            const slot = this.currentSlot;
-            const slotData = this.getCardioSlotData();
-            if (!live || !slot || !slotData) return;
+        // Turns a live (or manually entered) block into a cardio set. Pure:
+        // no DOM, so it can also save a block left running at workout end.
+        buildCardioSetFromLive(slot, live) {
             const profile = this.getCardioProfile(slot);
-            // Read the fields directly: a change event may not have fired yet.
-            document.querySelectorAll('[data-cc-finish]').forEach(input => {
-                const raw = parseFloat(String(input.value).replace(',', '.'));
-                live.finishDraft = live.finishDraft || {};
-                live.finishDraft[input.dataset.ccFinish] = Number.isFinite(raw) ? raw : '';
-            });
             const draft = live.finishDraft || {};
             if (live.manual && Number.isFinite(draft.primary)) live.primary = draft.primary;
             const totals = this.getCardioLiveTotals(live, profile);
             const minutes = Number(draft.minutes);
             const seconds = Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60) : Math.round(totals.elapsed);
-            if (!(seconds > 0)) {
-                document.querySelector('[data-cc-finish="minutes"]')?.focus();
-                this.showCoachToast('Indique la durée du bloc.', 'warning', '⏱️');
-                return;
-            }
+            if (!(seconds > 0)) return null;
             const averages = live.manual ? { primary: Number(live.primary) || 0, secondary: Number(live.secondary) || 0 } : totals.averages;
             const autoKcal = this.estimateCardioKcalPerMinute(profile.key, averages.primary, averages.secondary) * (seconds / 60);
             const autoDistance = profile.key === 'treadmill' ? averages.primary * (seconds / 3600) : (profile.key === 'swim' ? (Number(live.primary) || 0) / 1000 : 0);
             const distanceKm = Number.isFinite(Number(draft.distanceKm)) && draft.distanceKm !== '' ? Number(draft.distanceKm) : autoDistance;
             const calories = Number.isFinite(Number(draft.calories)) && draft.calories !== '' && Number(draft.calories) > 0 ? Number(draft.calories) : autoKcal;
             const feeling = FEELINGS.find(item => item.id === (draft.feeling || 'steady')) || FEELINGS[1];
-            const index = (slotData.sets || []).findIndex(set => !set?.completed);
-            const setIndex = index >= 0 ? index : (slotData.sets || []).length;
-            const primaryValue = Math.round(averages.primary * 10) / 10;
-
-            slotData.sets = slotData.sets || [];
-            slotData.sets[setIndex] = {
+            // Distance-like metrics are cumulative: keep the final value, not a time average.
+            const isCumulative = profile.primary.key === 'distance-m';
+            const primaryValue = Math.round((isCumulative ? (Number(live.primary) || 0) : averages.primary) * 10) / 10;
+            return {
                 weight: primaryValue,
                 reps: Math.round((seconds / 60) * 10) / 10,
                 trackingMode: 'cardio',
@@ -907,6 +899,11 @@
                     feeling: feeling.id,
                     targetMinutes: live.targetMinutes
                 },
+                // Standard fields read by stats and exercise profiles (v5.7.0).
+                ...(Number(distanceKm) > 0 ? { distanceMeters: Math.round(Number(distanceKm) * 1000) } : {}),
+                ...(profile.secondary?.key === 'incline' && averages.secondary > 0 ? { inclinePct: Math.round(averages.secondary * 10) / 10 } : {}),
+                ...(Number(calories) > 0 ? { calories: Math.round(Number(calories)) } : {}),
+                xpAwarded: 10 + Math.min(30, Math.floor(seconds / 60)),
                 targetReps: live.targetMinutes,
                 completed: true,
                 exerciseName: slot.activeExercise || slot.name,
@@ -916,6 +913,31 @@
                 rpe: feeling.rpe,
                 rpeSource: 'user'
             };
+        },
+
+        async validateCardioBlock() {
+            const live = this.getCardioLive();
+            const slot = this.currentSlot;
+            const slotData = this.getCardioSlotData();
+            if (!live || !slot || !slotData) return;
+            const profile = this.getCardioProfile(slot);
+            // Read the fields directly: a change event may not have fired yet.
+            document.querySelectorAll('[data-cc-finish]').forEach(input => {
+                const raw = parseFloat(String(input.value).replace(',', '.'));
+                live.finishDraft = live.finishDraft || {};
+                live.finishDraft[input.dataset.ccFinish] = Number.isFinite(raw) ? raw : '';
+            });
+            const built = this.buildCardioSetFromLive(slot, live);
+            if (!built) {
+                document.querySelector('[data-cc-finish="minutes"]')?.focus();
+                this.showCoachToast('Indique la durée du bloc.', 'warning', '⏱️');
+                return;
+            }
+            const seconds = built.durationSeconds;
+            const index = (slotData.sets || []).findIndex(set => !set?.completed);
+            const setIndex = index >= 0 ? index : (slotData.sets || []).length;
+            slotData.sets = slotData.sets || [];
+            slotData.sets[setIndex] = built;
             delete slotData.cardioLive;
 
             this.lastCompletedSetIndex = setIndex;
@@ -924,8 +946,7 @@
             await db.saveCurrentWorkout(this.currentWorkout);
 
             // 10 XP per block like any set, +1 per minute (capped) for the effort.
-            const bonus = Math.min(30, Math.floor(seconds / 60));
-            const xpGain = 10 + bonus;
+            const xpGain = slotData.sets[setIndex].xpAwarded;
             const xp = ((await db.getSetting('xp')) ?? 0) + xpGain;
             await db.setSetting('xp', xp);
 
@@ -958,6 +979,11 @@
             });
             if (!confirmed) return;
             slotData.sets.splice(index, 1);
+            const refund = Number(set.xpAwarded) || 0;
+            if (refund > 0) {
+                const xp = Math.max(0, ((await db.getSetting('xp')) ?? 0) - refund);
+                await db.setSetting('xp', xp);
+            }
             if (this.currentWorkout.completedSlots?.includes(this.currentSlot.id)) {
                 this.currentWorkout.completedSlots = this.currentWorkout.completedSlots.filter(id => id !== this.currentSlot.id);
             }
@@ -1003,6 +1029,14 @@
                 }
                 if (state.phase === 'done') {
                     this.freezeCardioLive(live);
+                    // Came back late (background, reload): the settings were
+                    // sampled past the end, scale them back to the real block.
+                    const actual = live.accumulatedMs / 1000;
+                    if (actual > state.totalSeconds && actual > 0) {
+                        const ratio = state.totalSeconds / actual;
+                        live.primarySum *= ratio;
+                        live.secondarySum *= ratio;
+                    }
                     live.accumulatedMs = state.totalSeconds * 1000;
                     live.status = 'finishing';
                     live.manual = false;
@@ -1084,6 +1118,37 @@
         },
 
 
+        // A block left running (or paused) when the workout ends is saved
+        // rather than silently dropped; under 30 s it is just discarded.
+        async confirmFinishSession(...args) {
+            const workout = this.currentWorkout;
+            if (workout && !this.isFinishingSession) {
+                let saved = 0;
+                for (const [slotId, slotData] of Object.entries(workout.slots || {})) {
+                    const live = slotData?.cardioLive;
+                    if (!live || live.status === 'idle') continue;
+                    this.freezeCardioLive(live);
+                    const slot = await this.getSlotRecord(slotId);
+                    const built = slot && this.getCardioElapsedSeconds(live) >= 30 ? this.buildCardioSetFromLive(slot, live) : null;
+                    if (built) {
+                        slotData.sets = slotData.sets || [];
+                        const index = slotData.sets.findIndex(set => !set?.completed);
+                        slotData.sets[index >= 0 ? index : slotData.sets.length] = built;
+                        saved += 1;
+                        const xp = ((await db.getSetting('xp')) ?? 0) + built.xpAwarded;
+                        await db.setSetting('xp', xp);
+                    }
+                    delete slotData.cardioLive;
+                }
+                if (saved) {
+                    this.stopCardioTicker();
+                    await db.saveCurrentWorkout(workout);
+                    this.showCoachToast(`Bloc cardio en cours enregistré (${saved}).`, 'hot', '❤️');
+                }
+            }
+            return baseConfirmFinishSession.apply(this, args);
+        },
+
         // ---------- Warm-up shortcut at the top of a session ----------
         async renderSlots() {
             await baseRenderSlots.apply(this, arguments);
@@ -1094,34 +1159,43 @@
             const list = document.getElementById('slots-list');
             const session = this.currentSession;
             if (!list || !session || !this.currentWorkout) return;
-            list.querySelector('.session-warmup-cta')?.remove();
+            const token = (this.warmupShortcutToken || 0) + 1;
+            this.warmupShortcutToken = token;
             const slots = await db.getSlotsBySession(session.id);
             const hasWarmup = slots.some(slot => slot.role === 'warmup');
             const started = Object.values(this.currentWorkout.slots || {}).some(data => (data?.sets || []).some(set => set?.completed));
             const dismissed = (await db.getSetting('warmupShortcutDismissed')) || [];
+            // A newer render started while we were reading: let it decide.
+            if (token !== this.warmupShortcutToken) return;
+            list.querySelectorAll('.session-warmup-cta').forEach(item => item.remove());
             if (hasWarmup || started || dismissed.includes(session.id) || slots.every(slot => this.isCardioSlot(slot))) return;
-            const button = document.createElement('div');
-            button.className = 'session-warmup-cta';
-            button.setAttribute('role', 'button');
-            button.tabIndex = 0;
-            button.innerHTML = `
-                <span class="session-warmup-cta-icon" aria-hidden="true">🔥</span>
-                <span>
-                    <strong>Ajouter un échauffement</strong>
-                    <small>5 min de vélo léger avant de charger</small>
-                </span>
+            const wrapper = document.createElement('div');
+            wrapper.className = 'session-warmup-cta';
+            wrapper.innerHTML = `
+                <button type="button" class="session-warmup-cta-main">
+                    <span class="session-warmup-cta-icon" aria-hidden="true">🔥</span>
+                    <span>
+                        <strong>Ajouter un échauffement</strong>
+                        <small>5 min de vélo léger avant de charger</small>
+                    </span>
+                </button>
                 <button type="button" class="session-warmup-cta-close" aria-label="Ne plus proposer pour cette séance">×</button>
             `;
-            button.addEventListener('click', async event => {
-                if (event.target.closest('.session-warmup-cta-close')) {
-                    event.stopPropagation();
-                    await db.setSetting('warmupShortcutDismissed', [...dismissed, session.id]);
-                    button.remove();
-                    return;
-                }
-                await this.addWarmupSlot(session.id);
+            wrapper.querySelector('.session-warmup-cta-close').addEventListener('click', async () => {
+                wrapper.remove();
+                await db.setSetting('warmupShortcutDismissed', [...dismissed, session.id]);
             });
-            list.prepend(button);
+            wrapper.querySelector('.session-warmup-cta-main').addEventListener('click', async event => {
+                if (this.addingWarmup) return;
+                this.addingWarmup = true;
+                event.currentTarget.disabled = true;
+                try {
+                    await this.addWarmupSlot(session.id);
+                } finally {
+                    this.addingWarmup = false;
+                }
+            });
+            list.prepend(wrapper);
         },
 
         async addWarmupSlot(sessionId) {

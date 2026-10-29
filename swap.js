@@ -24,6 +24,8 @@
     const baseDiscardSession = App.prototype.discardSession;
     const baseInit = App.prototype.init;
     const baseOpenExercise = App.prototype.openExercise;
+    const baseCheckPendingSession = App.prototype.checkPendingSession;
+    const baseImportData = App.prototype.importData;
     const baseShowStimulusScoreAnimation = App.prototype.showStimulusScoreAnimation;
     const baseShowCoachingAdvice = App.prototype.showCoachingAdvice;
 
@@ -36,13 +38,31 @@
         cable: { barbell: 1.4, machine: 1.25, dumbbell: 0.7, cable: 0.95 }
     };
 
+    // Always put back: they describe the exercise itself, not the player's plan.
+    const IDENTITY_FIELDS = new Set([
+        'name', 'activeExercise', 'type', 'muscleGroup', 'trackingMode', 'trackingModeSource', 'durationUnit',
+        'cardioMetric', 'timedLoad', 'exerciseStableId', 'exerciseFamilyId', 'instructions', 'pool',
+        'progressionMode', 'loadingProfile', 'progressionState', 'capDetection', 'bodyweightMode', 'bodyweightProfile'
+    ]);
     const clone = value => (value == null ? value : JSON.parse(JSON.stringify(value)));
 
     Object.assign(App.prototype, {
         async init() {
             await baseInit.call(this);
             // A today-only swap left behind by a crash or a force-quit.
-            if (!this.currentWorkout) await this.restoreTemporarySwaps();
+            if (!this.currentWorkout) await this.restoreTemporarySwaps({ refresh: true });
+        },
+
+        async checkPendingSession(...args) {
+            const result = await baseCheckPendingSession.apply(this, args);
+            if (!this.currentWorkout) await this.restoreTemporarySwaps({ refresh: true });
+            return result;
+        },
+
+        async importData(...args) {
+            const result = await baseImportData.apply(this, args);
+            if (!this.currentWorkout) await this.restoreTemporarySwaps({ refresh: true });
+            return result;
         },
 
         async confirmFinishSession() {
@@ -133,8 +153,11 @@
             const slots = await db.getAll('slots');
             const swapped = slots.filter(slot => slot?.temporarySwap?.snapshot);
             for (const slot of swapped) {
-                const { snapshot } = slot.temporarySwap;
+                const { snapshot, applied } = slot.temporarySwap;
                 SNAPSHOT_FIELDS.forEach(field => {
+                    // Keep what the player edited on purpose after the swap
+                    // (sets, reps, rest…); undo only what the swap changed.
+                    if (applied && !IDENTITY_FIELDS.has(field) && JSON.stringify(slot[field]) !== JSON.stringify(applied[field])) return;
                     if (snapshot[field] === undefined) delete slot[field];
                     else slot[field] = clone(snapshot[field]);
                 });
@@ -461,10 +484,11 @@
             }
 
             await this.applyExerciseChange(slot, exerciseName, false);
-            if (scope === 'today' && poolBefore) {
+            if (scope === 'today') {
                 const stored = await db.get('slots', slotId);
-                if (stored) {
-                    stored.pool = poolBefore;
+                if (stored?.temporarySwap) {
+                    if (poolBefore) stored.pool = poolBefore;
+                    stored.temporarySwap.applied = this.takeSlotSnapshot(stored);
                     await db.put('slots', stored);
                 }
             }

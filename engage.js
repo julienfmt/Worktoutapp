@@ -86,7 +86,7 @@
             let status;
             if (claimed) status = 'Défi relevé, bravo !';
             else if (challenge.done) status = 'Objectif atteint : récupère ta récompense !';
-            else if (challenge.daysLeft === 0) status = 'Dernier jour du mois.';
+            else if (challenge.daysLeft <= 1) status = 'Dernier jour du mois : fonce !';
             else status = `Encore ${remaining} séance${remaining > 1 ? 's' : ''} · ~${String(pace).replace('.', ',')} / sem. · ${challenge.daysLeft} j restants`;
 
             card.hidden = false;

@@ -1911,17 +1911,34 @@
 .session-warmup-cta {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     width: 100%;
-    padding: 12px 14px;
+    padding: 4px 8px 4px 4px;
     margin-bottom: 12px;
     border-radius: 20px;
     border: 2px dashed #fdba74;
     background: #fff7ed;
     color: #9a3412;
+}
+
+.session-warmup-cta-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 16px;
+    background: transparent;
+    color: inherit;
     font: inherit;
     text-align: left;
     cursor: pointer;
+}
+
+.session-warmup-cta-main:disabled {
+    opacity: 0.6;
 }
 
 .session-warmup-cta-icon {

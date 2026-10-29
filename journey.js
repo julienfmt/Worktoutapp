@@ -283,6 +283,18 @@
         },
 
         async claimJourneyChest(chestId, xpAmount, anchor = null) {
+            this.claimingChests = this.claimingChests || new Set();
+            if (this.claimingChests.has(chestId)) return;
+            this.claimingChests.add(chestId);
+            anchor?.setAttribute('aria-disabled', 'true');
+            try {
+                await this.claimJourneyChestOnce(chestId, xpAmount, anchor);
+            } finally {
+                this.claimingChests.delete(chestId);
+            }
+        },
+
+        async claimJourneyChestOnce(chestId, xpAmount, anchor) {
             const claims = await this.getJourneyClaims();
             if (claims.includes(chestId)) return;
             claims.push(chestId);

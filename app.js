@@ -145,7 +145,8 @@ class StreakEngine {
                 return null;
             }
             
-            const weeksPassed = Math.floor((currentWeekStart - lastCheckWeekStart) / (7 * 24 * 60 * 60 * 1000));
+            // Round, not floor: a week spanning a DST change is 7 days ± 1 hour.
+            const weeksPassed = Math.round((currentWeekStart - lastCheckWeekStart) / (7 * 24 * 60 * 60 * 1000));
             
             if (weeksPassed > 0) {
                 return await this.processWeekTransition(weeksPassed, lastCheckWeekStart);
@@ -1787,6 +1788,7 @@ class App {
     
     async discardSession() {
         document.getElementById('modal-resume-session').classList.remove('active');
+        this.clearStoredRestTimer();
         await db.clearCurrentWorkout();
         this.currentWorkout = null;
         this.currentSession = null;
@@ -1803,6 +1805,7 @@ class App {
     async confirmQuitSession() {
         this.hideQuitSessionModal();
         this.stopSessionTimer();
+        this.clearStoredRestTimer();
         await db.clearCurrentWorkout();
         this.currentWorkout = null;
         await this.renderHome();
@@ -2004,6 +2007,19 @@ class App {
         });
     }
     
+    // Forget any rest timer kept for a resume (quit, discard, finished workout).
+    clearStoredRestTimer() {
+        ['restTimerEndTime', 'restTimerTotalTime', 'restTimerReason', 'restTimerStartedAt', 'restTimerRecommendation', 'restTimerSlotId']
+            .forEach(key => localStorage.removeItem(key));
+        if (this.restTimer) {
+            clearInterval(this.restTimer);
+            this.restTimer = null;
+        }
+        this.clearRestTimerCompletionTimeout?.();
+        this.restTimerEndTime = null;
+        document.getElementById('timer-overlay')?.classList.remove('active');
+    }
+
     onAppResume() {
         void this.syncScreenWakeLock();
         void this.clearDisplayedRestNotifications();
@@ -2012,7 +2028,9 @@ class App {
         if (timerEndTime) {
             const remaining = Math.max(0, Math.ceil((parseInt(timerEndTime) - Date.now()) / 1000));
             
-            if (remaining > 0 && this.currentScreen === 'exercise') {
+            const timerSlotId = localStorage.getItem('restTimerSlotId');
+            const belongsHere = !timerSlotId || timerSlotId === String(this.currentSlot?.id ?? '');
+            if (remaining > 0 && this.currentScreen === 'exercise' && belongsHere) {
                 // Timer still running, restore it
                 this.overlayTimerMode = 'rest';
                 this.restTimerEndTime = parseInt(timerEndTime);
@@ -6005,10 +6023,15 @@ class App {
 
         const toast = document.createElement('div');
         toast.className = `coach-toast ${status}`;
-        toast.innerHTML = `
-            <span class="coach-toast-icon">${icon}</span>
-            <span class="coach-toast-text">${message}</span>
-        `;
+        toast.setAttribute('role', 'status');
+        // Plain text only: messages can carry user-defined exercise/session names.
+        const iconEl = document.createElement('span');
+        iconEl.className = 'coach-toast-icon';
+        iconEl.textContent = icon;
+        const textEl = document.createElement('span');
+        textEl.className = 'coach-toast-text';
+        textEl.textContent = String(message ?? '');
+        toast.append(iconEl, textEl);
         document.body.appendChild(toast);
 
         setTimeout(() => toast.classList.add('visible'), 50);
@@ -7999,9 +8022,12 @@ class App {
     }
 
     async renderSlots() {
+        // Concurrent renders (double tap on back, swap revert…) used to append
+        // the cards twice: only the latest render writes the list.
+        const renderToken = (this.slotsRenderToken || 0) + 1;
+        this.slotsRenderToken = renderToken;
         const slots = await this.normalizeStoredSlots(await db.getSlotsBySession(this.currentSession.id));
         const container = document.getElementById('slots-list');
-        container.innerHTML = '';
         const failureThreshold = (await db.getSetting('failureCount')) ?? 3;
 
         // Build superset map (firstSlotId -> secondSlotId)
@@ -8044,9 +8070,10 @@ class App {
             return this.createSlotCard(slot, isCompleted, isFirstInSuperset, isSecondInSuperset, firstSlotId, supersetColor, { failureThreshold, isSkipped });
         }));
 
+        if (renderToken !== this.slotsRenderToken) return;
         const fragment = document.createDocumentFragment();
         cards.forEach((card) => fragment.appendChild(card));
-        container.appendChild(fragment);
+        container.replaceChildren(fragment);
         
         // Update progress bar
         this.updateSessionProgress(slots);
@@ -10875,11 +10902,23 @@ class App {
         }
     }
     
+    // Double taps used to validate the same set twice (XP, timer, summary).
     async completeSupersetSet(setIndex) {
+        if (this.completingSetLock) return;
+        if (this.currentWorkout?.slots?.[this.currentSlot?.id]?.sets?.[setIndex]?.completed) return;
+        this.completingSetLock = true;
+        try {
+            await this.completeSupersetSetNow(setIndex);
+        } finally {
+            this.completingSetLock = false;
+        }
+    }
+
+    async completeSupersetSetNow(setIndex) {
         const weightA = parseFloat(document.querySelector(`.input-weight-a[data-set-index="${setIndex}"]`).value) || 0;
-        const repsA = parseInt(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`).value) || 0;
+        const repsA = this.parseSetInputValue(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`)?.value, this.currentSlot);
         const weightB = parseFloat(document.querySelector(`.input-weight-b[data-set-index="${setIndex}"]`).value) || 0;
-        const repsB = parseInt(document.querySelector(`.input-reps-b[data-set-index="${setIndex}"]`).value) || 0;
+        const repsB = this.parseSetInputValue(document.querySelector(`.input-reps-b[data-set-index="${setIndex}"]`)?.value, this.supersetSlot);
 
         if (repsA === 0 || repsB === 0) {
             const missingSide = repsA === 0 ? 'a' : 'b';
@@ -13337,7 +13376,7 @@ class App {
             const weightInput = document.querySelector(`.input-weight-${side}[data-set-index="${setIndex}"]`);
             const repsInput = document.querySelector(`.input-reps-${side}[data-set-index="${setIndex}"]`);
             const reps = repsInput
-                ? (parseInt(repsInput.value, 10) || 0)
+                ? this.parseSetInputValue(repsInput.value, this.currentSlot)
                 : Number(existing.reps || 0);
             const weight = weightInput
                 ? (parseFloat(weightInput.value) || 0)
@@ -13573,6 +13612,17 @@ class App {
     }
 
     async completeSet(setIndex) {
+        if (this.completingSetLock) return;
+        if (this.currentWorkout?.slots?.[this.currentSlot?.id]?.sets?.[setIndex]?.completed) return;
+        this.completingSetLock = true;
+        try {
+            await this.completeSetNow(setIndex);
+        } finally {
+            this.completingSetLock = false;
+        }
+    }
+
+    async completeSetNow(setIndex) {
         const weightInput = document.querySelector(`.input-weight[data-set-index="${setIndex}"]`);
         const repsInput = document.querySelector(`.input-reps[data-set-index="${setIndex}"]`);
         
@@ -13903,9 +13953,9 @@ class App {
     
     async saveEditSupersetSet(setIndex) {
         const weightA = parseFloat(document.querySelector(`.input-weight-a[data-set-index="${setIndex}"]`).value) || 0;
-        const repsA = parseInt(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`).value) || 0;
+        const repsA = this.parseSetInputValue(document.querySelector(`.input-reps-a[data-set-index="${setIndex}"]`)?.value, this.currentSlot);
         const weightB = parseFloat(document.querySelector(`.input-weight-b[data-set-index="${setIndex}"]`).value) || 0;
-        const repsB = parseInt(document.querySelector(`.input-reps-b[data-set-index="${setIndex}"]`).value) || 0;
+        const repsB = this.parseSetInputValue(document.querySelector(`.input-reps-b[data-set-index="${setIndex}"]`)?.value, this.supersetSlot);
         
         if (repsA === 0 || repsB === 0) {
             const missingSide = repsA === 0 ? 'a' : 'b';
@@ -13934,9 +13984,9 @@ class App {
 
     async saveEditUnilateralSet(setIndex) {
         const weightLeft = parseFloat(document.querySelector(`.input-weight-left[data-set-index="${setIndex}"]`)?.value) || 0;
-        const repsLeft = parseInt(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsLeft = this.parseSetInputValue(document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)?.value, this.currentSlot);
         const weightRight = parseFloat(document.querySelector(`.input-weight-right[data-set-index="${setIndex}"]`)?.value) || 0;
-        const repsRight = parseInt(document.querySelector(`.input-reps-right[data-set-index="${setIndex}"]`)?.value) || 0;
+        const repsRight = this.parseSetInputValue(document.querySelector(`.input-reps-right[data-set-index="${setIndex}"]`)?.value, this.currentSlot);
 
         const slotData = this.currentWorkout.slots[this.currentSlot.id];
         if (!slotData.setsLeft) slotData.setsLeft = [];
@@ -14635,6 +14685,7 @@ class App {
         this.restTimerStartedAt = Date.now();
         this.restTimerEndTime = this.restTimerStartedAt + (durationSeconds * 1000);
         localStorage.setItem('restTimerEndTime', this.restTimerEndTime);
+        localStorage.setItem('restTimerSlotId', String(this.currentSlot?.id ?? ''));
         localStorage.setItem('restTimerTotalTime', String(durationSeconds));
         localStorage.setItem('restTimerReason', this.restTimerReason);
         localStorage.setItem('restTimerStartedAt', String(this.restTimerStartedAt));
@@ -15642,6 +15693,8 @@ class App {
         const appendSets = (sets = [], variant = null, context = slot, metadata = {}) => {
             (Array.isArray(sets) ? sets : []).forEach((set, index) => {
                 if (!set?.completed) return;
+                // An empty set (0 reps / 0 s) is not a performance: keep it out of history.
+                if (!(Number(set.reps) > 0) && !(Number(set.durationSeconds) > 0)) return;
                 entries.push({
                     setData: set,
                     setNumber: index + 1,
@@ -16411,6 +16464,7 @@ class App {
         this.stopSessionTimer();
         this.hideFinishModal();
 
+        let workoutSaved = false;
         try {
             const stimulusScore = await this.calculateStimulusScore();
             const finalizedChallenge = await this.finalizeSessionChallengeForFinish();
@@ -16532,7 +16586,8 @@ class App {
             await db.setSetting('nextSessionIndex', nextIndex);
 
             const streakDataBefore = await streakEngine.getStreakData();
-            const wasGoalMetBefore = streakDataBefore.currentWeekSessions >= streakDataBefore.weeklyGoal;
+            // The workout is already in history: count the week without it.
+            const wasGoalMetBefore = (streakDataBefore.currentWeekSessions - 1) >= streakDataBefore.weeklyGoal;
 
             await streakEngine.recordWorkoutForStreak();
             await db.setSetting('lastWorkoutDate', saveDate);
@@ -16563,20 +16618,23 @@ class App {
                 stimulusScore
             });
 
-            await db.clearCurrentWorkout();
-            this.currentWorkout = null;
-            this.currentSlot = null;
-            this.supersetSlot = null;
-            this.editingSetIndex = null;
-
-            await this.showStimulusScoreAnimation(stimulusScore, finishRecap);
-
-            // The session bonus was announced but never credited: bank it now.
+            // Bank the session XP before the recap waits for a tap: closing
+            // the app on that screen must not lose it.
             const sessionXp = Math.max(0, Math.round(stimulusScore.total * 2));
             const xpBefore = (await db.getSetting('xp')) ?? 0;
             await db.setSetting('xp', xpBefore + sessionXp);
             const levelBefore = this.getPlayerLevel(xpBefore);
             const levelAfter = this.getPlayerLevel(xpBefore + sessionXp);
+
+            await db.clearCurrentWorkout();
+            this.currentWorkout = null;
+            this.currentSlot = null;
+            this.supersetSlot = null;
+            this.editingSetIndex = null;
+            workoutSaved = true;
+            this.clearStoredRestTimer?.();
+
+            await this.showStimulusScoreAnimation(stimulusScore, finishRecap);
 
             gamification.celebrateWorkoutComplete(sessionName, {
                 totalSets,
@@ -16609,9 +16667,15 @@ class App {
             }
         } catch (error) {
             console.error('Erreur lors de la sauvegarde de la séance:', error);
-            this.showCoachToast('La séance n’a pas pu être sauvegardée correctement. Rien n’a été effacé, tu peux réessayer.', 'warning', '⚠️');
-            this.startSessionTimer();
-            this.showScreen('session');
+            if (workoutSaved) {
+                // Saved already: only the celebration failed.
+                this.showCoachToast('Séance enregistrée ✓', 'hot', '✅');
+                await this.renderHome().catch(() => {});
+            } else {
+                this.showCoachToast('La séance n’a pas pu être sauvegardée correctement. Rien n’a été effacé, tu peux réessayer.', 'warning', '⚠️');
+                this.startSessionTimer();
+                this.showScreen('session');
+            }
         } finally {
             this.isFinishingSession = false;
             this.setFinishButtonLoading(false);
@@ -19276,8 +19340,12 @@ class App {
             // stable exercise metadata immediately, without waiting for a reload.
             await this.migrateExerciseIdentityMetadata({ force: true });
 
-            if (counts.currentWorkoutCleared) {
-                this.currentWorkout = null;
+            // A full restore replaces the current-workout store too: drop the
+            // in-memory one so a later autosave cannot write it back.
+            if (counts.currentWorkoutCleared || (isBackup && importMode === 'full')) {
+                this.stopSessionTimer?.();
+                this.clearStoredRestTimer();
+                this.currentWorkout = (isBackup && importMode === 'full') ? (await db.getCurrentWorkout?.()) || null : null;
                 this.currentSession = null;
                 this.currentSlot = null;
                 this.supersetSlot = null;
@@ -19683,6 +19751,8 @@ class App {
                 if (!slotData.sets[setIndex]) {
                     slotData.sets[setIndex] = {};
                 }
+                // A validated set is only changed through « Sauvegarder ».
+                if (slotData.sets[setIndex].completed) return;
                 
                 if (e.target.matches('.input-weight')) {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
@@ -19711,11 +19781,13 @@ class App {
                 if (!slotData.sets[setIndex]) {
                     slotData.sets[setIndex] = {};
                 }
+                // A validated set is only changed through « Sauvegarder ».
+                if (slotData.sets[setIndex].completed) return;
                 
                 if (e.target.matches('.input-weight-a')) {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
-                    slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                    slotData.sets[setIndex].reps = this.parseSetInputValue(e.target.value, this.isSupersetMode && e.target.matches('.input-reps-b') ? this.supersetSlot : this.currentSlot);
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -19729,11 +19801,13 @@ class App {
                 if (!slotData.sets[setIndex]) {
                     slotData.sets[setIndex] = {};
                 }
+                // A validated set is only changed through « Sauvegarder ».
+                if (slotData.sets[setIndex].completed) return;
                 
                 if (e.target.matches('.input-weight-b')) {
                     slotData.sets[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
-                    slotData.sets[setIndex].reps = parseInt(e.target.value) || 0;
+                    slotData.sets[setIndex].reps = this.parseSetInputValue(e.target.value, this.isSupersetMode && e.target.matches('.input-reps-b') ? this.supersetSlot : this.currentSlot);
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -19746,11 +19820,12 @@ class App {
                 
                 if (!slotData.setsLeft) slotData.setsLeft = [];
                 if (!slotData.setsLeft[setIndex]) slotData.setsLeft[setIndex] = {};
+                if (slotData.setsLeft[setIndex].completed) return;
                 
                 if (e.target.matches('.input-weight-left')) {
                     slotData.setsLeft[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
-                    slotData.setsLeft[setIndex].reps = parseInt(e.target.value) || 0;
+                    slotData.setsLeft[setIndex].reps = this.parseSetInputValue(e.target.value, this.currentSlot);
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -19763,11 +19838,12 @@ class App {
                 
                 if (!slotData.setsRight) slotData.setsRight = [];
                 if (!slotData.setsRight[setIndex]) slotData.setsRight[setIndex] = {};
+                if (slotData.setsRight[setIndex].completed) return;
                 
                 if (e.target.matches('.input-weight-right')) {
                     slotData.setsRight[setIndex].weight = parseFloat(e.target.value) || 0;
                 } else {
-                    slotData.setsRight[setIndex].reps = parseInt(e.target.value) || 0;
+                    slotData.setsRight[setIndex].reps = this.parseSetInputValue(e.target.value, this.currentSlot);
                 }
                 
                 await db.saveCurrentWorkout(this.currentWorkout);
@@ -19837,6 +19913,9 @@ class App {
                     rpeSection.dataset.touched = 'true';
                 }
                 this.updateRpeDisplay(rpe);
+                // The timer already ended (GO screen): the feeling was saved
+                // empty at that moment, record this late choice too.
+                if (this.restFeedbackCaptured) void this.saveRpeToLastSet();
             };
         });
 

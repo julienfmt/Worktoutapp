@@ -121,7 +121,7 @@
             if (!isCardio) return null;
             const seconds = this.getSetDurationSeconds(set, slot || { trackingMode: 'cardio' });
             const details = set.cardio || {};
-            let distanceKm = Number(details.distanceKm) || 0;
+            let distanceKm = Number(details.distanceKm) || (Number(set.distanceMeters) > 0 ? Number(set.distanceMeters) / 1000 : 0);
             const metric = set.cardioMetric || slot?.cardioMetric;
             const value = Number(set.cardioMetricValue ?? 0);
             if (!distanceKm && metric === 'speed' && value > 0) distanceKm = value * (seconds / 3600);
@@ -129,7 +129,7 @@
             return {
                 seconds,
                 distanceKm,
-                calories: Number(details.calories) || 0,
+                calories: Number(details.calories) || Number(set.calories) || 0,
                 warmup: details.role === 'warmup'
             };
         },
