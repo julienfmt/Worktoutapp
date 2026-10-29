@@ -13121,9 +13121,8 @@ class App {
                         </div>
                     ` : ''}
                     <div class="series-actions">
-                        ${this.isTimedSlot(this.currentSlot) && !isEditing && isNextIncompleteSet ? `
+                        ${this.isTimedSlot(this.currentSlot) && !isEditing ? `
                             <button class="btn btn-secondary btn-cardio-timer" data-set-index="${i}">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 7 5.5z"/></svg>
                                 ${displayReps ? 'Relancer le timer' : `Lancer ${this.formatRepTargetValue(targetReps, this.currentSlot)}`}
                             </button>
                         ` : ''}

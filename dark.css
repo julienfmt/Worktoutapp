@@ -1717,6 +1717,51 @@
     box-shadow: 0 3px 0 #7c2d12;
 }
 
+:where(html[data-theme="dark"]) .cc-card {
+    border: 2px solid #2e2850;
+    box-shadow: 0 4px 0 #2a2448, 0 12px 28px rgba(79, 70, 229, 0.06);
+}
+
+:where(html[data-theme="dark"]) .cc-mode.active {
+    box-shadow: 0 2px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-step {
+    border: 2px solid #2a2448;
+    box-shadow: 0 3px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-step:active {
+    box-shadow: 0 0 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-preset {
+    border: 2px solid #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-mini-stepper button {
+    border: 2px solid #2a2448;
+    box-shadow: 0 2px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-btn-pause {
+    border: 2px solid #2a2448;
+    box-shadow: 0 var(--btn-depth-sm) 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-field-input {
+    border: 2px solid #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-feeling.active {
+    box-shadow: 0 2px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) .cc-plan {
+    background: #2a2350;
+    border: 2px solid #2e2850;
+}
+
 :where(html[data-theme="dark"]) .se-role-option span {
     border: 2px solid #2a2448;
     box-shadow: 0 3px 0 #2a2448;
