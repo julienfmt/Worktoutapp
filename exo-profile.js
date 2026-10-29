@@ -377,8 +377,7 @@ const ExoProfileMixin = {
             container.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Tes exos</span>
-                        <h4>Fiches perso</h4>
+                        <h4>Fiches exercices</h4>
                     </div>
                     <span class="pz-chip" id="exo-search-count"></span>
                 </div>

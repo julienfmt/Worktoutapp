@@ -106,9 +106,9 @@
                     </div>
                 </div>
                 <div class="tools-orm-hero">
-                    <span>Ton max estimé sur 1 rep</span>
+                    <span>Max estimé sur 1 rep</span>
                     <strong>${e1rm > 0 ? `${this.formatOneDecimal(e1rm)} kg` : '--'}</strong>
-                    <small>Pour régler tes charges, pas à tester.</small>
+                    <small>Sert à régler tes charges, pas à être testé.</small>
                 </div>
                 <div class="tools-orm-table">
                     ${rows.map(pct => `
@@ -243,7 +243,7 @@
             if (entry.weight) await db.setSetting('bodyWeight', Math.round(entry.weight));
             this.bodyLog = log;
             this.hapticTap?.([10, 30, 14]);
-            this.showCoachToast('Mesure enregistrée. Reviens dans une semaine pour voir l’évolution.', 'hot', '📏');
+            this.showCoachToast('Mesure enregistrée.', 'hot', '📏');
             this.renderToolsSheet();
         },
 
@@ -253,8 +253,7 @@
             card.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Outils</span>
-                        <h4>Calculs & mensurations</h4>
+                        <h4>Outils</h4>
                     </div>
                 </div>
                 <div class="tools-list">

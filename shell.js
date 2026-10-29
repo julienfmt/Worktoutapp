@@ -372,7 +372,7 @@
             const { snapshot, bestStreak } = ctx;
             const tiles = [
                 { icon: '🏋️', value: snapshot.totalWorkouts, label: 'séances' },
-                { icon: '⏱️', value: this.formatHoursMinutes(metrics.totalMinutes), label: 'à t’entraîner' },
+                { icon: '⏱️', value: this.formatHoursMinutes(metrics.totalMinutes), label: 'd’entraînement' },
                 { icon: '🧱', value: this.formatTonnage(snapshot.totalLoadedVolume), label: 'soulevés' },
                 { icon: '🏆', value: snapshot.prCountTotal || 0, label: 'records', tone: 'gold' },
                 { icon: '🔥', value: `${bestStreak || 0} sem.`, label: 'meilleure série' },
@@ -381,8 +381,7 @@
             container.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Depuis le début</span>
-                        <h4>Ton total</h4>
+                        <h4>Depuis le début</h4>
                     </div>
                     <span class="pz-chip">${snapshot.thisMonthWorkouts} ce mois</span>
                 </div>
@@ -407,7 +406,7 @@
             const head = (title, chip = '') => `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Muscles · cette semaine</span>
+                        <span class="pz-kicker">${t('home.muscles.kicker')}</span>
                         <h4>${title}</h4>
                     </div>
                     ${chip}
@@ -415,8 +414,8 @@
             `;
 
             if (!muscles.length) {
-                container.innerHTML = `${head('Ta carte musculaire')}
-                    <div class="pz-empty">Ajoute des exercices avec un groupe musculaire pour suivre combien de séries chaque muscle reçoit.</div>`;
+                container.innerHTML = `${head(t('home.muscles.emptyTitle'))}
+                    <div class="pz-empty">${t('home.muscles.empty')}</div>`;
                 return;
             }
 
@@ -425,7 +424,7 @@
             const limit = 6;
             const visible = expanded ? muscles : muscles.slice(0, limit);
             container.innerHTML = `
-                ${head(`${growing}/${muscles.length} en zone de croissance`, '<span class="pz-chip">séries efficaces</span>')}
+                ${head(t('home.muscles.title', { growing, count: muscles.length }), `<span class="pz-chip">${t('home.muscles.chip')}</span>`)}
                 <div class="physique-grid">
                     ${visible.map(row => {
                         const scale = row.landmarks.MRV * 1.1;
@@ -438,17 +437,17 @@
                                     <span class="physique-tile-name">${this.escapeHtml(row.name)}</span>
                                     <span class="physique-tile-value">${String(row.volume).replace('.', ',')}<small>/${target}</small></span>
                                 </div>
-                                <div class="physique-meter" aria-label="${this.escapeHtml(`${row.name} : ${row.volume} séries sur ${target} visées, ${row.zone.label}`)}">
+                                <div class="physique-meter" aria-label="${this.escapeHtml(t('home.muscles.aria', { name: row.name, volume: row.volume, target, zone: t(`home.muscles.zone.${row.zone.id}`) }))}">
                                     <span class="physique-zone" style="left: ${pct(row.landmarks.MEV)}%; width: ${pct(row.landmarks.MAV) - pct(row.landmarks.MEV)}%"></span>
                                     <span class="physique-fill" style="width: ${pct(row.volume)}%"></span>
                                 </div>
-                                <span class="physique-tile-zone">${this.escapeHtml(row.zone.label)}</span>
+                                <span class="physique-tile-zone">${this.escapeHtml(t(`home.muscles.zone.${row.zone.id}`))}</span>
                             </div>
                         `;
                     }).join('')}
                 </div>
-                ${muscles.length > limit ? `<button type="button" class="pz-more physique-more" data-physique-toggle>${expanded ? 'Réduire' : `Voir les ${muscles.length} muscles`}</button>` : ''}
-                <div class="physique-legend"><i></i>Zone de croissance visée par semaine</div>
+                ${muscles.length > limit ? `<button type="button" class="pz-more physique-more" data-physique-toggle>${expanded ? t('common.showLess') : t('home.muscles.showAll', { count: muscles.length })}</button>` : ''}
+                <div class="physique-legend"><i></i>${t('home.muscles.legend')}</div>
             `;
             container.querySelector('[data-physique-toggle]')?.addEventListener('click', () => {
                 this.physiqueExpanded = !this.physiqueExpanded;
@@ -470,12 +469,10 @@
                 container.innerHTML = `
                     <div class="pz-card-head">
                         <div>
-                            <span class="pz-kicker">Cardio</span>
-                            <h4>Le cœur aussi se muscle</h4>
+                            <h4>Cardio</h4>
                         </div>
-                        <span class="pz-chip">❤️</span>
                     </div>
-                    <div class="pz-empty">Ajoute un bloc de tapis, vélo ou rameur à une séance : minutes, distance et calories apparaîtront ici.</div>
+                    <div class="pz-empty">Aucun cardio enregistré. Ajoute un bloc tapis, vélo ou rameur à une séance.</div>
                 `;
                 return;
             }

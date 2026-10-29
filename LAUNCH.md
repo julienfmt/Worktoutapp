@@ -89,3 +89,30 @@ Pour la version store :
 - Lien d'invitation en *universal link* / *app link* pour ouvrir l'app directement (`?ami=CODE` est déjà géré au lancement).
 - Rattacher le compte anonyme à Sign in with Apple / Google pour garder ses amis en changeant de téléphone.
 - Illustration mascotte des amis (rhinos qui tapent dans la main) : remplacer `MASCOT_SRC` dans `social.js`.
+
+## Langue de l'app (iOS / Android)
+
+L'app suit la langue du téléphone (`navigator.languages`, français si la langue n'est pas gérée) et l'utilisateur peut la changer dans l'app (`i18n.setLocale('auto' | 'fr' | 'en')`, voir README, « Traductions »). Dans la WebView Capacitor, `navigator.languages` reflète la langue choisie pour l'app dans les réglages du système, à condition de déclarer les langues gérées :
+
+- **iOS** (Réglages > Muscu > Langue) : dans `ios/App/App/Info.plist`, ajouter
+  ```xml
+  <key>CFBundleLocalizations</key>
+  <array>
+      <string>fr</string>
+      <string>en</string>
+  </array>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>fr</string>
+  ```
+  (ou ajouter les langues dans Xcode > Project > Info > Localizations).
+- **Android 13+** (Paramètres > Applis > Muscu > Langue) : créer `android/app/src/main/res/xml/locales_config.xml`
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+      <locale android:name="fr" />
+      <locale android:name="en" />
+  </locale-config>
+  ```
+  puis, dans `AndroidManifest.xml`, sur la balise `<application>` : `android:localeConfig="@xml/locales_config"`. Ajouter `resConfigs "fr", "en"` (ou `androidResources { localeFilters += ["fr", "en"] }`) dans `android/app/build.gradle` pour ne garder que ces langues.
+
+Une nouvelle langue = un fichier `locales/<code>.js`, son entrée dans `SUPPORTED` (`i18n.js`) et dans le script de `<head>` d'`index.html`, le précache de `sw.js`, puis les deux déclarations natives ci-dessus.

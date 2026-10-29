@@ -186,7 +186,7 @@
                     await db.setSetting('premium', { status: 'active', source: 'store', plan: this.paywallPlan, since: new Date().toISOString() });
                     await this.loadEntitlements();
                     gamification.triggerConfetti?.('heavy');
-                    gamification.showAchievement?.('👑', 'Bienvenue dans Muscu+ !', 'Tout le coach est à toi.');
+                    gamification.showAchievement?.('👑', 'Muscu+ activé', 'Toutes les fonctions du coach sont débloquées.');
                     this.hidePaywall();
                 } catch (error) {
                     if (error?.code !== 'PURCHASE_CANCELLED') this.showCoachToast('Achat impossible pour le moment. Réessaie plus tard.', 'warning', '⚠️');

@@ -1,32 +1,38 @@
+// ===== i18n =====
+// window.i18n comes from i18n.js (locales/*.js). Outside the browser (unit
+// tests) there is no dictionary: the key is returned so the logic still runs.
+const t = (key, params) => (typeof window !== 'undefined' && window.i18n ? window.i18n.t(key, params) : key);
+const intlLocale = () => (typeof window !== 'undefined' && window.i18n ? window.i18n.intlLocale() : 'fr-FR');
+
 // ===== Streak Engine =====
 class StreakEngine {
     constructor() {
         this.LEVELS = [
-            { name: 'Rookie', min: 0, max: 2, color: '#64748b', emoji: '🙂', description: 'Le run démarre' },
+            { name: 'Rookie', min: 0, max: 2, color: '#64748b', emoji: '🙂', description: 'Premières semaines' },
             { name: 'Initié', min: 3, max: 5, color: '#22c55e', emoji: '😄', description: 'Tu prends le rythme' },
-            { name: 'Focus', min: 6, max: 8, color: '#06b6d4', emoji: '😎', description: 'Concentration enclenchée' },
-            { name: 'Guerrier', min: 9, max: 11, color: '#f97316', emoji: '⚔️', description: 'Rien ne t\'arrête' },
-            { name: 'Berserker', min: 12, max: 14, color: '#ef4444', emoji: '🔥', description: 'Le feu est lancé' },
+            { name: 'Focus', min: 6, max: 8, color: '#06b6d4', emoji: '😎', description: 'Le rythme est installé' },
+            { name: 'Guerrier', min: 9, max: 11, color: '#f97316', emoji: '⚔️', description: 'Deux mois sans trou' },
+            { name: 'Berserker', min: 12, max: 14, color: '#ef4444', emoji: '🔥', description: 'Bientôt trois mois' },
             { name: 'Machine', min: 15, max: 17, color: '#8b5cf6', emoji: '🤖', description: 'Régularité parfaite' },
-            { name: 'Turbo', min: 18, max: 20, color: '#ec4899', emoji: '🚀', description: 'Accélération propre' },
-            { name: 'Champion', min: 21, max: 23, color: '#d946ef', emoji: '🏅', description: 'Le niveau monte' },
-            { name: 'Elite', min: 24, max: 26, color: '#7c3aed', emoji: '💎', description: 'Parmi les meilleurs' },
-            { name: 'Phénix', min: 27, max: 29, color: '#f43f5e', emoji: '🦅', description: 'Tu reviens toujours' },
-            { name: 'Master', min: 30, max: 32, color: '#0ea5e9', emoji: '🧠', description: 'Discipline maîtrisée' },
-            { name: 'Boss', min: 33, max: 35, color: '#14b8a6', emoji: '🕹️', description: 'Contrôle total' },
-            { name: 'Légende', min: 36, max: 38, color: '#f59e0b', emoji: '👑', description: 'Statut légendaire' },
-            { name: 'Mythique', min: 39, max: 41, color: '#eab308', emoji: '🌟', description: 'Aura mythique' },
-            { name: 'Invincible', min: 42, max: 44, color: '#22c55e', emoji: '🛡️', description: 'Streak blindé' },
-            { name: 'Cosmique', min: 45, max: 47, color: '#6366f1', emoji: '🪐', description: 'Orbitalement solide' },
-            { name: 'Immortel', min: 48, max: 50, color: '#fb923c', emoji: '☀️', description: 'Énergie solaire' },
+            { name: 'Turbo', min: 18, max: 20, color: '#ec4899', emoji: '🚀', description: 'Plus de quatre mois' },
+            { name: 'Champion', min: 21, max: 23, color: '#d946ef', emoji: '🏅', description: 'Bientôt cinq mois' },
+            { name: 'Elite', min: 24, max: 26, color: '#7c3aed', emoji: '💎', description: 'Plus de cinq mois' },
+            { name: 'Phénix', min: 27, max: 29, color: '#f43f5e', emoji: '🦅', description: 'Six mois passés' },
+            { name: 'Master', min: 30, max: 32, color: '#0ea5e9', emoji: '🧠', description: 'Bientôt sept mois' },
+            { name: 'Boss', min: 33, max: 35, color: '#14b8a6', emoji: '🕹️', description: 'Plus de sept mois' },
+            { name: 'Légende', min: 36, max: 38, color: '#f59e0b', emoji: '👑', description: 'Plus de huit mois' },
+            { name: 'Mythique', min: 39, max: 41, color: '#eab308', emoji: '🌟', description: 'Neuf mois de suite' },
+            { name: 'Invincible', min: 42, max: 44, color: '#22c55e', emoji: '🛡️', description: 'Bientôt dix mois' },
+            { name: 'Cosmique', min: 45, max: 47, color: '#6366f1', emoji: '🪐', description: 'Plus de dix mois' },
+            { name: 'Immortel', min: 48, max: 50, color: '#fb923c', emoji: '☀️', description: 'Onze mois de suite' },
             { name: 'Titan', min: 51, max: 53, color: '#facc15', emoji: '🏆', description: 'Un an en ligne de mire' },
-            { name: 'Supernova', min: 54, max: 56, color: '#fb7185', emoji: '💥', description: 'Explosion de constance' },
-            { name: 'Oracle', min: 57, max: 59, color: '#a855f7', emoji: '🔮', description: 'Tu vois loin' },
-            { name: 'Kaiju', min: 60, max: 62, color: '#16a34a', emoji: '🦖', description: 'Monstre de régularité' },
-            { name: 'Galactique', min: 63, max: 65, color: '#2563eb', emoji: '🌌', description: 'Hors catégorie' },
-            { name: 'Apex', min: 66, max: 68, color: '#f97316', emoji: '🦁', description: 'Sommet atteint' },
-            { name: 'Ascendant', min: 69, max: 71, color: '#db2777', emoji: '🛸', description: 'Tu changes de dimension' },
-            { name: 'Infini', min: 72, max: Infinity, color: '#06b6d4', emoji: '♾️', description: 'Streak sans plafond' }
+            { name: 'Supernova', min: 54, max: 56, color: '#fb7185', emoji: '💥', description: 'Plus d\'un an' },
+            { name: 'Oracle', min: 57, max: 59, color: '#a855f7', emoji: '🔮', description: 'Treize mois de suite' },
+            { name: 'Kaiju', min: 60, max: 62, color: '#16a34a', emoji: '🦖', description: 'Bientôt quatorze mois' },
+            { name: 'Galactique', min: 63, max: 65, color: '#2563eb', emoji: '🌌', description: 'Quatorze mois et demi' },
+            { name: 'Apex', min: 66, max: 68, color: '#f97316', emoji: '🦁', description: 'Plus de quinze mois' },
+            { name: 'Ascendant', min: 69, max: 71, color: '#db2777', emoji: '🛸', description: 'Bientôt seize mois' },
+            { name: 'Infini', min: 72, max: Infinity, color: '#06b6d4', emoji: '♾️', description: 'Plus de seize mois' }
         ];
         this.MAX_SHIELDS = 3;
     }
@@ -93,14 +99,14 @@ class StreakEngine {
         const sessionsNeeded = weeklyGoal - currentWeekSessions;
         
         if (sessionsNeeded <= 0) {
-            return { status: 'success', message: 'Objectif atteint !', daysLeft, sessionsNeeded: 0 };
+            return { status: 'success', message: t('home.week.goalMet'), daysLeft, sessionsNeeded: 0 };
         }
         
         if (sessionsNeeded > daysLeft) {
             if (shieldCount >= 1 || weekProtected) {
                 return { 
                     status: 'danger', 
-                    message: `Impossible d'atteindre l'objectif. Bouclier en jeu.`,
+                    message: t('home.week.shieldUsed'),
                     daysLeft, 
                     sessionsNeeded,
                     shieldAtRisk: true
@@ -108,7 +114,7 @@ class StreakEngine {
             }
             return { 
                 status: 'danger', 
-                message: `Plus assez de jours ! Streak en danger.`,
+                message: t('home.week.atRisk'),
                 daysLeft, 
                 sessionsNeeded,
                 streakAtRisk: true
@@ -116,10 +122,10 @@ class StreakEngine {
         }
         
         if (sessionsNeeded === daysLeft) {
-            const protectionMsg = shieldCount >= 1 ? ' Bouclier disponible.' : '';
+            const protectionMsg = shieldCount >= 1 ? ` ${t('home.week.shieldAvailable')}` : '';
             return { 
                 status: 'warning', 
-                message: `${sessionsNeeded} séance${sessionsNeeded > 1 ? 's' : ''} requise${sessionsNeeded > 1 ? 's' : ''} en ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.${protectionMsg}`,
+                message: `${t('home.week.tight', { count: sessionsNeeded, days: t('common.days', { count: daysLeft }) })}${protectionMsg}`,
                 daysLeft, 
                 sessionsNeeded 
             };
@@ -127,7 +133,7 @@ class StreakEngine {
         
         return { 
             status: 'ontrack', 
-            message: `${sessionsNeeded} séance${sessionsNeeded > 1 ? 's' : ''} restante${sessionsNeeded > 1 ? 's' : ''} cette semaine.`,
+            message: t('home.week.remaining', { count: sessionsNeeded }),
             daysLeft, 
             sessionsNeeded 
         };
@@ -534,8 +540,8 @@ class GamificationEngine {
         setTimeout(() => {
             this.showAchievement(
                 '🎉',
-                'Séance terminée',
-                `${sessionName} • ${stats.totalSets} séries • ${stats.duration} min`,
+                t('celebrate.workoutDone'),
+                `${sessionName} · ${t('common.sets', { count: stats.totalSets })} · ${stats.duration} min`,
                 stats.xpGain
             );
         }, 300);
@@ -547,8 +553,8 @@ class GamificationEngine {
         setTimeout(() => {
             this.showAchievement(
                 '🏆',
-                'Objectif atteint !',
-                'Tu as validé ton objectif hebdomadaire !',
+                t('celebrate.weekGoal.title'),
+                t('celebrate.weekGoal.body'),
                 50
             );
         }, 300);
@@ -563,14 +569,14 @@ class GamificationEngine {
     
     celebrateStreak(streakCount) {
         const oneYearMilestone = streakCount === 52
-            ? { icon: '🏆', title: '1 an de streak !', message: '52 semaines. C\'est colossal !', xp: 500 }
+            ? { icon: '🏆', title: t('celebrate.oneYear.title'), message: t('celebrate.oneYear.body'), xp: 500 }
             : null;
         const levelMilestone = streakEngine.LEVELS.find((level) => level.min === streakCount && level.min > 0);
         const milestone = oneYearMilestone || (levelMilestone
             ? {
                 icon: levelMilestone.emoji,
-                title: `${levelMilestone.name} !`,
-                message: `${levelMilestone.description} !`,
+                title: t('celebrate.streakLevel.title', { name: levelMilestone.name }),
+                message: levelMilestone.description,
                 xp: Math.min(450, 50 + Math.floor(levelMilestone.min / 3) * 25)
             }
             : null);
@@ -587,7 +593,7 @@ class GamificationEngine {
         const isFullShield = shieldCount % 1 === 0;
         if (isFullShield && shieldCount > 0) {
             this.triggerConfetti('light');
-            this.showAchievement('🛡️', 'Bouclier complet !', `Tu as maintenant ${Math.floor(shieldCount)} bouclier${shieldCount > 1 ? 's' : ''} !`, 25);
+            this.showAchievement('🛡️', t('celebrate.shield.title'), t('celebrate.shield.body', { count: Math.floor(shieldCount) }), 25);
         }
     }
     
@@ -605,15 +611,15 @@ class GamificationEngine {
             if (successfulWeeks.length === 1) {
                 this.showAchievement(
                     '🔥',
-                    'Semaine validée !',
-                    `Félicitations ! Tu as atteint ton objectif la semaine dernière. Ton streak est maintenant de ${streakCount} semaine${streakCount > 1 ? 's' : ''} !`,
+                    t('celebrate.weekValidated.title'),
+                    t('celebrate.weekValidated.body', { count: streakCount }),
                     75
                 );
             } else {
                 this.showAchievement(
                     '🔥',
-                    `${successfulWeeks.length} semaines validées !`,
-                    `Incroyable ! Tu as maintenu ton rythme. Streak actuel : ${streakCount} semaine${streakCount > 1 ? 's' : ''} !`,
+                    t('celebrate.weeksValidated.title', { count: successfulWeeks.length }),
+                    t('celebrate.weeksValidated.body', { count: streakCount }),
                     100
                 );
             }
@@ -631,8 +637,8 @@ class GamificationEngine {
         setTimeout(() => {
             this.showAchievement(
                 '🛡️',
-                'Bouclier utilisé !',
-                'Ton bouclier a protégé ton streak cette semaine. Continue comme ça !',
+                t('celebrate.shieldUsed.title'),
+                t('celebrate.shieldUsed.body'),
                 0
             );
         }, 300);
@@ -640,7 +646,7 @@ class GamificationEngine {
     
     celebratePersonalRecord(exerciseName) {
         this.triggerConfetti('light');
-        this.showAchievement('💪', 'Nouveau record !', `PR sur ${exerciseName}`);
+        this.showAchievement('🏆', t('celebrate.record.title'), exerciseName);
     }
     
     pulseElement(element) {
@@ -724,6 +730,7 @@ class App {
 
     async init() {
         await db.init();
+        if (typeof window !== 'undefined') void window.i18n?.syncLocaleWithDb?.();
         await initializeData();
 
         await Promise.all([
@@ -1736,11 +1743,10 @@ class App {
         }
         
         // Update modal content
-        document.getElementById('resume-session-info').textContent = 
-            `Séance "${session.name}" commencée il y a ${timeText}`;
+        document.getElementById('resume-session-info').textContent = t('resume.info', { name: session.name, time: timeText });
         document.getElementById('resume-progress-text').textContent = skippedCount > 0
-            ? `${acknowledgedCount}/${totalCount} exercices · ${skippedCount} ignoré${skippedCount > 1 ? 's' : ''}`
-            : `${completedCount}/${totalCount} exercices complétés`;
+            ? t('resume.progressSkipped', { done: acknowledgedCount, total: totalCount, count: skippedCount })
+            : t('resume.progress', { done: completedCount, total: totalCount });
         document.getElementById('resume-progress-fill').style.width = `${progress}%`;
         
         // Show modal
@@ -2197,8 +2203,8 @@ class App {
                 cyclePreview.classList.toggle('is-deload', isDeload);
             }
         } else {
-            document.getElementById('session-name').textContent = 'Crée ta première séance';
-            document.getElementById('session-duration').textContent = 'Configure ton programme';
+            document.getElementById('session-name').textContent = t('home.empty.title');
+            document.getElementById('session-duration').textContent = '';
             document.getElementById('session-slots').textContent = '0 exo';
             const setsEl = document.getElementById('session-sets');
             if (setsEl) setsEl.textContent = '0 série';
@@ -2217,7 +2223,7 @@ class App {
             const lastWorkout = [...history].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
             const lastSessionName = this.getSessionDisplayNameFromArchive(lastWorkout.sessionId, sessionLookup, sessionNameArchive);
             const daysAgo = Math.floor((Date.now() - new Date(lastWorkout.date)) / (1000 * 60 * 60 * 24));
-            const daysText = daysAgo === 0 ? "aujourd'hui" : daysAgo === 1 ? 'hier' : `il y a ${daysAgo} jours`;
+            const daysText = daysAgo === 0 ? t('common.today') : daysAgo === 1 ? t('common.yesterday') : t('common.daysAgo', { count: daysAgo });
             this.renderLastSessionInfo(lastSessionName, daysText);
         } else if (nextSession) {
             this.renderLastSessionInfo('');
@@ -2243,7 +2249,7 @@ class App {
         this.renderNextSessionMuscles(slots);
 
         const tagEl = document.getElementById('session-tag');
-        if (tagEl) tagEl.textContent = isSuggested ? 'Prochaine séance' : 'Séance choisie';
+        if (tagEl) tagEl.textContent = isSuggested ? t('home.nextSession') : t('home.chosenSession');
         this.applyHomeSessionAccent(this.getSessionAccent(session.id, sessions));
         this.currentSession = session;
     }
@@ -2278,8 +2284,8 @@ class App {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             </span>
             <span class="next-quest-last-copy">
-                <span class="next-quest-last-label">Dernière séance</span>
-                <span class="next-quest-last-value">${label ? `<strong>${this.escapeHtml(label)}</strong>${when ? ` · ${this.escapeHtml(when)}` : ''}` : 'Aucune pour l’instant'}</span>
+                <span class="next-quest-last-label">${t('home.lastSession')}</span>
+                <span class="next-quest-last-value">${label ? `<strong>${this.escapeHtml(label)}</strong>${when ? ` · ${this.escapeHtml(when)}` : ''}` : t('home.lastSessionNone')}</span>
             </span>
         `;
     }
@@ -2350,14 +2356,14 @@ class App {
             ? this.currentCalendarDate
             : new Date();
         const { start } = this.getCurrentMonthRange(activeMonth);
-        titleEl.textContent = start.toLocaleDateString('fr-FR', {
+        titleEl.textContent = start.toLocaleDateString(intlLocale(), {
             month: 'long',
             year: 'numeric'
         });
 
         const now = new Date();
         const isCurrentMonth = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth();
-        kickerEl.textContent = isCurrentMonth ? 'Mois en cours' : 'Historique';
+        kickerEl.textContent = t('stats.history');
         nextBtn.disabled = isCurrentMonth;
 
         const sessionLookup = new Map(sessions.map(session => [session.id, session]));
@@ -2371,7 +2377,7 @@ class App {
             })
             .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        summaryEl.textContent = `${monthHistory.length} séance${monthHistory.length > 1 ? 's' : ''}`;
+        summaryEl.textContent = t('common.sessions', { count: monthHistory.length });
         emptyEl.style.display = monthHistory.length === 0 ? 'block' : 'none';
 
         const workoutsByDay = new Map();
@@ -2465,12 +2471,12 @@ class App {
 
         const dateKicker = document.getElementById('home-date-kicker');
         if (dateKicker) {
-            dateKicker.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+            dateKicker.textContent = new Date().toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' });
         }
         const homeTitle = document.getElementById('home-title');
         if (homeTitle) {
-            const firstName = String((await db.getSetting('userName')) || '').trim();
-            homeTitle.textContent = firstName ? `Bonjour ${firstName}` : 'Bonjour';
+            const name = String((await db.getSetting('userName')) || '').trim();
+            homeTitle.textContent = name ? t('home.title', { name }) : t('home.titleNoName');
         }
     }
 
@@ -2524,7 +2530,8 @@ class App {
             counts.set(key, (counts.get(key) || 0) + 1);
         });
 
-        const labels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+        const initials = t('common.weekdayInitials').split(',');
+        const labels = initials.length === 7 ? initials : ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
         let isPast = true;
         return labels.map((label, index) => {
             const day = new Date(start);
@@ -2582,7 +2589,7 @@ class App {
         const tier = streak >= 24 ? 'inferno' : streak >= 12 ? 'blaze' : streak >= 3 ? 'lit' : 'ember';
 
         const now = new Date();
-        const kicker = `Semaine ${this.getIsoWeekNumber(now)}`;
+        const kicker = t('home.hero.week', { number: this.getIsoWeekNumber(now) });
 
         const segmentsHtml = Array.from({ length: levelSpan }, (_, index) => (
             `<span class="hero-seg${index < levelDone ? ' is-filled' : ''}"></span>`
@@ -2596,7 +2603,7 @@ class App {
                 : '';
             return `<div class="${classes.join(' ')}">
                 <span class="hero-day-tile">${mark}</span>
-                <span class="hero-day-label">${day.isToday ? 'Auj.' : day.label}</span>
+                <span class="hero-day-label">${day.isToday ? t('home.hero.todayShort') : day.label}</span>
             </div>`;
         }).join('');
 
@@ -2613,8 +2620,8 @@ class App {
 
         const status = isComplete ? 'success' : (prediction?.status || 'ontrack');
         const statusText = isComplete
-            ? (data.weekProtected ? 'Semaine protégée' : 'Streak sécurisé')
-            : (prediction?.message || `${weeklyGoal - sessionsDone} séance(s) restante(s)`);
+            ? (data.weekProtected ? t('home.hero.weekProtected') : t('home.hero.weekDone'))
+            : (prediction?.message || t('home.week.remaining', { count: weeklyGoal - sessionsDone }));
         const statusIcon = {
             success: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
             danger: '<path d="M12 8v5"/><path d="M12 16.5v.01"/><path d="M10.3 3.9L2 18a2 2 0 001.7 3h16.6A2 2 0 0022 18L13.7 3.9a2 2 0 00-3.4 0z"/>',
@@ -2623,9 +2630,9 @@ class App {
         }[status] || '';
 
         const nextText = isMaxLevel
-            ? '<strong>Niveau max</strong>'
-            : `<span>Prochain palier</span> <strong>${nextLevel.emoji} ${nextLevel.name}</strong>`;
-        const nextCount = isMaxLevel ? '∞' : `${weeksToNext} sem.`;
+            ? `<strong>${t('home.hero.maxLevel')}</strong>`
+            : `<span>${t('home.hero.nextLevel')}</span> <strong>${nextLevel.emoji} ${nextLevel.name}</strong>`;
+        const nextCount = isMaxLevel ? '∞' : t('home.hero.weeksShort', { count: weeksToNext });
 
         container.innerHTML = `
             <div class="hero-bg" aria-hidden="true">
@@ -2640,12 +2647,12 @@ class App {
             </div>
 
             <div class="hero-main">
-                <div class="hero-score" aria-label="Streak de ${streak} semaine${streak > 1 ? 's' : ''}">
+                <div class="hero-score" aria-label="${this.escapeHtml(t('home.hero.streakAria', { count: streak }))}">
                     ${this.getHeroFlameSVG()}
                     <span class="hero-score-number" data-digits="${String(streak).length}">${streak}</span>
                 </div>
                 <div class="hero-score-side">
-                    <div class="hero-score-unit">semaine${streak > 1 ? 's' : ''}<br>d'affilée</div>
+                    <div class="hero-score-unit">${t('home.hero.streakUnit', { count: streak })}</div>
                     <div class="hero-level-desc">${level.description}</div>
                 </div>
             </div>
@@ -2660,7 +2667,7 @@ class App {
 
             <div class="hero-week">
                 <div class="hero-week-head">
-                    <span class="hero-section-title">Cette semaine</span>
+                    <span class="hero-section-title">${t('home.hero.thisWeek')}</span>
                     <span class="hero-goal">
                         <span class="hero-goal-count"><strong>${sessionsDone}</strong>/${weeklyGoal}</span>
                         <span class="hero-pips">${goalPipsHtml}</span>
@@ -2674,7 +2681,7 @@ class App {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${statusIcon}</svg>
                     <span>${statusText}</span>
                 </div>
-                <div class="hero-shields" title="Boucliers : +0,5 par semaine validée, max ${streakEngine.MAX_SHIELDS}">
+                <div class="hero-shields" title="${this.escapeHtml(t('home.hero.shieldsHint', { max: streakEngine.MAX_SHIELDS }))}">
                     ${shieldsHtml}
                     <span class="hero-shields-count">${String(data.shieldCount).replace('.', ',')}</span>
                 </div>
@@ -2815,9 +2822,7 @@ class App {
             { kg: 7300000, one: 'tour Eiffel', many: 'tours Eiffel', emoji: '🗼' }
         ];
         const fitting = [...objects].reverse().find(item => kg >= item.kg) || null;
-        if (!fitting) {
-            return { emoji: '🪨', text: 'Chaque série remplit la jauge' };
-        }
+        if (!fitting) return null;
         const count = kg / fitting.kg;
         const rounded = count >= 10 ? Math.round(count) : Math.round(count * 10) / 10;
         return {
@@ -2907,7 +2912,7 @@ class App {
         const equivalent = this.getTonnageEquivalent(snapshot.totalLoadedVolume);
         const nextTitleNote = player.nextTitle
             ? `Titre « ${player.nextTitle.name} » au niveau ${player.nextTitle.min}`
-            : 'Titre ultime atteint';
+            : 'Dernier titre atteint';
 
         container.innerHTML = `
             <div class="hero-bg" aria-hidden="true">
@@ -2947,7 +2952,7 @@ class App {
                     <span>Records</span>
                 </div>
             </div>
-            <div class="player-equivalent"><span aria-hidden="true">${equivalent.emoji}</span>${this.escapeHtml(equivalent.text)}</div>
+            ${equivalent ? `<div class="player-equivalent"><span aria-hidden="true">${equivalent.emoji}</span>${this.escapeHtml(equivalent.text)}</div>` : ''}
         `;
     }
 
@@ -3259,11 +3264,10 @@ class App {
             container.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Tes lifts</span>
-                        <h4>Force & records</h4>
+                        <h4>Records</h4>
                     </div>
                 </div>
-                <div class="pz-empty">Tes records et progressions apparaîtront après tes premières séries chargées.</div>
+                <div class="pz-empty">Aucun record pour l’instant. Ils apparaissent après tes premières séries avec charge.</div>
             `;
             return;
         }
@@ -3273,15 +3277,14 @@ class App {
         container.innerHTML = `
             <div class="pz-card-head">
                 <div>
-                    <span class="pz-kicker">Tes lifts</span>
-                    <h4>Force & records</h4>
+                    <h4>Records</h4>
                 </div>
                 <span class="pz-chip">${snapshot.prCount30} record${snapshot.prCount30 > 1 ? 's' : ''} / 30 j</span>
             </div>
             <button type="button" class="lift-crown" data-exo-open="${this.escapeHtml(best.exerciseId)}">
                 <span class="lift-crown-medal" aria-hidden="true">👑</span>
                 <div class="lift-crown-main">
-                    <span>Ton lift le plus fort</span>
+                    <span>Meilleur lift</span>
                     <strong>${this.escapeHtml(best.exerciseId)}</strong>
                     <small>${formatKg(best.weight)} × ${best.reps} reps</small>
                 </div>
@@ -3340,7 +3343,7 @@ class App {
             <div class="pz-card-head">
                 <div>
                     <span class="pz-kicker">Activité · 8 semaines</span>
-                    <h4>${weeksWithData ? `${this.formatOneDecimal(avgSessions)} séances / sem.` : 'En attente de séances'}</h4>
+                    <h4>${weeksWithData ? `${this.formatOneDecimal(avgSessions)} séances / sem.` : 'Aucune séance'}</h4>
                 </div>
                 ${previousWeek.volume > 0 ? `<span class="pz-chip ${delta >= 0 ? 'is-up' : 'is-down'}">${this.formatPercentDelta(delta)} vs S-1</span>` : ''}
             </div>
@@ -4869,14 +4872,9 @@ class App {
 
         const titleIcon = document.querySelector('.lms-title-icon');
         if (titleIcon) {
-            titleIcon.innerHTML = renderAppIcon('recovery-checkin', { size: 20, label: 'Check-in récupération' });
+            titleIcon.innerHTML = renderAppIcon('recovery-checkin', { size: 20, label: 'Récupération' });
         }
 
-        const infoIcon = document.querySelector('.lms-info-icon');
-        if (infoIcon) {
-            infoIcon.innerHTML = renderAppIcon('recovery-info', { size: 22, label: 'Information récupération' });
-        }
-        
         const cycleContext = this.currentWorkout?.sessionCycle || await this.buildSessionCycleContext();
         this.currentWorkout.sessionCycle = cycleContext;
         this.cycleDeloadChoiceTemp = cycleContext.deloadChoice || 'off';
@@ -5067,7 +5065,7 @@ class App {
         let phase, title, iconKey;
         if (adaptationPercent >= 85) {
             phase = 'supercompensation';
-            title = 'Prêt pour progresser !';
+            title = 'Bien récupéré';
             iconKey = 'recovery-supercompensation';
         } else if (adaptationPercent >= 50) {
             phase = 'refuel';
@@ -5092,11 +5090,11 @@ class App {
         // Simplified message based on recovery status
         let adaptationMessage;
         if (adaptationPercent >= 85) {
-            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} sont bien récupérés. C'est le moment idéal pour progresser !`;
+            adaptationMessage = `${muscleInfo.name} : bien récupérés.`;
         } else if (adaptationPercent >= 50) {
-            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} récupèrent encore. Le coach ajuste surtout ses suggestions.`;
+            adaptationMessage = `${muscleInfo.name} : encore en récupération. Le coach ajuste ses suggestions.`;
         } else {
-            adaptationMessage = `Tes ${muscleInfo.name.toLowerCase()} ont besoin de repos. Le coach te proposera une version plus prudente si besoin.`;
+            adaptationMessage = `${muscleInfo.name} : besoin de repos. Le coach proposera des charges plus prudentes.`;
         }
         document.getElementById('adaptation-message').textContent = adaptationMessage;
         
@@ -8807,7 +8805,7 @@ class App {
             return this.openExercise(slotId);
         }
         if (this.isTimedSlot(this.currentSlot) || this.isTimedSlot(this.supersetSlot)) {
-            this.showCoachToast('Les blocs cardio ou chronométrés doivent être lancés seuls pour conserver leur chrono.', 'cold', '⏱️');
+            this.showCoachToast(t('toast.timedAlone'), 'cold', '⏱️');
             return this.openExercise(slotId);
         }
         
@@ -10979,7 +10977,7 @@ class App {
         document.getElementById('summary-max-weight').textContent = `${Math.max(maxWeightA, maxWeightB)} kg`;
         
         document.getElementById('summary-icon').textContent = '⚡';
-        document.getElementById('summary-title').textContent = 'SuperSet terminé !';
+        document.getElementById('summary-title').textContent = 'Superset terminé';
         
         const [historyA, historyB] = await Promise.all([
             this.getExerciseWorkoutHistory(this.currentSlot.activeExercise || this.currentSlot.name),
@@ -10992,15 +10990,15 @@ class App {
         document.getElementById('summary-comparison').innerHTML = supersetPanels || `
             <div class="comparison-card positive">
                 <span class="comparison-icon">🔥</span>
-                <span class="comparison-text">2 exercices en un ! Efficacité max !</span>
+                <span class="comparison-text">Deux exercices enchaînés.</span>
             </div>
         `;
         this.renderExerciseSummaryAchievements({
             badges: [
                 {
                     icon: '⚡',
-                    label: 'SuperSet validé',
-                    detail: 'Deux exercices bouclés dans le même bloc.'
+                    label: 'Superset terminé',
+                    detail: 'Deux exercices dans le même bloc.'
                 }
             ],
             microWins: [
@@ -12739,7 +12737,7 @@ class App {
         this.hideExerciseSummary();
         this.showScreen('session');
         await this.renderSlots();
-        this.showCoachToast('Exercice ignoré pour cette séance. Tu peux le reprendre quand tu veux.', 'cold', '↪️');
+        this.showCoachToast(t('toast.exerciseSkipped'), 'cold', '↪️');
     }
 
     async resumeSkippedExercise(slotId) {
@@ -12750,7 +12748,7 @@ class App {
         this.currentWorkout.skippedSlots = (this.currentWorkout.skippedSlots || []).filter(id => id !== slotId);
         await db.saveCurrentWorkout(this.currentWorkout);
         await this.openExercise(slotId);
-        this.showCoachToast('Exercice remis dans la séance.', 'hot', '↩️');
+        this.showCoachToast(t('toast.exerciseRestored'), 'hot', '↩️');
     }
 
     async applyLiveLoadAdaptation() {
@@ -12794,11 +12792,11 @@ class App {
         await db.saveCurrentWorkout(this.currentWorkout);
         if (isUnilateral) {
             this.renderUnilateralSeries();
-            this.showCoachToast('Prochaine série pré-remplie côté par côté. Tu peux encore tout modifier.', 'hot', '🎯');
+            this.showCoachToast(t('toast.nextSetPrefilledSides'), 'hot', '🎯');
         } else {
             this.renderSeries();
             const nextWeight = this.normalizeLoadPrecision(Number(analysis.suggestedWeight));
-            this.showCoachToast(`Prochaine série pré-remplie à ${nextWeight} kg. Tu peux encore la modifier.`, 'hot', '🎯');
+            this.showCoachToast(t('toast.nextSetPrefilled', { weight: nextWeight }), 'hot', '🎯');
         }
     }
 
@@ -13355,7 +13353,7 @@ class App {
             const firstInput = document.querySelector(`.input-reps-left[data-set-index="${setIndex}"]`)
                 || document.querySelector(`.input-reps-right[data-set-index="${setIndex}"]`);
             firstInput?.focus();
-            this.showCoachToast('Renseigne au moins un côté, ou termine/passe l’exercice depuis le contrôle libre.', 'cold', '↔️');
+            this.showCoachToast(t('toast.oneSideRequired'), 'cold', '↔️');
             return;
         }
 
@@ -13447,7 +13445,7 @@ class App {
             this.renderUnilateralSeries();
             void this.flushJustCompletedFeedback(unilateralPrCandidates);
             const missingSide = !slotData.setsLeft[setIndex]?.completed ? 'gauche' : 'droit';
-            this.showCoachToast(`Côté enregistré. Passe au côté ${missingSide} quand tu es prêt.`, 'cold', '↔️');
+            this.showCoachToast(t('toast.sideSaved', { side: missingSide }), 'cold', '↔️');
             setTimeout(() => document.querySelector(`.input-reps-${missingSide === 'gauche' ? 'left' : 'right'}[data-set-index="${setIndex}"]`)?.focus(), 50);
             return;
         }
@@ -13497,7 +13495,7 @@ class App {
         document.getElementById('summary-max-weight').textContent = `${Math.max(maxWeightLeft, maxWeightRight)} kg`;
         
         document.getElementById('summary-icon').textContent = '🔄';
-        document.getElementById('summary-title').textContent = 'Exercice unilatéral terminé !';
+        document.getElementById('summary-title').textContent = 'Exercice terminé';
         
         // Compare sides using the signal that matters most for this movement:
         // estimated strength when loaded, reps when it is bodyweight-only.
@@ -13526,14 +13524,14 @@ class App {
             comparisonHTML = `
                 <div class="comparison-card positive">
                     <span class="comparison-icon">⚖️</span>
-                    <span class="comparison-text">Équilibre parfait entre les deux côtés !</span>
+                    <span class="comparison-text">Gauche et droite équilibrés.</span>
                 </div>
             `;
         } else {
             comparisonHTML = `
                 <div class="comparison-card neutral">
                     <span class="comparison-icon">📊</span>
-                    <span class="comparison-text">Le côté ${weakerSide || 'le moins régulier'} sert de repère aujourd’hui. Commence par lui et garde sa performance comme référence, sans obligation de changer le plan.</span>
+                    <span class="comparison-text">${weakerSide ? `Côté ${weakerSide} en retrait. Commence par lui la prochaine fois.` : 'Les deux côtés ne sont pas au même niveau. Commence par le plus faible la prochaine fois.'}</span>
                 </div>
             `;
         }
@@ -13836,10 +13834,8 @@ class App {
         const count = (this.currentWorkout.fxSetCount || 0) + 1;
         this.currentWorkout.fxSetCount = count;
         if (count % 5 !== 0) return;
-        const labels = { 5: 'Échauffé', 10: 'En feu', 15: 'Machine', 20: 'Inarrêtable', 25: 'Légende' };
-        const label = labels[count] || 'Inarrêtable';
         setTimeout(() => {
-            this.spawnXpFloat(card, `🔥 ${count} séries · ${label}`, { isCombo: true });
+            this.spawnXpFloat(card, `🔥 ${t('common.sets', { count })}`, { isCombo: true });
             gamification.burstFromElement(card, { count: 40, spread: 200, power: 12, shapes: ['star', 'circle', 'ribbon'] });
         }, 450);
     }
@@ -14020,7 +14016,7 @@ class App {
         }
 
         if (updatedSides === 0) {
-            this.showCoachToast('Aucun côté modifié. Tu peux laisser un côté tel quel.', 'cold', '↔️');
+            this.showCoachToast(t('toast.noSideChanged'), 'cold', '↔️');
             return;
         }
         
@@ -14950,7 +14946,7 @@ class App {
 
     async enableRestTimerNotifications() {
         if (typeof window === 'undefined' || !('Notification' in window)) {
-            this.showCoachToast('Les notifications ne sont pas disponibles dans ce navigateur.', 'cold', '🔕');
+            this.showCoachToast(t('toast.notificationsUnavailable'), 'cold', '🔕');
             return;
         }
 
@@ -14960,9 +14956,9 @@ class App {
             if (permission === 'granted') {
                 localStorage.setItem('restTimerNotifications', 'enabled');
                 this.scheduleRestTimerNotification();
-                this.showCoachToast('Tu seras prévenu quand le repos sera terminé.', 'hot', '🔔');
+                this.showCoachToast(t('toast.restNotifyOn'), 'hot', '🔔');
             } else if (permission === 'denied') {
-                this.showCoachToast('Les notifications sont bloquées dans les réglages du navigateur.', 'cold', '🔕');
+                this.showCoachToast(t('toast.notificationsBlocked'), 'cold', '🔕');
             }
         } catch (error) {
             console.warn('Impossible d’activer les notifications du timer:', error);
@@ -15135,7 +15131,9 @@ class App {
         const repsInput = document.querySelector(`.input-reps[data-set-index="${targetSetIndex}"]`);
         repsInput?.focus();
         this.showCoachToast(
-            `${this.formatDurationLabel(appliedSeconds)} préremplies. Valide maintenant ${this.isCardioSlot(this.currentSlot) ? 'le bloc' : 'la série'}.`,
+            this.isCardioSlot(this.currentSlot)
+                ? t('toast.durationPrefilledBlock', { duration: this.formatDurationLabel(appliedSeconds) })
+                : t('toast.durationPrefilledSet', { duration: this.formatDurationLabel(appliedSeconds) }),
             'hot',
             '⏱️'
         );
@@ -15424,7 +15422,7 @@ class App {
     
     showDayStatusToast(status) {
         this.showCoachToast(
-            status === 'cold' ? 'Forme basse : mode maintenance, on ne force pas' : 'En feu ! Tente un record sur ta dernière série',
+            status === 'cold' ? t('toast.formLow') : t('toast.formHigh'),
             status === 'cold' ? 'cold' : 'hot'
         );
     }
@@ -15947,7 +15945,7 @@ class App {
             comparison.innerHTML = `
                 <div class="comparison-card neutral">
                     <span class="comparison-icon">🔋</span>
-                    <span class="comparison-text">Séance allégée volontairement: elle n’est pas comparée à tes séances normales et le coach ne s’en servira pas comme référence de charge.</span>
+                    <span class="comparison-text">Séance allégée : elle n’est pas comparée à tes séances normales ni utilisée comme référence de charge.</span>
                 </div>
             `;
         } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && !isTimedExercise) {
@@ -15967,16 +15965,16 @@ class App {
                 comparisonClass = 'positive';
                 icon = '🚀';
                 summaryIcon.textContent = '🎉';
-                summaryTitle.textContent = 'Progression !';
+                summaryTitle.textContent = 'En progrès';
                 
                 if (weightDiff > 0 && repsDiff < 0) {
-                    text = `Plus lourd aujourd’hui (<span>+${weightDiff}kg</span>) avec un peu moins de reps, ce qui reste cohérent. Force estimée: <span>${e1rmDiffPct >= 0 ? '+' : ''}${Math.round(e1rmDiffPct * 10) / 10}%<\/span>.`;
+                    text = `<span>+${weightDiff} kg</span> avec un peu moins de reps. Force estimée : <span>${e1rmDiffPct >= 0 ? '+' : ''}${Math.round(e1rmDiffPct * 10) / 10} %<\/span>.`;
                 } else if (repsDiff > 0 && weightDiff > 0) {
-                    text = `<span>+${repsDiff}</span> reps et <span>+${weightDiff}kg</span> vs dernière fois. Très solide.`;
+                    text = `<span>+${repsDiff}</span> reps et <span>+${weightDiff} kg</span> par rapport à la dernière fois.`;
                 } else if (repsDiff > 0) {
-                    text = `<span>+${repsDiff}</span> reps vs dernière fois. Belle consolidation.`;
+                    text = `<span>+${repsDiff}</span> reps par rapport à la dernière fois.`;
                 } else {
-                    text = `<span>+${weightDiff}kg</span> vs dernière fois. La charge monte dans le bon sens.`;
+                    text = `<span>+${weightDiff} kg</span> par rapport à la dernière fois.`;
                 }
                 
                 // Trigger confetti!
@@ -15986,13 +15984,13 @@ class App {
                 icon = '💪';
                 summaryIcon.textContent = '✅';
                 summaryTitle.textContent = 'Exercice terminé';
-                text = `Séance un peu plus dure que la précédente. Rien d’alarmant: récupère bien et reviens propre la prochaine fois.`;
+                text = `Un peu en dessous de la dernière fois. Ça arrive : récupère bien avant la prochaine.`;
             } else {
                 comparisonClass = 'neutral';
                 icon = '🟠';
                 summaryIcon.textContent = '✅';
                 summaryTitle.textContent = 'Exercice terminé';
-                text = 'Performance stable et propre. Tu empiles du travail utile.';
+                text = 'Performance stable.';
             }
             
             comparison.innerHTML = `
@@ -16003,20 +16001,20 @@ class App {
             `;
         } else if (this.lastExerciseHistory && this.lastExerciseHistory.totalReps > 0 && isTimedExercise) {
             summaryIcon.textContent = '✅';
-            summaryTitle.textContent = this.isCardioSlot(this.currentSlot) ? 'Bloc cardio terminé' : 'Temps tenu !';
+            summaryTitle.textContent = this.isCardioSlot(this.currentSlot) ? 'Bloc cardio terminé' : 'Temps tenu';
             comparison.innerHTML = `
                 <div class="comparison-card neutral">
                     <span class="comparison-icon">⏱️</span>
-                    <span class="comparison-text">Durée enregistrée${this.isCardioSlot(this.currentSlot) ? ' avec ton repère cardio' : ''}. Tu pourras la comparer à ton prochain passage.</span>
+                    <span class="comparison-text">Durée enregistrée.</span>
                 </div>
             `;
         } else {
             summaryIcon.textContent = '✅';
-            summaryTitle.textContent = 'Exercice terminé !';
+            summaryTitle.textContent = 'Exercice terminé';
             comparison.innerHTML = `
                 <div class="comparison-card neutral">
                     <span class="comparison-icon">🌟</span>
-                    <span class="comparison-text">Première fois sur cet exercice !</span>
+                    <span class="comparison-text">Première fois sur cet exercice : cette séance sert de référence.</span>
                 </div>
             `;
         }
@@ -16299,58 +16297,23 @@ class App {
         const streakData = await streakEngine.getStreakData();
         const weeklyGoal = streakData.weeklyGoal || 3;
         const sessionsAfterFinish = Math.min(weeklyGoal, (streakData.currentWeekSessions || 0) + 1);
-        const weeklyProgressText = `${sessionsAfterFinish}/${weeklyGoal} cette semaine`;
+        const isComplete = remaining === 0 && skippedExercises === 0 && completionRate >= 0.999;
+        const heroIcon = isComplete ? '🏁' : '🏋️';
+        const title = isComplete ? t('finish.titleDone') : t('finish.title');
+        let message = t('finish.messageNothing');
+        if (isComplete) message = t('finish.messageDone');
+        else if (remaining === 0 && skippedExercises > 0) message = t('finish.messageSkipped', { done: completedExercises, count: skippedExercises });
+        else if (completedExercises > 0 || totalSets > 0) message = t('finish.messageRemaining', { count: remaining });
 
-        let badge = 'Finisher mode';
-        let heroIcon = '✨';
-        let title = 'Arrêter ici ?';
-        let message = 'On enregistre ce qui est fait maintenant, puis on t’envoie vers le récap final.';
-        let note = `${completedExercises}/${totalExercises || completedExercises} exercices · ${totalSets} séries · ${weeklyProgressText}`;
-
-        if (remaining === 0 && skippedExercises > 0) {
-            badge = 'Séance flexible';
-            heroIcon = '🧭';
-            title = 'Séance adaptée';
-            message = `Tu as validé ${completedExercises} exercice${completedExercises > 1 ? 's' : ''} et choisi d’en passer ${skippedExercises}.`;
-            note = `${acknowledgedExercises}/${totalExercises} blocs parcourus · ${skippedExercises} ignoré${skippedExercises > 1 ? 's' : ''} · ${durationMinutes} min`;
-        } else if (completionRate >= 0.999) {
-            badge = 'Full clear';
-            heroIcon = '🏁';
-            title = 'Séance bouclée';
-            message = 'Tout est validé. Tu peux passer directement au récap final.';
-            note = `Full clear sécurisé · ${totalSets} séries · ${durationMinutes} min`;
-        } else if (completionRate >= 0.75) {
-            badge = 'Quête presque finie';
-            heroIcon = '⚡';
-            title = 'Très proche du full clear';
-            message = `Il reste ${remaining} exercice${remaining > 1 ? 's' : ''}, mais la séance peut déjà être clôturée proprement.`;
-            note = `${completedExercises}/${totalExercises} exercices validés · ${durationMinutes} min`;
-        } else if (completionRate >= 0.4) {
-            badge = 'Progression validée';
-            heroIcon = '🎯';
-            title = 'Base de séance sécurisée';
-            message = `Tu as déjà validé ${completedExercises} exercice${completedExercises > 1 ? 's' : ''}. Tu peux arrêter ici, ou continuer un peu.`;
-            note = `${totalSets} séries jouées · ${durationMinutes} min · ${weeklyProgressText}`;
-        } else if (completedExercises > 0 || totalSets > 0) {
-            badge = 'Sortie stratégique';
-            heroIcon = '🛡️';
-            title = 'Finir proprement';
-            message = `On garde ce qui est déjà fait si tu préfères arrêter maintenant.`;
-            note = `${totalSets} séries enregistrées · ${remaining} exercice${remaining > 1 ? 's' : ''} restant${remaining > 1 ? 's' : ''}`;
-        }
-
-        document.getElementById('finish-badge').textContent = badge;
         document.getElementById('finish-hero-icon').textContent = heroIcon;
         document.getElementById('finish-title').textContent = title;
         document.getElementById('finish-message').textContent = message;
-        document.getElementById('finish-note').textContent = note;
-        document.getElementById('finish-progress-label').textContent = skippedExercises > 0
-            ? 'Séance parcourue'
-            : remaining === 0 ? 'Clear séance' : 'Progression séance';
+        document.getElementById('finish-note').textContent = t('finish.weekNote', { done: sessionsAfterFinish, goal: weeklyGoal });
+        document.getElementById('finish-progress-label').textContent = t('finish.progress');
         document.getElementById('finish-progress-value').textContent = `${skippedExercises > 0 ? coveragePercent : completionPercent}%`;
         document.getElementById('finish-progress-fill').style.width = `${skippedExercises > 0 ? coveragePercent : completionPercent}%`;
         document.getElementById('finish-stat-exercises').textContent = skippedExercises > 0
-            ? `${completedExercises}/${totalExercises || completedExercises} · ${skippedExercises} ignoré${skippedExercises > 1 ? 's' : ''}`
+            ? `${completedExercises}/${totalExercises || completedExercises} · ${t('finish.skippedShort', { count: skippedExercises })}`
             : `${completedExercises}/${totalExercises || completedExercises}`;
         document.getElementById('finish-stat-sets').textContent = `${totalSets}`;
         document.getElementById('finish-stat-duration').textContent = `${durationMinutes} min`;
@@ -16366,7 +16329,7 @@ class App {
         if (!confirmBtn) return;
 
         confirmBtn.disabled = isLoading;
-        confirmBtn.textContent = isLoading ? 'Sauvegarde…' : 'Terminer la séance';
+        confirmBtn.textContent = isLoading ? t('finish.saving') : t('finish.confirm');
     }
 
     async confirmFinishSession() {
@@ -16567,7 +16530,7 @@ class App {
             if (levelAfter.level > levelBefore.level) {
                 setTimeout(() => {
                     gamification.triggerConfetti('heavy');
-                    gamification.showAchievement(levelAfter.title.emoji, `Niveau ${levelAfter.level} !`, `Tu es maintenant ${levelAfter.title.name}. Continue, la machine se construit.`);
+                    gamification.showAchievement(levelAfter.title.emoji, t('celebrate.levelUp.title', { level: levelAfter.level }), t('celebrate.levelUp.body', { title: levelAfter.title.name }));
                 }, 4200);
             }
 
@@ -16575,8 +16538,8 @@ class App {
                 setTimeout(() => {
                     gamification.showAchievement(
                         '🎯',
-                        'Défi ajusté',
-                        'Pas grave: le coach variera le prochain défi au lieu de te resservir exactement le même.',
+                        t('celebrate.challengeMissed.title'),
+                        t('celebrate.challengeMissed.body'),
                         null
                     );
                 }, 1800);
@@ -16591,10 +16554,10 @@ class App {
             console.error('Erreur lors de la sauvegarde de la séance:', error);
             if (workoutSaved) {
                 // Saved already: only the celebration failed.
-                this.showCoachToast('Séance enregistrée ✓', 'hot', '✅');
+                this.showCoachToast(t('toast.sessionSaved'), 'hot', '✅');
                 await this.renderHome().catch(() => {});
             } else {
-                this.showCoachToast('La séance n’a pas pu être sauvegardée correctement. Rien n’a été effacé, tu peux réessayer.', 'warning', '⚠️');
+                this.showCoachToast(t('toast.sessionSaveFailed'), 'warning', '⚠️');
                 this.startSessionTimer();
                 this.showScreen('session');
             }
@@ -16709,48 +16672,39 @@ class App {
             if (score.normalized >= 80) {
                 quality = 'excellent';
                 emoji = '🔥';
-                message = 'Séance parfaite !';
+                message = t('recap.title.excellent');
             } else if (score.normalized >= 60) {
                 quality = 'good';
                 emoji = '💪';
-                message = 'Bonne séance !';
+                message = t('recap.title.good');
             } else if (score.normalized >= 40) {
                 quality = 'ok';
                 emoji = '👍';
-                message = 'Séance correcte';
+                message = t('recap.title.ok');
             } else {
                 quality = 'low';
                 emoji = '🎯';
-                message = 'Marge de progression';
+                message = t('recap.title.low');
             }
 
             const heroMetrics = Array.isArray(recap?.heroMetrics) ? recap.heroMetrics : [];
             const comparisonTone = recap?.comparison?.tone || 'neutral';
             const comparisonText = recap?.comparison?.text
                 ? this.escapeHtml(recap.comparison.text)
-                : 'Séance bien enregistrée.';
+                : t('recap.saved');
             const positiveRows = Array.isArray(recap?.positiveRows) ? recap.positiveRows : [];
             const cautionRows = Array.isArray(recap?.cautionRows) ? recap.cautionRows : [];
             const stableRows = Array.isArray(recap?.stableRows) ? recap.stableRows : [];
             const achievementBadges = Array.isArray(recap?.badges) ? recap.badges : [];
             const microWins = Array.isArray(recap?.microWins) ? recap.microWins : [];
             const focusRows = positiveRows.length > 0 ? positiveRows : stableRows.slice(0, 2);
-            const topMusclesText = recap?.topMuscles?.length
-                ? `Zones les plus stimulées: ${recap.topMuscles.map(name => this.escapeHtml(name)).join(' · ')}`
-                : 'Les zones dominantes apparaîtront au fil de tes prochaines séances.';
             const summaryLine = recap?.summaryLine
                 ? this.escapeHtml(recap.summaryLine)
-                : 'Séance enregistrée.';
+                : t('recap.saved');
             const normalizedScore = Math.max(0, Math.min(100, Number(score?.normalized) || 0));
             const scoreCircumference = 2 * Math.PI * 52;
             const scoreOffset = scoreCircumference * (1 - normalizedScore / 100);
-            const qualityLabel = quality === 'excellent'
-                ? 'Momentum max'
-                : quality === 'good'
-                    ? 'Très bon signal'
-                    : quality === 'ok'
-                        ? 'Base solide'
-                        : 'Progression en vue';
+            const qualityLabel = t(`recap.stimulus.${quality}`);
             const achievementsHtml = achievementBadges.length
                 ? `
                     <div class="stimulus-achievement-section">
@@ -16838,7 +16792,7 @@ class App {
             const ringCircumference = 2 * Math.PI * ringRadius;
             const finAchievementsHtml = achievementBadges.length ? `
                 <section class="fin-section">
-                    <h4 class="fin-heading">Réussites <span>${achievementBadges.length}</span></h4>
+                    <h4 class="fin-heading">${t('recap.achievements')} <span>${achievementBadges.length}</span></h4>
                     <ul class="fin-list">
                         ${achievementBadges.map(badge => `
                             <li class="fin-achievement">
@@ -16868,8 +16822,8 @@ class App {
             }).join('');
             const finTrendsHtml = (focusRows.length || cautionRows.length) ? `
                 <section class="fin-section">
-                    ${focusRows.length ? `<h4 class="fin-heading">Points forts</h4><ul class="fin-list">${finTrendList(focusRows, 'good')}</ul>` : ''}
-                    ${cautionRows.length ? `<h4 class="fin-heading fin-heading-spaced">À surveiller</h4><ul class="fin-list">${finTrendList(cautionRows, 'warn')}</ul>` : ''}
+                    ${focusRows.length ? `<h4 class="fin-heading">${t('recap.strengths')}</h4><ul class="fin-list">${finTrendList(focusRows, 'good')}</ul>` : ''}
+                    ${cautionRows.length ? `<h4 class="fin-heading fin-heading-spaced">${t('recap.watch')}</h4><ul class="fin-list">${finTrendList(cautionRows, 'warn')}</ul>` : ''}
                 </section>
             ` : '';
 
@@ -16877,7 +16831,7 @@ class App {
             overlay.innerHTML = `
                 <div class="fin-shell">
                     <header class="fin-header">
-                        <div class="fin-kicker">Séance terminée</div>
+                        <div class="fin-kicker">${t('recap.kicker')}</div>
                         <h2 class="fin-title">${this.escapeHtml(message)}</h2>
                         <p class="fin-summary">${summaryLine}</p>
                     </header>
@@ -16898,12 +16852,11 @@ class App {
                             </svg>
                             <div class="fin-ring-center">
                                 <span class="score-number">${normalizedScore}</span>
-                                <small>Stimulus</small>
+                                <small>${t('recap.stimulus.label')}</small>
                             </div>
                             <div class="fin-rank rank-${rankLetter.toLowerCase()}">${rankLetter}</div>
                         </div>
                         <div class="fin-quality">${this.escapeHtml(qualityLabel)}</div>
-                        <div class="fin-quality-note">${normalizedScore}% du plein potentiel du jour</div>
                     </div>
 
                     ${this.renderSessionFinishXp(recap?.charts?.xp)}
@@ -16917,14 +16870,14 @@ class App {
                     ${finAchievementsHtml}
 
                     <section class="fin-section">
-                        <h4 class="fin-heading">Verdict</h4>
+                        <h4 class="fin-heading">${t('recap.comparison')}</h4>
                         <p class="fin-verdict ${this.escapeHtml(comparisonTone)}">${comparisonText}</p>
                     </section>
 
                     ${finTrendsHtml}
 
                     <div class="fin-action">
-                        <button class="fin-continue stimulus-score-btn" type="button">Continuer</button>
+                        <button class="fin-continue stimulus-score-btn" type="button">${t('recap.close')}</button>
                     </div>
                 </div>
             `;
@@ -18572,7 +18525,7 @@ class App {
         this.syncEditSlotControls();
 
         if (toast) {
-            this.showCoachToast('Exercice prérempli: séries, reps, repos, consignes et variantes sont prêts.', 'hot', '✓');
+            this.showCoachToast(t('toast.exercisePrefilled'), 'hot', '✓');
         }
     }
 
@@ -18713,7 +18666,7 @@ class App {
         const trackingMode = document.getElementById('edit-slot-tracking-mode')?.value || 'strength';
         
         if (!name || !activeExercise) {
-            this.showCoachToast('Le nom du slot et l\'exercice actif sont obligatoires', 'warning', '⚠️');
+            this.showCoachToast(t('toast.slotNameRequired'), 'warning', '⚠️');
             return;
         }
 
@@ -18817,7 +18770,7 @@ class App {
             .filter(val => val.length > 0);
         
         if (slot.pool.length === 0) {
-            this.showCoachToast('Garde au moins un exercice dans la liste', 'warning', '⚠️');
+            this.showCoachToast(t('toast.keepOneExercise'), 'warning', '⚠️');
             return;
         }
         
@@ -19089,7 +19042,7 @@ class App {
         } else if (nextSlotId) {
             const nextSlot = await db.get('slots', nextSlotId);
             if (nextSlot && (this.isTimedSlot(slot) || this.isTimedSlot(nextSlot))) {
-                this.showCoachToast('Un bloc cardio ou chronométré se lance séparément pour que son timer reste simple.', 'cold', '⏱️');
+                this.showCoachToast(t('toast.timedAlone'), 'cold', '⏱️');
                 return;
             }
             // Link superset
@@ -19117,7 +19070,7 @@ class App {
         const newName = nameInput?.value.trim();
         if (!newName) {
             if (nameInput) nameInput.value = session.name;
-            this.showCoachToast('Le nom de la séance ne peut pas être vide', 'warning', '⚠️');
+            this.showCoachToast(t('toast.sessionNameRequired'), 'warning', '⚠️');
             return;
         }
 
@@ -20094,7 +20047,7 @@ class App {
         
         const items = poolEditor.querySelectorAll('.pool-item-edit');
         if (items.length <= 1) {
-            this.showCoachToast('Garde au moins un exercice dans la liste', 'warning', '⚠️');
+            this.showCoachToast(t('toast.keepOneExercise'), 'warning', '⚠️');
             return;
         }
         
@@ -22247,7 +22200,7 @@ class App {
         if (!previousStats || previousStats.totalSets === 0) {
             return {
                 tone: 'neutral',
-                text: `Première séance ${sessionName} enregistrée sur ce format.`
+                text: t('recap.cmp.first', { name: sessionName })
             };
         }
 
@@ -22255,7 +22208,7 @@ class App {
         if (Number.isFinite(volumeDelta) && Math.abs(volumeDelta) >= 8) {
             return {
                 tone: volumeDelta > 0 ? 'positive' : 'warning',
-                text: `${this.formatPercentDelta(volumeDelta)} de volume chargé vs ta dernière ${sessionName}.`
+                text: t('recap.cmp.volume', { delta: this.formatPercentDelta(volumeDelta), name: sessionName })
             };
         }
 
@@ -22263,7 +22216,7 @@ class App {
         if (Math.abs(setDelta) >= 2) {
             return {
                 tone: setDelta > 0 ? 'positive' : 'neutral',
-                text: `${setDelta > 0 ? '+' : ''}${setDelta} série${Math.abs(setDelta) > 1 ? 's' : ''} par rapport à la dernière ${sessionName}.`
+                text: t('recap.cmp.sets', { delta: `${setDelta > 0 ? '+' : ''}${setDelta}`, count: Math.abs(setDelta), name: sessionName })
             };
         }
 
@@ -22271,19 +22224,19 @@ class App {
         if (Math.abs(repDelta) >= 4) {
             return {
                 tone: repDelta > 0 ? 'positive' : 'neutral',
-                text: `${repDelta > 0 ? '+' : ''}${repDelta} reps totales vs ta dernière ${sessionName}.`
+                text: t('recap.cmp.reps', { delta: `${repDelta > 0 ? '+' : ''}${repDelta}`, name: sessionName })
             };
         }
 
         return {
             tone: 'neutral',
-            text: `Séance dans la continuité de ta dernière ${sessionName}.`
+            text: t('recap.cmp.same', { name: sessionName })
         };
     }
 
     buildSessionTrendIndicator(row) {
         if (row.deltaPct == null || !Number.isFinite(row.deltaPct)) {
-            return row.trend === 'improved' ? 'En hausse' : row.trend === 'regressed' ? 'À surveiller' : 'Stable';
+            return row.trend === 'improved' ? t('recap.trend.up') : row.trend === 'regressed' ? t('recap.watch') : t('recap.trend.stable');
         }
 
         return `${this.formatPercentDelta(row.deltaPct)} e1RM`;
@@ -22297,8 +22250,8 @@ class App {
             badges.push({
                 icon: '🏆',
                 theme: 'record',
-                label: `${recordCount} record${recordCount > 1 ? 's' : ''}`,
-                detail: 'Nouveau(x) meilleur(s) signal(aux) détecté(s) sur la séance.'
+                label: t('recap.records', { count: recordCount }),
+                detail: t('recap.recordsDetail', { count: recordCount })
             });
         }
 
@@ -22310,8 +22263,8 @@ class App {
             badges.push({
                 icon: '🚀',
                 theme: 'progress',
-                label: `${topRow.label} en hausse`,
-                detail: `${this.formatPercentDelta(topRow.deltaPct)} d'e1RM vs la séance précédente`
+                label: topRow.label,
+                detail: t('recap.e1rmUp', { delta: this.formatPercentDelta(topRow.deltaPct) })
             });
         }
 
@@ -22339,7 +22292,7 @@ class App {
             microWins.push({
                 icon: 'focus',
                 theme: 'focus',
-                text: `Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}`
+                text: topMuscles.slice(0, 2).join(', ')
             });
         }
 
@@ -22484,7 +22437,7 @@ class App {
         const comparison = isDeloadSession
             ? {
                 tone: 'neutral',
-                text: 'Séance deload enregistrée. Elle est gardée à part pour ne pas biaiser la lecture de ta progression.'
+                text: t('recap.cmp.deload')
             }
             : this.buildSessionComparisonMessage(currentStats, previousStats, this.currentSession.name);
         const sessionAchievements = this.buildSessionFinishAchievements({
@@ -22497,32 +22450,32 @@ class App {
 
         const heroMetrics = [
             {
-                label: 'Durée',
+                label: t('recap.metric.duration'),
                 theme: 'duration',
                 value: `${durationMinutes} min`,
-                note: `${completedExercises}/${totalExercises || completedExercises} exercices terminés${skippedExercises > 0 ? ` · ${skippedExercises} passé${skippedExercises > 1 ? 's' : ''}` : ''}`
+                note: `${completedExercises}/${totalExercises || completedExercises} ${t('recap.metric.exercises')}${skippedExercises > 0 ? ` · ${t('finish.skippedShort', { count: skippedExercises })}` : ''}`
             },
             {
-                label: 'Séquences',
+                label: t('recap.metric.sets'),
                 theme: 'sets',
                 value: `${totalSets}`,
                 note: `${currentStats.totalReps} reps · ${this.formatOneDecimal(currentStats.totalTimedMinutes)} min chronométrées`
             },
             {
-                label: currentStats.totalVolume > 0 ? 'Volume' : (currentStats.totalCardioMinutes > 0 ? 'Cardio' : 'Temps'),
+                label: currentStats.totalVolume > 0 ? t('recap.metric.volume') : (currentStats.totalCardioMinutes > 0 ? t('recap.metric.cardio') : t('recap.metric.time')),
                 theme: currentStats.totalVolume > 0 ? 'volume' : 'cardio',
                 value: currentStats.totalVolume > 0
                     ? `${this.formatVolume(currentStats.totalVolume)} kg`
                     : `${this.formatOneDecimal(currentStats.totalTimedMinutes)} min`,
-                note: currentStats.totalVolume > 0 ? 'charge totale déplacée' : 'durée cumulée'
+                note: currentStats.totalVolume > 0 ? t('recap.metric.volumeNote') : t('recap.metric.timeNote')
             },
             {
-                label: recordCount > 0 ? 'Records' : 'Intensité',
+                label: recordCount > 0 ? t('recap.metric.records') : t('recap.metric.intensity'),
                 theme: recordCount > 0 ? 'record' : 'intensity',
                 value: recordCount > 0
                     ? `${recordCount}`
                     : (currentStats.avgRpe == null ? '--' : `RPE ${this.formatOneDecimal(currentStats.avgRpe)}`),
-                note: recordCount > 0 ? 'nouveau(x) meilleur(s) signal(aux)' : currentStats.avgRpeSource
+                note: recordCount > 0 ? t('recap.recordsDetail', { count: recordCount }) : currentStats.avgRpeSource
             }
         ];
 
@@ -22530,16 +22483,13 @@ class App {
             ? await this.estimateSessionCalories({ sets: recapSets, durationMinutes })
             : null;
 
-        let summaryLine = isDeloadSession
-            ? 'Deload validé proprement.'
-            : completionRate >= 0.99 && skippedExercises === 0
-                ? 'Séance complétée proprement.'
-                : skippedExercises > 0
-                    ? `${completedExercises}/${totalExercises} exercices validés · ${skippedExercises} passé${skippedExercises > 1 ? 's' : ''} pour aujourd'hui.`
-                : `${completedExercises}/${totalExercises} exercices validés.`;
-        if (topMuscles.length > 0) {
-            summaryLine += ` Focus dominant: ${topMuscles.slice(0, 2).join(' · ')}.`;
-        }
+        const summaryParts = [isDeloadSession
+            ? `${this.currentSession.name} · ${t('recap.deload')}`
+            : skippedExercises > 0
+                ? `${this.currentSession.name} · ${completedExercises}/${totalExercises} ${t('recap.metric.exercises')} · ${t('finish.skippedShort', { count: skippedExercises })}`
+                : `${this.currentSession.name} · ${completedExercises}/${totalExercises} ${t('recap.metric.exercises')}`];
+        if (topMuscles.length > 0) summaryParts.push(topMuscles.slice(0, 2).join(', '));
+        const summaryLine = summaryParts.join(' · ');
 
         const charts = await this.buildSessionFinishCharts({
             recapSets,
@@ -22675,7 +22625,7 @@ class App {
         return `
             <div class="fin-xp${levelUp ? ' is-level-up' : ''}">
                 <div class="fin-xp-top">
-                    <span class="fin-xp-level">${this.escapeHtml(after.title?.emoji || '⚡')} Niv. ${after.level} · ${this.escapeHtml(after.title?.name || '')}</span>
+                    <span class="fin-xp-level">${this.escapeHtml(after.title?.emoji || '⚡')} ${t('recap.xp.level', { level: after.level })} · ${this.escapeHtml(after.title?.name || '')}</span>
                     <span class="fin-xp-gain">+${gain} XP</span>
                 </div>
                 <div class="fin-xp-track">
@@ -22683,8 +22633,8 @@ class App {
                     <div class="fin-xp-fill" style="--fin-xp-from:${fromPct.toFixed(1)}%;--fin-xp-to:${toPct.toFixed(1)}%"></div>
                 </div>
                 <div class="fin-xp-note">${levelUp
-                    ? `LEVEL UP · Niv. ${before.level} → ${after.level}`
-                    : `${Math.max(0, after.ceil - after.xp)} XP avant le niveau ${after.level + 1}`}</div>
+                    ? t('recap.xp.levelUp', { level: after.level })
+                    : t('recap.xp.toNext', { xp: Math.max(0, after.ceil - after.xp), level: after.level + 1 })}</div>
             </div>
         `;
     }
@@ -22719,10 +22669,10 @@ class App {
                 <div class="fin-section">
                     <div class="fin-chart-head">
                         <div>
-                            <div class="fin-chart-kicker">Volume · ${trend.length} séances</div>
+                            <div class="fin-chart-kicker">${t('recap.chart.volume', { count: trend.length })}</div>
                             <div class="fin-chart-big">${fmt(last.value)} <small>kg</small></div>
                         </div>
-                        <span class="fin-delta ${delta >= 0 ? 'up' : 'down'}">${isBest ? '👑 Record · ' : ''}${delta >= 0 ? '+' : ''}${Math.round(delta)}% vs moy.</span>
+                        <span class="fin-delta ${delta >= 0 ? 'up' : 'down'}">${isBest ? `${t('recap.chart.best')} · ` : ''}${delta >= 0 ? '+' : ''}${Math.round(delta)}% ${t('recap.chart.vsAvg')}</span>
                     </div>
                     <svg class="fin-trend-svg" viewBox="0 0 ${width} ${height}" aria-hidden="true">
                         <defs>
@@ -22752,8 +22702,8 @@ class App {
             cards.push(`
                 <div class="fin-section">
                     <div class="fin-chart-head">
-                        <div class="fin-chart-kicker">Volume par exercice</div>
-                        <span class="fin-legend-ghost">▏ séance précédente</span>
+                        <div class="fin-chart-kicker">${t('recap.chart.byExercise')}</div>
+                        <span class="fin-legend-ghost">▏ ${t('recap.chart.previous')}</span>
                     </div>
                     <div class="fin-bars">
                         ${bars.map((bar, index) => {
@@ -22784,7 +22734,7 @@ class App {
             cards.push(`
                 <div class="fin-section">
                     <div class="fin-chart-head">
-                        <div class="fin-chart-kicker">Série par série</div>
+                        <div class="fin-chart-kicker">${t('recap.chart.bySet')}</div>
                         <span class="fin-rpe-legend"><i class="low"></i>RPE&lt;7<i class="mid"></i>7<i class="high"></i>8<i class="max"></i>9+</span>
                     </div>
                     <div class="fin-eq">
