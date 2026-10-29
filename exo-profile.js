@@ -122,9 +122,15 @@ const ExoProfileMixin = {
             ? Object.entries(modeVotes).sort((a, b) => b[1] - a[1])[0][0]
             : (this.getTrackingMode(name) || 'strength');
         const strengthSets = sets.filter(set => this.getExoSetMode(set, name) === 'strength');
-        if (mode === 'strength' && strengthSets.length && strengthSets.every(set => !(Number(set.weight) > 0))) {
+        const bodyweightConfig = this.getBodyweightAutoConfig(name);
+        const isBodyweightMove = bodyweightConfig.assistedPattern
+            || (bodyweightConfig.autoMode && !bodyweightConfig.weightedPattern);
+        if (mode === 'strength' && (isBodyweightMove || (strengthSets.length && strengthSets.every(set => !(Number(set.weight) > 0))))) {
+            // Bodyweight, assisted or "lest" sets: reps are the record, the
+            // added load is shown on its own (assistance is never a record).
             mode = 'bodyweight';
         }
+        const assisted = Boolean(bodyweightConfig.assistedPattern);
 
         const sessionsMap = new Map();
         for (const set of sets) {
@@ -142,6 +148,7 @@ const ExoProfileMixin = {
                     bestDuration: 0,
                     bestMetric: 0,
                     distance: 0,
+                    bestPace: null,
                     metricKey: set.cardioMetric || null,
                     sides: { left: 0, right: 0 }
                 });
@@ -158,17 +165,27 @@ const ExoProfileMixin = {
                 if (eligible) session.bestDuration = Math.max(session.bestDuration, seconds);
                 const metric = Number(set.cardioMetricValue ?? (mode === 'cardio' ? set.weight : 0) ?? 0);
                 if (eligible && metric > 0) session.bestMetric = Math.max(session.bestMetric, metric);
-                const distance = Number(set.distanceMeters || 0)
-                    || (set.cardioMetric === 'distance-m' ? Number(set.cardioMetricValue || 0) : 0);
-                if (distance > 0) session.distance += distance;
+                const distance = this.getSetDistanceMeters(set);
+                if (distance > 0) {
+                    session.distance += distance;
+                    const pace = seconds > 0 ? seconds / distance : 0;
+                    if (eligible && pace > 0 && (!session.bestPace || pace < session.bestPace.pace)) {
+                        session.bestPace = { pace, set };
+                    }
+                }
                 if (mode === 'timed' && weight > 0) session.volume += weight * Math.max(1, seconds / 60);
                 continue;
             }
 
             if (reps <= 0) continue;
-            session.volume += weight > 0 ? weight * reps : 0;
+            session.volume += weight > 0 && !assisted ? weight * reps : 0;
             if (!eligible) continue;
             session.bestReps = Math.max(session.bestReps, reps);
+            if (mode === 'bodyweight') {
+                if (!session.topSet || reps > session.topSet.reps) session.topSet = { weight, reps, date: set.date };
+                session.maxLoad = Math.max(session.maxLoad || 0, weight);
+                continue;
+            }
             if (weight > 0) {
                 const rpe = this.getStatsRpe(set, null) || 8;
                 const e1rm = this.calculateE1RM(weight, reps, rpe);
@@ -210,6 +227,8 @@ const ExoProfileMixin = {
         const totalSets = sessions.reduce((sum, session) => sum + session.sets, 0);
         const last = sessions[sessions.length - 1] || null;
         const lastSides = [...sessions].reverse().find(session => session.sides.left > 0 && session.sides.right > 0) || null;
+        const bestPace = sessions.reduce((acc, session) => (session.bestPace && (!acc || session.bestPace.pace < acc.pace) ? session.bestPace : acc), null);
+        const maxLoad = Math.max(0, ...sessions.map(session => session.maxLoad || 0));
 
         return {
             name,
@@ -225,6 +244,9 @@ const ExoProfileMixin = {
             totalSets,
             last,
             lastSides,
+            bestPace,
+            maxLoad,
+            assisted,
             mastery: this.getExoMastery(sessions.length),
             muscleId: entry.muscleId,
             nextGoal: this.buildExoNextGoal(mode, sessions, bestSession, name),
@@ -314,7 +336,12 @@ const ExoProfileMixin = {
         if (profile.mode === 'strength' && session.topSet) {
             return `${count} · top ${this.formatOneDecimal(session.topSet.weight).replace('.', ',')} kg × ${session.topSet.reps}`;
         }
-        if (profile.mode === 'bodyweight') return `${count} · max ${session.bestReps} reps`;
+        if (profile.mode === 'bodyweight') {
+            const load = session.maxLoad > 0
+                ? (profile.assisted ? ` · assist. ${this.formatOneDecimal(session.maxLoad).replace('.', ',')} kg` : ` · lest +${this.formatOneDecimal(session.maxLoad).replace('.', ',')} kg`)
+                : '';
+            return `${count} · max ${session.bestReps} reps${load}`;
+        }
         if (profile.mode === 'timed') return `${count} · max ${this.formatDurationLabel(session.bestDuration)}`;
         const parts = [this.formatDurationLabel(session.duration)];
         if (session.distance > 0) parts.push(this.formatExoDistance(session.distance));
@@ -562,9 +589,14 @@ const ExoProfileMixin = {
             ];
         }
         if (profile.mode === 'bodyweight') {
+            const loadTile = profile.maxLoad > 0
+                ? (profile.assisted
+                    ? { label: 'Assistance', value: `${this.formatOneDecimal(Math.min(...profile.sessions.filter(s => s.maxLoad > 0).map(s => s.maxLoad))).replace('.', ',')} kg`, sub: 'la plus faible' }
+                    : { label: 'Lest max', value: `+${this.formatOneDecimal(profile.maxLoad).replace('.', ',')} kg`, sub: 'au poids du corps' })
+                : { label: 'Séries', value: String(profile.totalSets), sub: 'au total' };
             return [
                 { label: 'Record', value: best ? this.formatExoValue(profile, best.value) : '--', sub: bestDate, gold: true },
-                { label: 'Séries', value: String(profile.totalSets), sub: 'au total' },
+                loadTile,
                 { label: 'Séances', value: String(profile.sessions.length), sub: this.formatExoRelativeDate(profile.last?.date) }
             ];
         }
@@ -575,8 +607,11 @@ const ExoProfileMixin = {
                 { label: 'Séances', value: String(profile.sessions.length), sub: this.formatExoRelativeDate(profile.last?.date) }
             ];
         }
+        const paceLabel = profile.bestPace ? this.getCardioDerivedLabel(profile.bestPace.set, profile.name) : null;
         return [
-            { label: 'Plus long', value: best ? this.formatExoValue(profile, best.value) : '--', sub: bestDate, gold: true },
+            paceLabel
+                ? { label: 'Meilleure allure', value: paceLabel.split(' ')[0], sub: paceLabel.split(' ').slice(1).join(' '), gold: true }
+                : { label: 'Plus long', value: best ? this.formatExoValue(profile, best.value) : '--', sub: bestDate, gold: true },
             profile.totalDistance > 0
                 ? { label: 'Distance', value: this.formatExoDistance(profile.totalDistance), sub: 'au total' }
                 : { label: 'Temps cumulé', value: `${Math.round(profile.totalDuration / 60)} min`, sub: 'au total' },
