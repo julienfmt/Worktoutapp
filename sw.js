@@ -17,6 +17,7 @@ const APP_SHELL_ASSETS = [
     './ai-coach.css?v=6.0.0',
     './onboarding.css?v=6.0.0',
     './v6.css?v=6.0.0',
+    './dark.css?v=6.0.0',
     './db.js?v=6.0.0',
     './exercises-db.json?v=2',
     './data.js?v=6.0.0',

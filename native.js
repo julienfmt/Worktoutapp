@@ -249,6 +249,18 @@
 
                 <div class="settings-card">
                     <div class="settings-card-row">
+                        <span class="settings-card-icon" aria-hidden="true">🌗</span>
+                        <span class="settings-card-main"><strong>Apparence</strong><small>Suit ton téléphone ou forcé</small></span>
+                    </div>
+                    <div class="theme-switch" role="radiogroup" aria-label="Apparence">
+                        ${[['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']].map(([value, label]) => `
+                            <button type="button" class="${(this.themeChoice || 'auto') === value ? 'active' : ''}" data-theme-choice="${value}" role="radio" aria-checked="${(this.themeChoice || 'auto') === value}">${label}</button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-row">
                         <span class="settings-card-icon" aria-hidden="true">🔔</span>
                         <span class="settings-card-main">
                             <strong>Rappels</strong>
@@ -295,8 +307,13 @@
             `;
             if (!block.dataset.bound) {
                 block.dataset.bound = 'true';
-                block.addEventListener('click', event => {
+                block.addEventListener('click', async event => {
                     if (event.target.closest('[data-app-setting="paywall"]')) this.showPaywall?.();
+                    const theme = event.target.closest('[data-theme-choice]');
+                    if (theme) {
+                        await this.setThemeChoice(theme.dataset.themeChoice);
+                        await this.renderAppSettingsBlock();
+                    }
                 });
                 block.addEventListener('change', event => void this.onAppSettingChange(event));
             }

@@ -13,6 +13,10 @@
         bindEvents() {
             baseBindEvents.call(this);
             this.initHomePager();
+            db.getSetting('themeChoice').then(choice => this.applyTheme(choice || 'auto')).catch(() => {});
+            window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
+                if ((this.themeChoice || 'auto') === 'auto') this.applyTheme('auto');
+            });
         },
 
         showScreen(screenId) {
@@ -21,6 +25,21 @@
             if (screenId === 'home') {
                 requestAnimationFrame(() => this.alignHomePager());
             }
+        },
+
+        // Theme: 'auto' follows the phone, or a forced light/dark choice.
+        applyTheme(choice = 'auto') {
+            const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+            const theme = choice === 'dark' || (choice === 'auto' && prefersDark) ? 'dark' : 'light';
+            document.documentElement.dataset.theme = theme;
+            document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#120f24' : '#f8fafc');
+            try { localStorage.setItem('themeChoice', choice); } catch (error) {}
+            this.themeChoice = choice;
+        },
+
+        async setThemeChoice(choice) {
+            await db.setSetting('themeChoice', choice);
+            this.applyTheme(choice);
         },
 
         initHomePager() {
