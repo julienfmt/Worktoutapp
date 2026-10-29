@@ -4258,3 +4258,59 @@ html[data-theme="dark"] .btn-link-superset.linked:hover,
 html[data-theme="dark"] .btn-unilateral-validate {
     --primary-dark: #4f46e5;
 }
+
+/* ===== Weekly leagues (league.js) ===== */
+.league-card { border-top: 4px solid var(--league, #c2773a); }
+.league-rule { margin: 4px 0 10px; font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+.league-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.league-row { display: grid; grid-template-columns: 26px 32px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; background: var(--bg-tertiary, #f3f2fb); font-weight: 700; font-size: 14px; }
+.league-row.zone-up .league-rank { color: #16a34a; }
+.league-row.zone-down .league-rank { color: #e11d48; }
+.league-row.is-me { background: var(--league, #c2773a); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+.league-row.is-me .league-rank { color: #fff; }
+.league-rank { font-family: 'Nunito', sans-serif; font-weight: 900; text-align: center; }
+.league-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(99,102,241,.14); font-weight: 900; }
+.league-row.is-me .league-avatar { background: rgba(255,255,255,.25); }
+.league-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.league-xp { font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 13px; }
+.league-gap { text-align: center; color: var(--text-muted); line-height: 1; }
+.league-note { display: block; margin-top: 8px; color: var(--text-muted); font-size: 11px; }
+
+/* ===== Coach IA chat (coach-chat.js) ===== */
+.cc-chat { display: flex; flex-direction: column; height: min(88vh, 760px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+#cc-chat-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cc-chat-head { display: flex; align-items: center; gap: 10px; padding: 4px 4px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cc-chat-head > div { flex: 1; min-width: 0; }
+.cc-chat-head h3 { margin: 0; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 18px; }
+.cc-chat-head small { display: block; text-align: left; color: var(--text-muted); font-weight: 600; }
+.cc-chat-avatar { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: linear-gradient(135deg, #312e81, #6d28d9); box-shadow: 0 3px 0 #1e1b4b; }
+.cc-chat-icon { width: 36px; height: 36px; border-radius: 12px; border: none; background: var(--bg-tertiary, #f3f2fb); font-size: 15px; cursor: pointer; color: var(--text-primary); }
+.cc-thread { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px 2px; overscroll-behavior: contain; }
+.cc-bubble { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.45; font-weight: 600; word-wrap: break-word; }
+.cc-bubble.is-coach { align-self: flex-start; background: var(--bg-tertiary, #f3f2fb); color: var(--text-primary); border-bottom-left-radius: 6px; }
+.cc-bubble.is-me { align-self: flex-end; background: #6366f1; color: #fff; border-bottom-right-radius: 6px; box-shadow: 0 3px 0 #4338ca; }
+.cc-bubble.is-error { background: rgba(225, 29, 72, .1); color: #be123c; }
+.cc-li { display: block; padding-left: 14px; position: relative; }
+.cc-li::before { content: '•'; position: absolute; left: 2px; color: #6366f1; }
+.cc-code { display: block; margin: 6px 0; padding: 8px 10px; border-radius: 12px; background: rgba(99, 102, 241, .12); font-size: 13px; }
+.cc-apply { display: block; margin-top: 8px; width: 100%; padding: 10px; border: none; border-radius: 14px; background: #22c55e; color: #fff; font-weight: 800; box-shadow: 0 3px 0 #15803d; cursor: pointer; }
+.cc-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cc-suggestion { border: 2px solid var(--border); background: var(--card-bg, #fff); color: var(--text-primary); border-radius: 999px; padding: 8px 12px; font-weight: 700; font-size: 13px; cursor: pointer; text-align: left; }
+.cc-typing { display: flex; gap: 5px; padding: 14px 16px; }
+.cc-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); animation: cc-dot 1s infinite ease-in-out; }
+.cc-typing span:nth-child(2) { animation-delay: .15s; }
+.cc-typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes cc-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-4px); } }
+.cc-compose { display: flex; gap: 8px; align-items: flex-end; padding-top: 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.cc-compose textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; padding: 11px 14px; border-radius: 16px; border: 2px solid var(--border); background: var(--card-bg, #fff); color: var(--text-primary); font: 600 15px/1.35 inherit; font-family: inherit; }
+.cc-send { width: 46px; height: 46px; border-radius: 50%; border: none; background: #6366f1; color: #fff; font-size: 18px; box-shadow: 0 3px 0 #4338ca; cursor: pointer; flex-shrink: 0; }
+.cc-send:disabled, .cc-compose textarea:disabled { opacity: .5; }
+.cc-setup { display: flex; flex-direction: column; gap: 10px; padding: 14px 2px; overflow-y: auto; }
+.cc-setup p { margin: 0; font-weight: 600; color: var(--text-secondary); }
+.cc-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 16px; border: 2px solid var(--border); cursor: pointer; }
+.cc-option span { display: flex; flex-direction: column; gap: 2px; }
+.cc-option small { color: var(--text-muted); font-weight: 600; }
+.cc-option:has(input:checked) { border-color: #6366f1; background: rgba(99, 102, 241, .08); }
+.cc-field { text-transform: none; letter-spacing: normal; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--border); background: var(--card-bg, #fff); color: var(--text-primary); font: inherit; font-weight: 600; }
+.cc-btn-main { padding: 14px; border: none; border-radius: 16px; background: #6366f1; color: #fff; font-weight: 900; font-size: 16px; box-shadow: 0 4px 0 #4338ca; cursor: pointer; }
+.cc-text-link { background: none; border: none; color: #6366f1; font-weight: 700; padding: 6px; cursor: pointer; }

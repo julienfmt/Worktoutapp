@@ -1006,6 +1006,7 @@
         buildDigest,
         formatDigest,
         buildPrompt,
+        PROGRAM_CONTRACT,
         buildShareMessage,
         planLaunch,
         extractProgram,

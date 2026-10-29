@@ -22,7 +22,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
-### Nouveautés v6.0
+### Nouveautés v6.0 – 6.1
 - 🧭 **3 onglets swipables** : Accueil / Parcours / Stats, barre d'onglets en bas, glisser à gauche ou à droite pour changer de volet (`shell.js`).
 - 🏠 Accueil recentré : streak, prochaine séance, prochaine étape du parcours et **carte musculaire de la semaine** (séries par muscle vs zone de croissance visée).
 - 🗺️ **Parcours façon Duolingo** (`journey.js`) : un chemin infini de chapitres thématiques, une étape par séance terminée, coffres à ouvrir (+XP), séance de boss et récompense de fin de chapitre. Les chapitres déjà terminés avant la mise à jour sont marqués ouverts.
@@ -36,8 +36,11 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 👑 **Muscu+** (`premium.js`) : offre et écran d'abonnement définis, tout reste offert pendant la bêta. Détails dans `LAUNCH.md`.
 - ⌚ **Prêt pour le natif** (`native.js`) : Apple Santé / Health Connect, rappels façon Duolingo (jour de séance, série en danger, retour, récompenses) avec aperçu dans Réglages.
 - 🧮 **Boîte à outils** (`tools.js`) : calculateur de disques, 1RM et pourcentages, mensurations et courbe de poids.
+- 💬 **Coach IA qui discute** (`coach-chat.js`) : un chat « comme un pote » qui connaît tes séances, records et volume, et peut proposer des changements de programme relus avant application. Serveur avec quotas (`workers/coach-proxy.js`) ou ta propre clé Claude.
+- 🏅 **Ligues hebdomadaires** (`league.js`) : Bronze → Diamant, 15 joueurs, top 5 promus, 5 derniers relégués (rivaux simulés en attendant les ligues en ligne).
+- 🌙 **Mode sombre** : Auto / Clair / Sombre dans Réglages → Apparence.
 - ⚙️ Réglages simplifiés : l'essentiel en haut, les réglages avancés du coach repliés.
-- 🗄️ Base IndexedDB **v2** (index `setHistory.exerciseStableId`), migration automatique sans perte ; service worker 6.0.0.
+- 🗄️ Base IndexedDB **v2** (index `setHistory.exerciseStableId`), migration automatique sans perte ; service worker 6.1.0.
 
 ### Nouveautés v5
 - 🎨 DA unifiée mauve/violet + vert de validation (`theme.css`) : boutons 3D gamifiés, cartes de série identiques en bilatéral / unilatéral / superset, animations (entrée de cartes, validation, « +XP » flottant, badge record).
