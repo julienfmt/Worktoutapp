@@ -248,6 +248,24 @@ async function run() {
     assert.equal(longGap.type, 'decrease');
     assert.ok(longGap.suggestedWeight < 70 && longGap.suggestedWeight >= 62.5);
 
+    // Light loads never snap to 0 kg (2 kg raises with a 2 kg step).
+    assert.equal(app.snapLoadToStep(1.8, 2, 2, 'down'), 2);
+    assert.equal(app.snapLoadToStep(0.5, 3, 2, 'down'), 2);
+
+    // Capped machine with no history: let the player choose, never "2 kg".
+    const cappedFirst = app.getCappedLoadProgressionAdvice(
+        { ...press, progressionMode: 'capped_load', maxSelectableLoadKg: 120 },
+        { lastWorkout: null, nextLoadCandidate: 2, targetReps: '8 / 8 / 8' }
+    );
+    assert.equal(cappedFirst.suggestedWeight, '?');
+
+    // Assisted bodyweight: assistance comes from what was logged last time.
+    const assisted = app.getBodyweightProgressionAdvice(
+        { ...press, progressionMode: 'bodyweight', bodyweightProfile: { family: 'pullup', allowAssistance: true, assistanceStepKg: 5 } },
+        { lastWorkout: { sets: [] }, lastWeight: 30, consecutiveExposureSuccess: 2, targetReps: '8 / 8 / 8', avgReps: 8, avgRpe: 8 }
+    );
+    assert.equal(assisted.suggestedAssistanceKg, 25);
+
     console.log('coach-engine tests: OK');
 }
 

@@ -5985,7 +5985,7 @@ class App {
             if (latestSet?.label) {
                 if (Math.abs(suggestedNumericWeight - latestSet.weight) < 0.5) {
                     if (previousSessionSet && Math.abs(previousSessionSet.weight - latestSet.weight) < 0.5 && latestSet.reps > previousSessionSet.reps) {
-                        return `Meme base: ${latestSet.label}. Tu avais gagne ${latestSet.reps - previousSessionSet.reps} rep.`;
+                        return `Même base : ${latestSet.label}. Tu avais gagné ${latestSet.reps - previousSessionSet.reps} rep${latestSet.reps - previousSessionSet.reps > 1 ? 's' : ''}.`;
                     }
                     if (targetLabel && latestSet.reps < Number(targetLabel || 0)) {
                         return `Dernière S${setIndex + 1}: ${latestSet.label}. Reprends ${suggestedLabel}, vise ${targetLabel}.`;
@@ -8474,6 +8474,7 @@ class App {
         this.supersetSlot = null; // Reset superset
         this.isSupersetMode = false;
         this.isUnilateralMode = false; // Reset unilateral mode
+        this.avgPerformance = null; // Never compare with the previous exercise
         this.isReviewMode = this.areSlotsCompleted([slotId]);
         this.nextSetSuggestedWeight = null; // Reset intra-session weight suggestion
         this.nextUnilateralSuggestedWeights = null;
@@ -8903,6 +8904,7 @@ class App {
         const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
         if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
         this.closeExerciseInsightsSheet();
+        this.avgPerformance = null;
         this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
         if (!this.currentSlot || !this.currentSlot.supersetWith) return;
@@ -9587,6 +9589,23 @@ class App {
         const { lastWorkout, lastWeight, avgReps, targetReps } = context;
 
         if (!lastWorkout) {
+            // Only deload sessions so far: the light load was deliberately
+            // reduced, so the normal working load is a bit above it.
+            const deloadWeight = context.skippedDeload ? this.getReferenceWeight(context.skippedDeload, slot) : 0;
+            if (deloadWeight > 0) {
+                const step = this.getLoadStepForSlot(slot, context.weightIncrement);
+                const working = this.snapLoadToStep(deloadWeight / 0.9, deloadWeight, step, 'nearest');
+                return {
+                    type: 'new',
+                    title: 'Retour à la charge de travail',
+                    message: `Ta dernière séance était un deload à ${deloadWeight} kg. Repars vers ${working} kg pour ${targetReps}, avec ${slot.type === 'isolation' ? '1 à 2' : '2'} reps en réserve.`,
+                    suggestedWeight: working,
+                    referenceWeight: deloadWeight,
+                    suggestedReps: targetReps,
+                    suggestedRir: slot.type === 'isolation' ? 1 : 2,
+                    weightTrend: 'up'
+                };
+            }
             return {
                 type: 'new',
                 title: 'Séance de calibration',
@@ -9785,7 +9804,7 @@ class App {
                     type: 'decrease',
                     icon: 'decrease',
                     title: 'Reprise après une pause',
-                    message: `Dernier passage il y a ${weeks} semaines: reprends à ${reloadWeight}kg (~-10%) avec 2-3 reps en réserve. La force revient vite, le coach remontera dès que les reps suivent.`,
+                    message: `Dernier passage il y a ${weeks} semaines : reprends à ${reloadWeight} kg${reloadWeight < lastWeight ? ` (${Math.round((reloadWeight / lastWeight - 1) * 100)} %)` : ''} avec 2-3 reps en réserve. La force revient vite, le coach remontera dès que les reps suivent.`,
                     suggestedWeight: reloadWeight,
                     suggestedRir: Math.max(2, Number(advice.suggestedRir) || 2),
                     weightTrend: 'down',
@@ -9851,7 +9870,9 @@ class App {
 
         if (slot.progressionMode === 'bodyweight' && slot.bodyweightProfile?.allowAssistance) {
             const assistanceStepKg = slot.bodyweightProfile.assistanceStepKg || 5;
-            const currentAssistanceKg = slot.bodyweightProfile.currentAssistanceKg || 0;
+            const currentAssistanceKg = Number(context.lastWeight) > 0
+                ? Number(context.lastWeight)
+                : (Number(slot.bodyweightProfile.currentAssistanceKg) || 0);
             overlay.suggestedAssistanceKg = currentAssistanceKg + assistanceStepKg;
             overlay.suggestedWeight = null;
             overlay.suggestedWeightLabel = `${overlay.suggestedAssistanceKg}kg assistance`;
@@ -9861,12 +9882,15 @@ class App {
         }
 
         if (numericBaseWeight != null) {
-            const deloadWeight = this.snapLoadToStep(
+            const snappedDeload = this.snapLoadToStep(
                 numericBaseWeight * (1 - (deloadPercent / 100)),
                 numericBaseWeight,
                 this.getLoadStepForSlot(slot, context.weightIncrement),
                 'down'
             );
+            // Light loads (e.g. 2 kg) cannot drop a step: keep the load, the
+            // deload comes from the reps kept in reserve.
+            const deloadWeight = snappedDeload > 0 ? snappedDeload : numericBaseWeight;
             overlay.suggestedWeight = deloadWeight;
             overlay.referenceWeight = numericBaseWeight;
             overlay.weightTrend = 'down';
@@ -9903,7 +9927,9 @@ class App {
         if (!advice) return advice;
 
         const adjusted = { ...advice };
-        const sideLabel = options.side === 'left' ? 'gauche' : options.side === 'right' ? 'droit' : 'faible';
+        // Both side cards must name the same starting side: the weaker one.
+        const leadSide = this.getUnilateralLeadSide();
+        const sideLabel = leadSide === 'right' ? 'droit' : 'gauche';
         adjusted.coachOverlay = 'unilateral';
 
         if (slot.progressionMode === 'load') {
@@ -9922,7 +9948,8 @@ class App {
                 type: 'new',
                 title: 'Premier essai',
                 message: 'Commence dans la fourchette normale. Le mode charge plafonnée prendra le relais quand la machine sera saturée.',
-                suggestedWeight: slot.maxSelectableLoadKg ? Math.min(slot.maxSelectableLoadKg, context.nextLoadCandidate || slot.maxSelectableLoadKg) : '?',
+                // No history yet: let the player pick (nextLoadCandidate is 0 + step).
+                suggestedWeight: '?',
                 suggestedReps: context.targetReps,
                 weightTrend: 'neutral'
             };
@@ -10063,6 +10090,38 @@ class App {
             };
         }
 
+        // Weighted bodyweight (lest already on the belt): progress the lest
+        // like any load instead of falling back to "poids du corps".
+        if (profile.allowExternalLoad && !profile.allowAssistance && (Number(context.lastWeight) > 0 || currentAxis === 'load')) {
+            if (Number(context.lastWeight) > 0) {
+                const loadAdvice = this.getLoadProgressionAdvice(slot, context);
+                if (loadAdvice) {
+                    return {
+                        ...loadAdvice,
+                        suggestedWeightLabel: 'Lest',
+                        progressionAxis: 'load',
+                        nextProgressionAxis: 'load'
+                    };
+                }
+            }
+            return {
+                type: 'increase',
+                title: 'Prêt pour le lest',
+                message: 'Ajoute un léger lest et vise le bas de la fourchette, puis remonte les reps.',
+                suggestedWeight: Math.max(slot.incrementKg || 2.5, slot.minIncrementKg || 1),
+                suggestedWeightLabel: 'Lest',
+                suggestedReps: context.targetReps,
+                weightTrend: 'up',
+                progressionAxis: 'load',
+                nextProgressionAxis: 'load'
+            };
+        }
+
+        // Assistance actually used last time (machine counterweight / band).
+        const currentAssistanceKg = Number(context.lastWeight) > 0
+            ? Number(context.lastWeight)
+            : (Number(profile.currentAssistanceKg) || assistanceStepKg);
+
         if (profile.allowAssistance) {
             if (canAdvance) {
                 return {
@@ -10070,7 +10129,7 @@ class App {
                     title: 'Moins d’assistance',
                     message: `Le mouvement est validé 2 fois. Réduis l’assistance d’un palier de ${assistanceStepKg}kg avant d’ajouter de nouvelles reps.`,
                     suggestedWeight: null,
-                    suggestedAssistanceKg: Math.max(0, (profile.currentAssistanceKg || assistanceStepKg) - assistanceStepKg),
+                    suggestedAssistanceKg: Math.max(0, currentAssistanceKg - assistanceStepKg),
                     suggestedWeightLabel: 'Assistance',
                     suggestedReps: context.targetReps,
                     weightTrend: 'down',
@@ -10085,7 +10144,7 @@ class App {
                     title: 'Assistance à stabiliser',
                     message: 'Reste au même niveau d’assistance pour revenir dans la plage. Si tu es très en dessous des reps, augmente légèrement l’assistance.',
                     suggestedWeight: null,
-                    suggestedAssistanceKg: profile.currentAssistanceKg || assistanceStepKg,
+                    suggestedAssistanceKg: currentAssistanceKg,
                     suggestedWeightLabel: 'Assistance',
                     suggestedReps: context.targetReps,
                     weightTrend: 'neutral',
@@ -10234,6 +10293,23 @@ class App {
         return constrained;
     }
 
+    // Called when a workout is saved: the progression axis chosen during the
+    // session becomes the reference for the next one (only if sets were done).
+    async commitPendingProgressionAxes() {
+        for (const [slotId, slotData] of Object.entries(this.currentWorkout?.slots || {})) {
+            if (!slotData?.pendingProgressionAxis) continue;
+            const done = [...(slotData.sets || []), ...(slotData.setsLeft || []), ...(slotData.setsRight || [])]
+                .some(set => set?.completed && Number(set.reps) > 0);
+            if (!done) continue;
+            const stored = await db.get('slots', slotId);
+            if (!stored) continue;
+            const slot = this.normalizeSlotProgressionConfig(stored);
+            slot.progressionState.primaryAxis = slotData.pendingProgressionAxis;
+            if (slotData.pendingSuccessfulAxis) slot.progressionState.lastSuccessfulAxis = slotData.pendingSuccessfulAxis;
+            await db.put('slots', slot);
+        }
+    }
+
     async syncSlotProgressionStateFromAdvice(slot, advice, context = {}) {
         if (!slot?.id || !advice) return;
 
@@ -10243,9 +10319,13 @@ class App {
         const normalizedSlot = this.normalizeSlotProgressionConfig(storedSlot);
         let changed = false;
 
-        if (advice.progressionAxis && advice.progressionAxis !== 'switch' && normalizedSlot.progressionState?.primaryAxis !== advice.progressionAxis) {
-            normalizedSlot.progressionState.primaryAxis = advice.progressionAxis;
-            changed = true;
+        // The axis the coach picked is only committed once the workout is
+        // saved (see confirmFinishSession): persisting it here changed the
+        // advice after every set and could lock progression on one axis.
+        const workoutSlotData = this.currentWorkout?.slots?.[slot.id];
+        if (workoutSlotData && advice.progressionAxis && advice.progressionAxis !== 'switch') {
+            workoutSlotData.pendingProgressionAxis = advice.progressionAxis;
+            if (context.consecutiveExposureSuccess >= 2) workoutSlotData.pendingSuccessfulAxis = advice.progressionAxis;
         }
 
         if ((normalizedSlot.progressionMode === 'capped_load' || context.atCap || context.canIncreaseLoad === false) && !normalizedSlot.capDetection?.userFlag) {
@@ -10262,13 +10342,6 @@ class App {
                 normalizedSlot.capDetection.autoConfidence = nextConfidence;
                 normalizedSlot.capDetection.reasons = Array.from(reasons);
                 normalizedSlot.capDetection.lastDetectedAt = new Date().toISOString();
-                changed = true;
-            }
-        }
-
-        if (context.consecutiveExposureSuccess >= 2 && advice.progressionAxis && advice.progressionAxis !== 'switch') {
-            if (normalizedSlot.progressionState.lastSuccessfulAxis !== advice.progressionAxis) {
-                normalizedSlot.progressionState.lastSuccessfulAxis = advice.progressionAxis;
                 changed = true;
             }
         }
@@ -12163,7 +12236,7 @@ class App {
             && lastReps >= repsMin
             && lastReps >= previousReps - 1;
         const suggestedWeight = lastWeight > 0
-            ? this.normalizeLoadPrecision(Math.max(0, dramaticLoadDrop ? lastWeight : lastWeight - loadStep))
+            ? this.normalizeLoadPrecision(dramaticLoadDrop || lastWeight - loadStep <= 0 ? lastWeight : lastWeight - loadStep)
             : null;
 
         return {
@@ -12253,8 +12326,8 @@ class App {
             message = `Le côté ${sideLabel(fatigueSide.side)} montre ${reason}. Tu peux alléger ce côté pour la prochaine série et prendre plus de repos. Les deux côtés restent entièrement à ton choix.`;
             recommendedRestSeconds += 45;
             suggestedWeights = {
-                left: left?.side === fatigueSide.side ? fatigueSide.suggestedWeight : left?.lastWeight ?? null,
-                right: right?.side === fatigueSide.side ? fatigueSide.suggestedWeight : right?.lastWeight ?? null
+                left: left?.side === fatigueSide.side ? (fatigueSide.suggestedWeight ?? fatigueSide.lastWeight ?? null) : left?.lastWeight ?? null,
+                right: right?.side === fatigueSide.side ? (fatigueSide.suggestedWeight ?? fatigueSide.lastWeight ?? null) : right?.lastWeight ?? null
             };
         } else if (imbalance) {
             kind = 'imbalance';
@@ -12433,8 +12506,10 @@ class App {
         ];
 
         if (fatigueSignal || singleSetCalibration) {
+            // After a big drop the weight already on the bar is the right one:
+            // keep it (the message then says "garde", not "descends à").
             const suggestedWeight = lastWeight > 0
-                ? this.normalizeLoadPrecision(Math.max(0, dramaticLoadDrop ? lastWeight : lastWeight - loadStep))
+                ? this.normalizeLoadPrecision(dramaticLoadDrop || lastWeight - loadStep <= 0 ? lastWeight : lastWeight - loadStep)
                 : null;
             const recommendedRestSeconds = Math.max(
                 Number(slot.rest) || 0,
@@ -12457,7 +12532,9 @@ class App {
                 badge: fatigueSignal ? 'Ajustement proposé' : 'Calibration',
                 title: fatigueSignal ? 'Signal de fatigue en séance' : 'Charge à recalibrer',
                 message: fatigueSignal
-                    ? `Le coach observe que ${reason}. Tu peux descendre à ${suggestedWeight != null ? formatWeight(suggestedWeight) : 'une charge plus légère'} et prendre davantage de repos. Rien n’est imposé.`
+                    ? (suggestedWeight != null && suggestedWeight < lastWeight
+                        ? `Le coach observe que ${reason}. Tu peux descendre à ${formatWeight(suggestedWeight)} et prendre davantage de repos. Rien n’est imposé.`
+                        : `Le coach observe que ${reason}. Garde ${suggestedWeight != null ? formatWeight(suggestedWeight) : 'cette charge'} et prends davantage de repos avant la prochaine série. Rien n’est imposé.`)
                     : `La première série est sous la zone (${repsMin}-${repsMax}). Tu peux tester ${suggestedWeight != null ? formatWeight(suggestedWeight) : 'plus léger'} sur la prochaine, ou continuer comme tu le sens.`,
                 suggestedWeight,
                 suggestedSets,
@@ -15231,6 +15308,10 @@ class App {
             slotData.sets[this.lastCompletedSetIndex].rpeSource = rpeSource;
             await db.saveCurrentWorkout(this.currentWorkout);
             
+            // Timed holds and cardio: "reps" are seconds or minutes, the
+            // strength back-off / increase / hot-cold logic does not apply.
+            if (this.isTimedSlot(this.currentSlot)) return;
+
             // === INTRA-SESSION WEIGHT ADJUSTMENTS ===
             if (!isLastSet && rpeTouched) {
                 // HIGH RPE (>= 9): Suggest weight reduction for next sets
@@ -16578,6 +16659,7 @@ class App {
             }
 
             this.invalidateExerciseHistoryCaches();
+            await this.commitPendingProgressionAxes();
 
             const sessions = await db.getSessions();
             const historyForSuggestion = await db.getAll('workoutHistory');
@@ -20791,7 +20873,10 @@ class App {
             : direction === 'up'
                 ? Math.ceil(ratio - epsilon)
                 : Math.round(ratio);
-        return this.normalizeLoadPrecision(Math.max(0, base + k * increment));
+        const snapped = base + k * increment;
+        // An external load never snaps to 0 kg: the lightest step is the floor.
+        if (snapped <= 0) return this.normalizeLoadPrecision(Math.min(base, increment));
+        return this.normalizeLoadPrecision(snapped);
     }
 
     // Reps expected at a new load, from the last performance and its reps in reserve.
@@ -23243,6 +23328,13 @@ class App {
                 adjusted.suggestedWeight = Math.min(suggestedWeight, readinessWeight);
                 adjusted.referenceWeight = referenceWeight;
                 adjusted.weightTrend = adjusted.suggestedWeight < referenceWeight ? 'down' : adjusted.weightTrend;
+                if (adjusted.suggestedWeight < referenceWeight) {
+                    // Lighter than last time: it is no longer an "increase",
+                    // and the reps go back to the programmed range.
+                    adjusted.type = 'decrease';
+                    adjusted.icon = 'decrease';
+                    adjusted.suggestedReps = this.formatTargetReps(this.genTargetReps(slot.repsMin, slot.repsMax, slot.sets));
+                }
                 adjusted.title = 'Version prudente';
                 adjusted.message = `${lmsData.message} Conserve toutes les séries prévues et ajuste seulement la charge si l’échauffement confirme la gêne.`;
             }
