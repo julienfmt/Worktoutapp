@@ -100,6 +100,7 @@
             this.stopCardioTicker();
             this.cardioHistoryCache = null;
             this.cachedBodyWeight = await db.getSetting('bodyWeight');
+            this.cardioAdvancedOpen = (await db.getSetting('cardioAdvancedOpen')) === true;
             await baseOpenExercise.call(this, slotId);
             if (this.isCardioConsoleSlot()) {
                 document.getElementById('logbook-card')?.style.setProperty('display', 'none');
@@ -514,6 +515,14 @@
                 </div>
             ` : '';
 
+            const advancedOpen = this.cardioAdvancedOpen === true;
+            const modeLabel = { steady: 'Continu', intervals: 'Fractionné', free: 'Libre' }[live.mode] || 'Continu';
+            const settingsSummary = [
+                isIntervals ? `${live.intervals.rounds} × ${live.intervals.work}/${live.intervals.rest} s` : modeLabel,
+                `${this.formatCardioValue(live.primary, primary)} ${primary.unit}`.trim(),
+                live.mode === 'steady' ? `${live.targetMinutes} min` : ''
+            ].filter(Boolean).join(' · ');
+
             const actions = {
                 idle: `
                     <button type="button" class="btn cc-btn-start" data-cc-action="start">
@@ -554,15 +563,7 @@
                     <div class="cc-card">
                         <div class="cc-top">
                             <span class="cc-machine">${this.escapeHtml(blockLabel)}</span>
-                            <span class="cc-chip">${isWarmup ? 'Échauffement' : `${this.formatCardioValue(this.estimateCardioKcalPerMinute(profile.key, live.primary, live.secondary), { decimals: 1 })} kcal/min`}</span>
                         </div>
-                        ${showFinish ? '' : `
-                            <div class="cc-modes" role="tablist" aria-label="Type de bloc">
-                                ${[['steady', 'Continu'], ['intervals', 'Fractionné'], ['free', 'Libre']].map(([mode, label]) => `
-                                    <button type="button" class="cc-mode ${live.mode === mode ? 'active' : ''}" data-cc-action="mode" data-mode="${mode}" role="tab" aria-selected="${live.mode === mode}" ${lockedMode ? 'disabled' : ''}>${label}</button>
-                                `).join('')}
-                            </div>
-                        `}
                         <div class="cc-dial" aria-live="off">
                             <svg class="cc-ring" viewBox="0 0 120 120" aria-hidden="true">
                                 <circle class="cc-ring-track" cx="60" cy="60" r="54"/>
@@ -575,19 +576,40 @@
                             </div>
                         </div>
                         ${isIntervals ? `<div class="cc-rounds" data-cc="rounds">${Array.from({ length: live.intervals.rounds }, () => '<i></i>').join('')}</div>` : ''}
-                        <div class="cc-live">
-                            <div class="cc-live-item"><strong data-cc="distance">--</strong><span>${profile.key === 'swim' ? 'nagés' : 'distance'}</span></div>
-                            <div class="cc-live-item"><strong data-cc="kcal">0</strong><span>kcal</span></div>
-                            <div class="cc-live-item"><strong data-cc="avg">--</strong><span>moy. ${this.escapeHtml(primary.unit || primary.label.toLowerCase())}</span></div>
-                        </div>
-                        ${showFinish ? this.renderCardioFinishPanel(live, profile) : `
-                            <div class="cc-controls">
-                                ${stepper(primary, live.primary, 'primary')}
-                                ${stepper(secondary, live.secondary, 'secondary')}
-                                ${targetStepper}
+                        ${status === 'idle' ? '' : `
+                            <div class="cc-live">
+                                <div class="cc-live-item"><strong data-cc="distance">--</strong><span>${profile.key === 'swim' ? 'nagés' : 'distance'}</span></div>
+                                <div class="cc-live-item"><strong data-cc="kcal">0</strong><span>kcal</span></div>
+                                <div class="cc-live-item"><strong data-cc="avg">--</strong><span>moy. ${this.escapeHtml(primary.unit || primary.label.toLowerCase())}</span></div>
                             </div>
-                            ${intervalConfig}
+                        `}
+                        ${showFinish ? this.renderCardioFinishPanel(live, profile) : `
                             <div class="cc-actions">${actions[status] || actions.idle}</div>
+                            <div class="cc-drawer ${advancedOpen ? 'is-open' : ''}">
+                                <button type="button" class="cc-drawer-toggle" data-cc-action="toggle-advanced" aria-expanded="${advancedOpen}">
+                                    <span class="cc-drawer-title">Réglages</span>
+                                    <span class="cc-drawer-summary">${this.escapeHtml(settingsSummary)}</span>
+                                    <svg class="cc-drawer-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                                </button>
+                                ${advancedOpen ? `
+                                    <div class="cc-drawer-body">
+                                        ${lockedMode ? '' : `
+                                            <div class="cc-modes" role="tablist" aria-label="Type de bloc">
+                                                ${[['steady', 'Continu'], ['intervals', 'Fractionné'], ['free', 'Libre']].map(([mode, label]) => `
+                                                    <button type="button" class="cc-mode ${live.mode === mode ? 'active' : ''}" data-cc-action="mode" data-mode="${mode}" role="tab" aria-selected="${live.mode === mode}">${label}</button>
+                                                `).join('')}
+                                            </div>
+                                        `}
+                                        ${intervalConfig}
+                                        <div class="cc-controls">
+                                            ${targetStepper}
+                                            ${stepper(primary, live.primary, 'primary')}
+                                            ${stepper(secondary, live.secondary, 'secondary')}
+                                        </div>
+                                        ${isWarmup ? '' : `<small class="cc-drawer-note">≈ ${this.formatCardioValue(this.estimateCardioKcalPerMinute(profile.key, live.primary, live.secondary), { decimals: 1 })} kcal/min à ce réglage</small>`}
+                                    </div>
+                                ` : ''}
+                            </div>
                         `}
                     </div>
                     <div class="cc-plan">
@@ -615,29 +637,37 @@
             const distance = draft.distanceKm ?? (totals.distanceKm != null ? Math.round(totals.distanceKm * 100) / 100 : '');
             const kcal = draft.calories ?? Math.round(totals.kcal);
             const feeling = draft.feeling || 'steady';
+            const showDetails = this.cardioAdvancedOpen === true || live.showDetails === true;
             return `
                 <div class="cc-finish">
                     <strong class="cc-finish-title">${live.manual ? 'Saisis ton bloc' : 'Bloc terminé !'}</strong>
-                    <div class="cc-finish-grid">
-                        <label class="cc-field">
-                            <span>Durée</span>
-                            <span class="cc-field-input"><input type="number" inputmode="decimal" step="0.5" min="0" value="${minutes || ''}" placeholder="20" data-cc-finish="minutes"><small>min</small></span>
-                        </label>
-                        <label class="cc-field">
-                            <span>Distance</span>
-                            <span class="cc-field-input"><input type="number" inputmode="decimal" step="0.01" min="0" value="${distance === '' ? '' : distance}" placeholder="optionnel" data-cc-finish="distanceKm"><small>km</small></span>
-                        </label>
-                        <label class="cc-field">
-                            <span>Calories</span>
-                            <span class="cc-field-input"><input type="number" inputmode="numeric" step="1" min="0" value="${kcal || ''}" placeholder="auto" data-cc-finish="calories"><small>kcal</small></span>
-                        </label>
-                        ${live.manual ? `
+                    <label class="cc-field">
+                        <span>Durée</span>
+                        <span class="cc-field-input"><input type="number" inputmode="decimal" step="0.5" min="0" value="${minutes || ''}" placeholder="20" data-cc-finish="minutes"><small>min</small></span>
+                    </label>
+                    ${showDetails ? `
+                        <div class="cc-finish-grid">
                             <label class="cc-field">
-                                <span>${this.escapeHtml(profile.primary.label)} moy.</span>
-                                <span class="cc-field-input"><input type="number" inputmode="decimal" step="${profile.primary.step}" min="0" value="${this.formatCardioValue(live.primary, profile.primary).replace(',', '.')}" data-cc-finish="primary"><small>${this.escapeHtml(profile.primary.unit)}</small></span>
+                                <span>Distance</span>
+                                <span class="cc-field-input"><input type="number" inputmode="decimal" step="0.01" min="0" value="${distance === '' ? '' : distance}" placeholder="optionnel" data-cc-finish="distanceKm"><small>km</small></span>
                             </label>
-                        ` : ''}
-                    </div>
+                            <label class="cc-field">
+                                <span>Calories</span>
+                                <span class="cc-field-input"><input type="number" inputmode="numeric" step="1" min="0" value="${kcal || ''}" placeholder="auto" data-cc-finish="calories"><small>kcal</small></span>
+                            </label>
+                            ${live.manual ? `
+                                <label class="cc-field">
+                                    <span>${this.escapeHtml(profile.primary.label)} moy.</span>
+                                    <span class="cc-field-input"><input type="number" inputmode="decimal" step="${profile.primary.step}" min="0" value="${this.formatCardioValue(live.primary, profile.primary).replace(',', '.')}" data-cc-finish="primary"><small>${this.escapeHtml(profile.primary.unit)}</small></span>
+                                </label>
+                            ` : ''}
+                        </div>
+                    ` : `
+                        <button type="button" class="cc-details-link" data-cc-action="toggle-details">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            Distance, calories (facultatif)
+                        </button>
+                    `}
                     <span class="cc-finish-label">Ressenti</span>
                     <div class="cc-feelings" role="radiogroup" aria-label="Ressenti">
                         ${FEELINGS.map(item => `
@@ -720,6 +750,19 @@
             const live = this.getCardioLive();
             const profile = this.getCardioProfile();
             switch (action) {
+                case 'toggle-advanced': {
+                    this.cardioAdvancedOpen = !this.cardioAdvancedOpen;
+                    await db.setSetting('cardioAdvancedOpen', this.cardioAdvancedOpen);
+                    this.hapticTap?.(6);
+                    this.renderCardioConsole();
+                    return;
+                }
+                case 'toggle-details': {
+                    if (!live) return;
+                    live.showDetails = !live.showDetails;
+                    this.renderCardioConsole();
+                    return;
+                }
                 case 'mode': {
                     if (!live || live.status !== 'idle') return;
                     live.mode = button.dataset.mode;

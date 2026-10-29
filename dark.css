@@ -1751,6 +1751,10 @@
     box-shadow: 0 var(--btn-depth-sm) 0 #2a2448;
 }
 
+:where(html[data-theme="dark"]) .cc-drawer {
+    border-top: 2px solid #2e2850;
+}
+
 :where(html[data-theme="dark"]) .cc-field-input {
     border: 2px solid #2a2448;
 }
