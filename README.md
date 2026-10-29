@@ -30,8 +30,13 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 📊 Onglet **Stats** : total depuis le début, calendrier, activité 8 semaines, carte **cardio** (minutes / objectif santé 150 min, distance, calories), lifts, sauvegarde.
 - 🏃 **Console cardio** (`cardio.js`) : chrono live qui survit à la mise en arrière-plan, modes Continu / Fractionné (Tabata, 30/30, 4×4…) / Libre, réglages machine pendant l'effort (vitesse + pente, résistance + cadence, watts…), distance et calories en direct, bips et vibrations, objectif du coach basé sur la dernière fois, saisie sans chrono, ressenti.
 - 🔥 **Échauffement** : rôle « Échauffement » pour un bloc cardio, raccourci « Ajouter un échauffement » en tête de séance.
-- ✨ **Onboarding refait** (`onboarding.js`) : une question par écran (objectif, niveau, fréquence, durée, cardio, poids), puis un **programme complet généré** (découpage, exercices, séries/reps/repos, échauffement, cardio). Le même générateur est disponible dans « Mes séances ».
 - 🔁 **Changer d'exercice** (`swap.js`) : bouton dans l'écran exercice, raison (machine prise, pas le matériel, gêne, envie de varier), **juste aujourd'hui** ou pour de bon, suggestions classées depuis toute la bibliothèque avec la dernière perf, charge de départ estimée par le coach pour un exercice jamais fait, défi de séance mis en pause. Un changement « aujourd'hui » est annulé sur le programme à la fin de la séance, l'historique garde l'exercice réellement fait.
+- 🛠️ **Fiabilité (audit complet)** : 11 bugs du coach corrigés (axe de progression validé en fin de séance, lest/assistance réels, charges jamais à 0 kg, deload, unilatéral), double tap sur les séries, série validée modifiée sans « Sauvegarder », XP de fin de séance sécurisé, série hebdo au changement d'heure, minuteur fantôme, restauration de sauvegarde.
+- 🎆 **Défi du mois** (« Résolution 2027 » en janvier) avec récompense et trophées, astuces de première séance, **partage du récap en image**.
+- 👑 **Muscu+** (`premium.js`) : offre et écran d'abonnement définis, tout reste offert pendant la bêta. Détails dans `LAUNCH.md`.
+- ⌚ **Prêt pour le natif** (`native.js`) : Apple Santé / Health Connect, rappels façon Duolingo (jour de séance, série en danger, retour, récompenses) avec aperçu dans Réglages.
+- 🧮 **Boîte à outils** (`tools.js`) : calculateur de disques, 1RM et pourcentages, mensurations et courbe de poids.
+- ⚙️ Réglages simplifiés : l'essentiel en haut, les réglages avancés du coach repliés.
 - 🗄️ Base IndexedDB **v2** (index `setHistory.exerciseStableId`), migration automatique sans perte ; service worker 6.0.0.
 
 ### Nouveautés v5
@@ -104,7 +109,7 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - `index.html` : structure des écrans (accueil, séance, exercice, paramètres, bottom sheets, modals).
 - `styles.css` : design mobile-first et composants (cards, boutons, charts, overlays, etc.).
 - `theme.css` : couche de DA chargée en dernier (tokens, boutons gamifiés, animations).
-- `shell.js`, `journey.js`, `cardio.js`, `onboarding.js`, `swap.js` : modules v6 qui étendent `App` (navigation, parcours/trophées, console cardio, onboarding, changement d'exercice) ; `v6.css` pour leurs styles.
+- `shell.js`, `journey.js`, `cardio.js`, `swap.js`, `engage.js`, `premium.js`, `native.js`, `tools.js` : modules v6 qui étendent `App` (navigation, parcours/trophées, console cardio, changement d'exercice, défis et partage, Muscu+, natif, outils) ; `v6.css` pour leurs styles. `onboarding.js` / `onboarding.css` et `exo-profile.js` viennent de la 5.7.
 - `app.js` : logique principale (navigation, timers, logbook, coaching adaptatif, analyse série par série, qualité des séries, récupération, analyse gauche/droite, substitutions, charts, import/export, superset, progression, etc.).
 - `data.js` : données de départ (séances Bras/Pecs A/B et slots associés).
 - `exercise-db.js` + `exercises-db.json` : base d'exercices (chargement paresseux, recherche, résolution exo → fiche).
