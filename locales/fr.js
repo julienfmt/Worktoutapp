@@ -36,7 +36,6 @@
         'home.startSession': 'Démarrer la séance',
         'home.changeSession': 'Changer de séance',
         'home.mySessions': 'Mes séances',
-        'home.aiCoach': 'Coach IA',
         'home.lastSession': 'Dernière séance',
         'home.lastSessionNone': 'Aucune pour l’instant',
         'home.empty.title': 'Crée ta première séance',
@@ -351,12 +350,8 @@
         'onboarding.own.import.desc': 'Un programme ou une sauvegarde de l’app',
         'onboarding.own.manual.title': 'Le créer moi-même',
         'onboarding.own.manual.desc': 'Séance par séance, exercice par exercice',
-        'onboarding.own.chat.title': 'Le faire avec ChatGPT',
-        'onboarding.own.chat.desc': 'Un message à coller dans ChatGPT, qui te renvoie un fichier à importer',
         'onboarding.toast.buildFailed': 'La création du programme a échoué. Réessaie, ou crée tes séances toi-même.',
         'onboarding.toast.ready': 'Programme prêt. Touche « Démarrer la séance » une fois à la salle.',
-        'onboarding.toast.promptCopied': 'Message copié. Colle-le dans ChatGPT, puis importe le fichier qu’il te donne.',
-        'onboarding.toast.copyFailed': 'Copie impossible. Réessaie dans quelques secondes.',
 
         // Help bubbles (data-help="key")
         'help.ok': 'Compris',

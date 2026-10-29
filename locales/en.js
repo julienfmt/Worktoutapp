@@ -34,7 +34,6 @@
         'home.startSession': 'Start workout',
         'home.changeSession': 'Change workout',
         'home.mySessions': 'My workouts',
-        'home.aiCoach': 'AI coach',
         'home.lastSession': 'Last workout',
         'home.lastSessionNone': 'None yet',
         'home.empty.title': 'Create your first workout',
@@ -349,12 +348,8 @@
         'onboarding.own.import.desc': 'A plan or a backup from the app',
         'onboarding.own.manual.title': 'Build it myself',
         'onboarding.own.manual.desc': 'Workout by workout, exercise by exercise',
-        'onboarding.own.chat.title': 'Build it with ChatGPT',
-        'onboarding.own.chat.desc': 'Paste a message into ChatGPT, it gives you a file to import',
         'onboarding.toast.buildFailed': 'Couldn’t create the plan. Try again, or build your workouts yourself.',
         'onboarding.toast.ready': 'Plan ready. Tap “Start workout” once you’re at the gym.',
-        'onboarding.toast.promptCopied': 'Message copied. Paste it into ChatGPT, then import the file it gives you.',
-        'onboarding.toast.copyFailed': 'Couldn’t copy. Try again in a few seconds.',
 
         // Help bubbles
         'help.ok': 'Got it',

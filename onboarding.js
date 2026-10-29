@@ -283,7 +283,6 @@
             }
         },
 
-        // Used by the ChatGPT prompt builder when called without a profile.
         getOnboardingProfileValues() {
             const answers = this.onboarding?.answers || {};
             const goal = GOALS.find(item => item.id === answers.goal);
@@ -591,10 +590,6 @@
                                 <span class="ob-option-emoji">✍️</span>
                                 <span class="ob-option-copy"><strong>${t('onboarding.own.manual.title')}</strong><small>${t('onboarding.own.manual.desc')}</small></span>
                             </button>
-                            <button type="button" class="ob-option" data-ob-action="own-chat" style="--i:2">
-                                <span class="ob-option-emoji">🤖</span>
-                                <span class="ob-option-copy"><strong>${t('onboarding.own.chat.title')}</strong><small>${t('onboarding.own.chat.desc')}</small></span>
-                            </button>
                         </div>
                     `;
 
@@ -864,7 +859,6 @@
             } else if (action === 'own') this.goOnboardingTo('own', 'forward');
             else if (action === 'own-import') this.startOnboardingImport();
             else if (action === 'own-manual') this.startOnboardingManualCreation();
-            else if (action === 'own-chat') this.copyOnboardingPrompt();
             else if (action === 'finish') this.finishOnboarding();
         },
 
@@ -1042,17 +1036,6 @@
             this.onboarding = null;
             await this.showEditSessionsSheet();
             this.showNewSessionView();
-        },
-
-        async copyOnboardingPrompt() {
-            const profile = this.getOnboardingProfileValues();
-            const prompt = this.buildChatProgramPrompt(profile);
-            const copied = await this.copyTextToClipboard(prompt);
-            if (copied) {
-                this.showCoachToast(t('onboarding.toast.promptCopied'), 'hot', '📋');
-            } else {
-                this.showCoachToast(t('onboarding.toast.copyFailed'), 'warning', '📋');
-            }
         }
     };
 

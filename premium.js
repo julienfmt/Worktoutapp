@@ -23,7 +23,6 @@
         { key: 'coach-advanced', tier: 'plus', emoji: '🚀', title: 'Coach avancé', desc: 'Deload auto, fatigue en direct, multi-axes, plateaux' },
         { key: 'cardio-intervals', tier: 'plus', emoji: '❤️‍🔥', title: 'Cardio fractionné', desc: 'Tabata, 4×4, programmes d’intervalles' },
         { key: 'stats-advanced', tier: 'plus', emoji: '📈', title: 'Stats complètes', desc: 'Historique illimité, fiches perso, records détaillés' },
-        { key: 'ai-coach', tier: 'plus', emoji: '🤖', title: 'Coach IA', desc: 'Analyse et optimisation de ton programme' },
         { key: 'streak-shields', tier: 'plus', emoji: '🛡️', title: 'Boucliers bonus', desc: 'Protège ta série quand la vie s’en mêle' },
         { key: 'health-sync', tier: 'plus', emoji: '⌚', title: 'Apple Santé / Health Connect', desc: 'Séances, calories et poids synchronisés' },
         { key: 'themes', tier: 'plus', emoji: '🎨', title: 'Cartes de partage premium', desc: 'Designs exclusifs pour partager tes séances' }

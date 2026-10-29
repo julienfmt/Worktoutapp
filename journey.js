@@ -16,7 +16,7 @@
         { title: 'Discipline', emoji: '🛡️', color: '#14b8a6', tip: 'Garde les mêmes jours d’entraînement chaque semaine.' },
         { title: 'Le sommet', emoji: '🏔️', color: '#3b82f6', tip: 'Prévois un deload toutes les 4 à 6 semaines.' },
         { title: 'Titan', emoji: '🗿', color: '#a855f7', tip: 'Une charge stagne ? Essaie une variante de l’exercice.' },
-        { title: 'Légende', emoji: '👑', color: '#eab308', tip: 'Fais relire ton programme par le Coach IA.' }
+        { title: 'Légende', emoji: '👑', color: '#eab308', tip: 'Relis ton programme et ajuste-le toutes les 6 à 8 semaines.' }
     ];
     const ROMAN = ['', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
     // Horizontal offsets (px) of the zigzag, like the Duolingo path.

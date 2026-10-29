@@ -11,7 +11,7 @@ Run from the repo root:  python3 scripts/build-dark-css.py
 import re
 from pathlib import Path
 
-SOURCES = ['styles.css', 'streak-score.css', 'theme.css', 'ai-coach.css', 'onboarding.css', 'v6.css']
+SOURCES = ['styles.css', 'streak-score.css', 'theme.css', 'onboarding.css', 'v6.css']
 SCOPE = ':where(html[data-theme="dark"])'
 
 SURFACE = {

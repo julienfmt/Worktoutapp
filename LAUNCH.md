@@ -14,7 +14,7 @@ Défini dans `premium.js`. **Désactivé pendant la bêta** (`PAYWALL_ENABLED = 
 
 **Toujours gratuit** : suivi illimité (séances, séries, cardio, historique), coach de base (charge + reps conseillées), parcours, trophées, quêtes, défis du mois, programme généré à l'inscription.
 
-**Muscu+** : coach avancé (deload auto, fatigue en direct, progression multi-axes, plateaux), cardio fractionné, stats complètes et fiches perso détaillées, Coach IA, boucliers de série bonus, synchro Apple Santé / Health Connect, cartes de partage premium.
+**Muscu+** : coach avancé (deload auto, fatigue en direct, progression multi-axes, plateaux), cardio fractionné, stats complètes et fiches perso détaillées, boucliers de série bonus, synchro Apple Santé / Health Connect, cartes de partage premium.
 
 Principes : la progression et l'historique ne sont **jamais** verrouillés (aucune donnée prise en otage) ; le paywall n'apparaît qu'au moment où l'on touche une fonctionnalité Plus (`app.requireFeature(key)`), jamais en pleine série.
 
@@ -51,13 +51,6 @@ Le plan est recalculé après chaque séance et au lancement. En natif, il est p
 
 À faire au moment d'emballer : `npm i @capacitor/haptics && npx cap sync`. Aucun autre réglage natif.
 
-## 4 bis. Coach IA « comme un pote »
-
-Aujourd'hui (`ai-coach.js` + `ai-coach-ui.js`) : l'app prépare un résumé de tes données (assiduité, tendances e1RM, volume par muscle, déséquilibres, notes) et l'envoie en un tap à ChatGPT, Claude, Gemini ou Le Chat ; la réponse collée est relue et appliquée au programme.
-
-**Discussion intégrée** : retirée de l'app pour l'instant (pas nécessaire au lancement). Le code du chat et du worker (`coach-chat.js`, `workers/coach-proxy.js`) reste disponible dans l'historique git (commit `d6823b7`) si on la réactive.
-
-À venir : moments proactifs (bilan après séance, relance quand la série est en danger, félicitations sur un record), 1 fois max par jour.
 
 ## 4 ter. Ligues hebdomadaires
 

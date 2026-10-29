@@ -36,7 +36,7 @@
         initSheetChrome() {
             if (this.sheetChromeReady) return;
             this.sheetChromeReady = true;
-            const OWN_CLOSE = '.sheet-close, .exercise-insights-close, [data-sf="close"], [data-tools="close"], [data-paywall="close"], [data-ai-action="close"]';
+            const OWN_CLOSE = '.sheet-close, .exercise-insights-close, [data-sf="close"], [data-tools="close"], [data-paywall="close"]';
             const closeSheet = (sheet) => sheet?.querySelector(':scope > .sheet-backdrop')?.click();
             const topSheet = () => [...document.querySelectorAll('.bottom-sheet.active')].pop();
 

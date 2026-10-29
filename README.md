@@ -49,7 +49,6 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧮 **Outils** (Stats) : liste lisible avec icônes et descriptions (« Disques à charger », « Charge max estimée », « Mensurations »), table des % sur une colonne, stepper qui ne déborde plus.
 - 🧘 **Abdos** : 10 exercices ajoutés à la bibliothèque (Crunch, Sit-up, Relevé de jambes allongé, Crunch vélo, Crunch oblique, Russian twist, V-up, Toes to bar, Mountain climber et Hollow hold chronométrés). Chrono de gainage : badge « Chrono » (plus « Cardio »), pas de smileys pendant le maintien, bouton « Lancer » seulement sur la série en cours.
 - 🔕 Notifications et bulles d'aide sans émoji encadré.
-- 💬 Chat coach IA retiré pour l'instant (le parcours copier-coller vers ChatGPT / Claude / Gemini / Le Chat reste).
 
 ### Nouveautés v6.0 – 6.1
 - 🧭 **3 onglets swipables** : Accueil / Parcours / Stats, barre d'onglets en bas, glisser à gauche ou à droite pour changer de volet (`shell.js`).
@@ -121,14 +120,6 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🛠️ Les anciennes séances reconnues comme cardio sont réparées à leur prochaine ouverture, même si un ancien profil de progression les avait transformées en séries classiques.
 - 🧩 Les blocs cardio et les séries chronométrées ne sont pas proposés en superset, pour garder un lancement et un chrono prévisibles.
 
-### Coach IA
-- ✨ Bouton **Coach IA** (accueil + carte dans Parcours) : on choisit une demande (analyser, optimiser, nouveau programme, question libre) et une IA (ChatGPT, Claude, Gemini, Le Chat ou autre).
-- 📦 L'app envoie un **résumé fait pour l'IA**, pas l'export brut : profil, assiduité 8 semaines, programme actuel au format `worktout-program-v1`, tendance e1RM par exercice (stagnation, baisse, signaux douleur / amplitude), volume par muscle vs MEV/MAV/MRV, déséquilibres G/D, exercices sautés, notes.
-- 🚀 Envoi en un tap : message copié + IA ouverte (pré-rempli quand il tient dans l'URL), ou partage du fichier `.md` via la feuille de partage du téléphone.
-- 📋 Retour : « Coller la réponse de l'IA » retrouve le programme dans le message, affiche les changements (ajouts / retraits / modifs / supersets) puis l'applique en gardant l'historique. Sauvegarde automatique et bouton « Revenir au programme d'avant l'IA ».
-- 📱 Prêt pour une app native : `ai-coach.js` passe par un adaptateur (`AiBridge`) qui utilise les plugins Capacitor (Clipboard, Share, Filesystem, AppLauncher / Browser) quand ils sont présents, sinon les API web.
-- Fichiers : `ai-coach.js` (données, prompts, lecture de la réponse — sans DOM, testé), `ai-coach-ui.js` (interface), `ai-coach.css`. Tests : `tests/browser-runner.html?test=ai-coach`.
-
 ## Notifications du rhino
 Le rhino est un pote de salle un peu bête, trop impliqué dans tes progrès. Les textes (fr/en, ~40 lignes, mêmes ids dans les deux langues) et les règles de planification sont dans `rhino-notifications.js` (pur, testé par `tests/notifications.test.js`). `native.js` collecte les vraies données (historique, objectif hebdo, prochaine séance, potes), tient le journal et programme via Capacitor Local Notifications. Réglages → Rappels : interrupteur, heure et puces (🔥 Séances, 👀 Retour, 🎁 Récompenses, 🦏 Potes si tu as des amis). L'aperçu « Prochain : jeudi 18:30 » vient du vrai plan ; `window.previewRhinoNotifications()` le logue en console.
 
@@ -193,7 +184,7 @@ Sans build : `locales/fr.js` (source de vérité) et `locales/en.js` remplissent
   - HTML statique : garde le texte français dans la balise et ajoute `data-i18n="clé"` (texte), `data-i18n-placeholder`, `data-i18n-aria-label` ou `data-i18n-title`. Sur un bouton avec icône, mets le texte dans un `<span data-i18n>`. Après un rendu dynamique de HTML statique, `applyI18n(element)`.
   - Une clé absente en anglais retombe sur le français ; une clé absente partout s’affiche telle quelle (facile à repérer).
 - **Déjà migré** : navigation, accueil (titre, carte séance, streak, muscles, défi du mois), onboarding complet et bulles d’aide, amis et séance à deux, modale de fin et récap de séance, reprise/abandon de séance, toasts réécrits.
-- **Reste en français** : écran exercice et coach (messages du moteur de progression, testés), éditeur de séances et bibliothèque d’exercices, Parcours (chapitres, quêtes, trophées, ligue), cartes Stats, outils, cardio, Coach IA, réglages, notifications, noms de niveaux/paliers et données (noms d’exercices, muscles de `data.js`). Les noms d’exercices sont des identifiants : ne pas les traduire dans les données, seulement à l’affichage.
+- **Reste en français** : écran exercice et coach (messages du moteur de progression, testés), éditeur de séances et bibliothèque d’exercices, Parcours (chapitres, quêtes, trophées, ligue), cartes Stats, outils, cardio, réglages, notifications, noms de niveaux/paliers et données (noms d’exercices, muscles de `data.js`). Les noms d’exercices sont des identifiants : ne pas les traduire dans les données, seulement à l’affichage.
 
 ## Notes d’usage
 - Les timers de repos se restaurent après un retour depuis l’arrière-plan.
@@ -207,6 +198,6 @@ Sans build : `locales/fr.js` (source de vérité) et `locales/en.js` remplissent
 Non spécifiée. À définir selon tes besoins.
 
 ### Nouveautés v5.7
-- 👋 Onboarding refait façon apps grand public : une question par écran, barre de progression animée, grandes cartes qui avancent toutes seules, sliders (séances/semaine avec les jours qui s'allument, durée sur cadran), mini-démo interactive du ressenti, écran « on prépare ton programme » puis programme **généré automatiquement** (objectif, niveau, jours, durée, matériel, zones prioritaires) avec confettis. Import / création manuelle / ChatGPT restent dispo via « J'ai déjà un programme ». Installation PWA en dernière étape.
+- 👋 Onboarding refait façon apps grand public : une question par écran, barre de progression animée, grandes cartes qui avancent toutes seules, sliders (séances/semaine avec les jours qui s'allument, durée sur cadran), mini-démo interactive du ressenti, écran « on prépare ton programme » puis programme **généré automatiquement** (objectif, niveau, jours, durée, matériel, zones prioritaires) avec confettis. Import / création manuelle restent dispo via « J'ai déjà un programme ». Installation PWA en dernière étape.
 - 😤 Écran de repos : le RPE devient des smileys (😌 Facile → 💀 À fond). Aucun coché = pas de ressenti enregistré ; retoucher un smiley le décoche. Les séries validées affichent le smiley.
 - ❓ Petites bulles d'aide « ? » : deload, cycle, ressenti, objectifs de l'exercice (RIR), e1RM.
