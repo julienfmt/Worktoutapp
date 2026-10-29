@@ -225,6 +225,49 @@ async function run() {
     assert.equal(imported.slots[2].trackingMode, 'timed');
     assert.equal(imported.slots[2].repsMin, 30);
 
+    // Name detection: strength rows are never cardio, holds are timed,
+    // hyphenated bodyweight names are recognised.
+    const modeOf = name => app.getTrackingMode(name);
+    for (const name of ['Rowing haltère', 'Rowing poulie basse', 'Rowing inversé', 'Rowing à la machine', 'Rowing barre', 'Row haltère', 'Développé couché', 'Curl élastique']) {
+        assert.equal(modeOf(name), 'strength', `${name} stays strength`);
+    }
+    for (const name of ['Tapis de course', 'Rameur', 'Elliptique', 'Vélo elliptique', 'SkiErg', 'Corde à sauter', 'Spinning', 'Natation crawl', 'Stepper']) {
+        assert.equal(modeOf(name), 'cardio', `${name} is cardio`);
+    }
+    for (const name of ['Gainage', 'Planche', 'Planche latérale', 'Chaise', 'Chaise au mur', 'Wall sit', 'Dead hang']) {
+        assert.equal(modeOf(name), 'timed', `${name} is timed`);
+    }
+    assert.equal(modeOf('Relevé de jambes chaise romaine'), 'strength');
+    assert.equal(app.getBodyweightAutoConfig('Pull-up').autoMode, true, 'Pull-up is bodyweight');
+    assert.equal(app.getBodyweightAutoConfig('Muscle-up').autoMode, true, 'Muscle-up is bodyweight');
+    assert.equal(app.getBodyweightAutoConfig('Dip machine').autoMode, false, 'Dip machine is loaded');
+    assert.equal(app.getBodyweightAutoConfig('Tractions assistées').assistedPattern, true);
+    assert.equal(app.getBodyweightAutoConfig('Band pull apart').assistedPattern, false, 'a band exercise is not assistance');
+
+    // A stored strength row is never rewritten by keyword inference, and a row
+    // an older version turned into a 1-block cardio slot is repaired.
+    const keptRow = app.normalizeSlotProgressionConfig({ name: 'Rowing haltère', trackingMode: 'strength', sets: 3, repsMin: 8, repsMax: 12, rest: 90 });
+    assert.equal(keptRow.trackingMode, 'strength');
+    assert.equal(keptRow.sets, 3);
+    const repairedRow = app.normalizeSlotProgressionConfig({ name: 'Rowing poulie basse', trackingMode: 'cardio', sets: 1, repsMin: 10, repsMax: 30, rest: 0, cardioMetric: 'power' });
+    assert.equal(repairedRow.trackingMode, 'strength');
+    assert.equal(repairedRow.sets, 3);
+    assert.equal(repairedRow.rest, 90);
+
+    // Stats rely on the set's own mode even when its slot is gone.
+    const swimSet = { exerciseName: 'Natation', weight: 1000, reps: 30, trackingMode: 'cardio', durationSeconds: 1800 };
+    assert.equal(app.getSetLoadedVolume(swimSet, null), 0, 'cardio never counts as tonnage');
+    assert.equal(app.getSetLoadedVolume({ exerciseName: 'Tractions assistées', weight: 30, reps: 8 }, null), 0, 'assistance is not tonnage');
+    assert.equal(app.getSetLoadedVolume({ exerciseName: 'Squat', weight: 100, reps: 5, trackingMode: 'strength' }, null), 500);
+
+    // Rower: distance gives a split /500 m; treadmill: pace /km.
+    const rowerSet = { reps: 8, durationSeconds: 480, trackingMode: 'cardio', distanceMeters: 2000, cardioMetric: 'power', cardioMetricValue: 180 };
+    assert.equal(app.getCardioDerivedLabel(rowerSet, 'Rameur'), '2:00 /500 m');
+    assert.equal(app.getCardioDerivedLabel({ reps: 30, durationSeconds: 1800, distanceMeters: 5000 }, 'Tapis de course'), '6:00 /km');
+    assert.ok(app.getCardioExtraFields('Tapis de course').some(field => field.key === 'inclinePct'), 'treadmill offers incline');
+    assert.ok(app.getCardioExtraFields('Rameur').some(field => field.key === 'distanceMeters' && field.unit === 'm'), 'rower distance in meters');
+    assert.equal(app.getCardioMetricConfig('Corde à sauter', 'cadence').unit, 'sauts/min');
+
     console.log('exercise-tracking tests: OK');
 }
 

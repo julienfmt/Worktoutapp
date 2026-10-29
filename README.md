@@ -70,6 +70,15 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🎛️ Réglages d'exercice : objectifs en un tap (Force / Muscle / Endurance), boutons +/− pour séries, reps et repos, intensité expliquée en mots (Échec → Facile), « Changer d'exercice » via la bibliothèque. Tout le reste est rangé dans « Réglages avancés ».
 - 🧹 Confirmations dans la DA de l'app (plus de `confirm()` natif), l'accueil se met à jour après une modification.
 
+### Nouveautés v5.6
+- 🔎 **Fiches perso** dans l'onglet Parcours : recherche d'un exo (nom, muscle, équipement) dans ton historique et ton programme, puis fiche dédiée dans la DA : maîtrise par exo (🥉 Bronze → 👑 Légende selon le nombre de séances), record, plus lourd, tonnage, objectif « prochain record », courbe de progression avec records dorés, équilibre gauche/droite, 6 médailles par exo, historique avec écarts, accès à la fiche technique et relance douce après 2 semaines d'absence. Les lifts de « Force & records » ouvrent aussi la fiche.
+- 🏃 **Cardio enrichi** : en plus de la durée et du repère principal, chaque bloc peut noter (facultatif) distance, pente et calories selon la machine (tapis : distance/pente/kcal, rameur & SkiErg : distance en m + kcal, vélo/elliptique : distance/kcal…). Calcul automatique du **split /500 m** (rameur, SkiErg), de l'**allure /km** (tapis, course), de l'allure /100 m (natation) et de la vitesse moyenne (vélo). Corde à sauter en sauts/min. L'XP d'un bloc cardio suit sa durée.
+- 🤸 **Poids du corps** : tractions, dips, pompes… acceptent un lest facultatif (vide = PDC, affiché « PDC +10kg ») ; « Pull-up », « Chin-up », « Muscle-up » sont reconnus ; « Dip machine » repasse en charge. Les records live détectent aussi un **record de reps** au poids du corps et un **record de durée** sur le gainage/chaise.
+- 🛡️ **Assistance** (tractions assistées, élastique) : jamais comptée comme du tonnage ni comme un record — plus d'assistance n'est plus « plus fort ». Un élastique sur un curl n'est plus pris pour de l'assistance.
+- 🐛 Détection des exercices fiabilisée : « Rowing haltère / poulie / inversé / à la machine » ne sont plus pris pour du rameur (et les programmes abîmés par l'ancienne détection sont réparés en 3 × 8-12), « Planche », « Chaise », « Spinning », « Crawl » sont reconnus, un mode enregistré n'est plus réécrit par une simple déduction par mot-clé.
+- 📊 Les stats (tonnage, records, trophées) lisent le mode de chaque série : une séance de natation ou de rameur d'un exo supprimé ne gonfle plus le tonnage.
+- ↔️ Unilatéral chronométré (planche latérale, farmer carry à une main) : libellé « Durée (s) » et durée enregistrée correctement.
+
 ### Suivi cardio et chronométré
 - 🏃 Le tapis de course et les autres appareils cardio sont enregistrés comme des blocs avec une durée et un repère adapté (vitesse en km/h, watts, résistance, niveau ou distance).
 - ⏱️ Le chrono peut mesurer un bloc cardio en minutes ou une série tenue en secondes (gainage, maintien, farmer carry, poussée de traîneau). L’historique conserve la durée exacte et affiche la bonne unité.
@@ -134,3 +143,8 @@ Appli 100% statique : dépose le contenu du dossier sur n’importe quel héberg
 
 ## Licence
 Non spécifiée. À définir selon tes besoins.
+
+### Nouveautés v5.7
+- 👋 Onboarding refait façon apps grand public : une question par écran, barre de progression animée, grandes cartes qui avancent toutes seules, sliders (séances/semaine avec les jours qui s'allument, durée sur cadran), mini-démo interactive du ressenti, écran « on prépare ton programme » puis programme **généré automatiquement** (objectif, niveau, jours, durée, matériel, zones prioritaires) avec confettis. Import / création manuelle / ChatGPT restent dispo via « J'ai déjà un programme ». Installation PWA en dernière étape.
+- 😤 Écran de repos : le RPE devient des smileys (😌 Facile → 💀 À fond). Aucun coché = pas de ressenti enregistré ; retoucher un smiley le décoche. Les séries validées affichent le smiley.
+- ❓ Petites bulles d'aide « ? » : deload, cycle, ressenti, objectifs de l'exercice (RIR), e1RM.

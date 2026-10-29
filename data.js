@@ -1037,7 +1037,7 @@ const EXERCISE_LIBRARY = [
         rir: 3,
         trackingMode: 'cardio',
         cardioMetric: 'speed',
-        instructions: 'Note la durée et la vitesse moyenne affichée sur le tapis. Tu peux ajouter la pente dans tes notes.',
+        instructions: 'Note la durée et la vitesse moyenne affichée sur le tapis. Distance, pente et calories sont facultatives : l’allure /km se calcule toute seule.',
         aliases: ['treadmill', 'tapis roulant', 'course', 'marche inclinée']
     }),
     createExerciseLibraryEntry({
@@ -1051,7 +1051,7 @@ const EXERCISE_LIBRARY = [
         rir: 3,
         trackingMode: 'cardio',
         cardioMetric: 'power',
-        instructions: 'Note la durée et les watts moyens affichés par le rameur.',
+        instructions: 'Note la durée et les watts moyens. Ajoute la distance pour obtenir ton split /500 m automatiquement.',
         aliases: ['rower', 'rowing erg', 'erg']
     }),
     createExerciseLibraryEntry({
@@ -2595,7 +2595,7 @@ const EXERCISE_LIBRARY = [
         rir: 2,
         trackingMode: 'cardio',
         cardioMetric: 'speed',
-        instructions: 'Note la durée et la vitesse moyenne. Tu peux ajouter la pente dans tes notes.',
+        instructions: 'Note la durée et la vitesse moyenne. Distance, pente et calories sont facultatives.',
         aliases: ['brisk walk', 'walking']
     })
 ];

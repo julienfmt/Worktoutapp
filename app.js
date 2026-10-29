@@ -704,8 +704,6 @@ class App {
         this.challengeRevealTimeout = null;
         this.pendingImportContext = 'default';
         this.onboardingVisible = false;
-        this.onboardingStepOrder = ['install', 'profile', 'program'];
-        this.currentOnboardingStepIndex = 0;
         this.storageInfoRefreshIntervalMs = 60000;
         this.storageInfoRefreshTimer = null;
         this.activeAppDialogResolver = null;
@@ -979,256 +977,6 @@ class App {
         if (/iphone|ipad|ipod/i.test(ua)) return 'ios';
         if (/android/i.test(ua)) return 'android';
         return 'desktop';
-    }
-
-    getOnboardingStepMeta(stepId) {
-        const labels = {
-            install: {
-                title: 'Installe l\'app',
-                nextLabel: 'Suivant'
-            },
-            profile: {
-                title: 'Crée ton programme',
-                nextLabel: 'Suivant'
-            },
-            program: {
-                title: 'Créer ta première séance',
-                nextLabel: ''
-            }
-        };
-
-        return labels[stepId] || labels.profile;
-    }
-
-    async showOnboarding() {
-        const goal = (await db.getSetting('weeklyGoal')) ?? 3;
-        const objective = (await db.getSetting('trainingObjective')) ?? '';
-        const installed = this.isAppInstalled();
-        const stepOrder = installed ? ['profile', 'program'] : ['install', 'profile', 'program'];
-        const modal = document.getElementById('modal-onboarding');
-
-        this.onboardingVisible = true;
-        this.onboardingStepOrder = stepOrder;
-        this.currentOnboardingStepIndex = 0;
-
-        const goalInput = document.getElementById('onboarding-weekly-goal');
-        const goalValue = document.getElementById('onboarding-weekly-goal-value');
-        const objectiveInput = document.getElementById('onboarding-objective');
-
-        if (goalInput) goalInput.value = goal;
-        if (goalValue) goalValue.textContent = goal;
-        if (objectiveInput) objectiveInput.value = objective;
-
-        this.updateOnboardingGoalChips(objective);
-        this.updateInstallInstructions();
-        this.updateOnboardingWeeklyGoalUI(goal);
-        this.renderOnboardingStep();
-
-        modal.classList.add('active');
-    }
-
-    hideOnboarding() {
-        this.onboardingVisible = false;
-        document.getElementById('modal-onboarding').classList.remove('active');
-    }
-
-    updateInstallInstructions() {
-        const platform = this.getInstallPlatform();
-        const grid = document.getElementById('onboarding-install-grid');
-
-        if (!grid) return;
-
-        const iosCard = grid.querySelector('.onboarding-install-card-ios');
-        const androidCard = grid.querySelector('.onboarding-install-card-android');
-
-        grid.querySelectorAll('.onboarding-install-card').forEach((card) => {
-            card.style.order = '';
-            card.classList.remove('is-priority');
-        });
-
-        if (platform === 'android') {
-            if (androidCard) {
-                androidCard.style.order = '-1';
-                androidCard.classList.add('is-priority');
-            }
-        } else if (platform === 'ios') {
-            iosCard?.classList.add('is-priority');
-        }
-    }
-
-    updateOnboardingWeeklyGoalUI(value) {
-        const goal = Math.max(1, Math.min(7, parseInt(value, 10) || 3));
-        const progress = (goal - 1) / 6;
-        const lightness = 88 - (progress * 36);
-        const saturation = 52 + (progress * 28);
-        const accent = `hsl(244 ${saturation}% ${lightness}%)`;
-        const accentMid = `hsl(246 ${Math.max(44, saturation - 8)}% ${Math.min(94, lightness + 12)}%)`;
-        const accentSoft = `hsl(248 100% ${Math.min(98, lightness + 15)}%)`;
-        const accentGlow = `hsl(244 ${Math.min(96, saturation + 6)}% ${Math.max(40, lightness - 4)}% / ${0.14 + (progress * 0.22)})`;
-        const accentBorder = `hsl(244 ${Math.min(92, saturation + 4)}% ${Math.max(46, lightness - 2)}% / 0.24)`;
-        const captions = [
-            'Départ en douceur',
-            'Rythme tranquille',
-            'Bon rythme',
-            'Très solide',
-            'Ça monte fort',
-            'Gros rythme',
-            'Mode machine'
-        ];
-
-        const card = document.getElementById('onboarding-weekly-card');
-        const valueBadge = document.getElementById('onboarding-weekly-goal-value');
-        const caption = document.getElementById('onboarding-weekly-goal-caption');
-        const meter = document.getElementById('onboarding-weekly-meter');
-
-        if (valueBadge) valueBadge.textContent = goal;
-        if (caption) caption.textContent = captions[goal - 1] || captions[2];
-
-        if (card) {
-            card.style.setProperty('--onboarding-goal-accent', accent);
-            card.style.setProperty('--onboarding-goal-mid', accentMid);
-            card.style.setProperty('--onboarding-goal-soft', accentSoft);
-            card.style.setProperty('--onboarding-goal-glow', accentGlow);
-            card.style.setProperty('--onboarding-goal-border', accentBorder);
-        }
-
-        if (meter) {
-            meter.querySelectorAll('span').forEach((dot, index) => {
-                dot.classList.toggle('active', index < goal);
-            });
-        }
-    }
-
-    renderOnboardingStep() {
-        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex] || 'profile';
-        const meta = this.getOnboardingStepMeta(currentStep);
-        const total = this.onboardingStepOrder.length;
-
-        document.querySelectorAll('.onboarding-panel').forEach((panel) => {
-            panel.classList.toggle('active', panel.dataset.step === currentStep);
-        });
-
-        const title = document.getElementById('onboarding-title');
-        if (title) title.textContent = meta.title;
-
-        const badge = document.getElementById('onboarding-step-badge');
-        if (badge) badge.textContent = `Étape ${this.currentOnboardingStepIndex + 1}/${total}`;
-
-        const backBtn = document.getElementById('btn-onboarding-back');
-        if (backBtn) {
-            backBtn.style.visibility = this.currentOnboardingStepIndex === 0 ? 'hidden' : 'visible';
-        }
-
-        const skipBtn = document.getElementById('btn-onboarding-skip');
-        if (skipBtn) {
-            const isProgramStep = currentStep === 'program';
-            skipBtn.style.display = isProgramStep ? 'inline-flex' : 'none';
-        }
-
-        const nextBtn = document.getElementById('btn-onboarding-next');
-        if (nextBtn) {
-            const isProgramStep = currentStep === 'program';
-            nextBtn.style.display = isProgramStep ? 'none' : 'inline-flex';
-            nextBtn.textContent = meta.nextLabel;
-        }
-
-        const stepper = document.getElementById('onboarding-stepper');
-        if (stepper) {
-            stepper.style.gridTemplateColumns = `repeat(${Math.max(total, 1)}, minmax(0, 1fr))`;
-            stepper.innerHTML = this.onboardingStepOrder.map((stepId, index) => `
-                <span class="onboarding-stepper-dot ${index === this.currentOnboardingStepIndex ? 'active' : ''}" data-step="${stepId}"></span>
-            `).join('');
-        }
-    }
-
-    updateOnboardingGoalChips(activeValue = '') {
-        const normalized = (activeValue || '').trim().toLowerCase();
-        document.querySelectorAll('#onboarding-goal-chips .onboarding-chip').forEach((chip) => {
-            chip.classList.toggle('active', chip.dataset.value.trim().toLowerCase() === normalized);
-        });
-    }
-
-    getOnboardingProfileValues() {
-        const weeklyGoalValue = parseInt(document.getElementById('onboarding-weekly-goal')?.value || '3', 10);
-        return {
-            objective: (document.getElementById('onboarding-objective')?.value || '').trim(),
-            weeklyGoal: Number.isFinite(weeklyGoalValue) ? weeklyGoalValue : 3
-        };
-    }
-
-    async saveOnboardingProfile() {
-        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
-
-        if (!objective) {
-            document.getElementById('onboarding-objective')?.focus();
-            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
-            return false;
-        }
-
-        await db.setSetting('trainingObjective', objective);
-        await db.setSetting('weeklyGoal', weeklyGoal);
-        return true;
-    }
-
-    async nextOnboardingStep() {
-        const currentStep = this.onboardingStepOrder[this.currentOnboardingStepIndex];
-        if (currentStep === 'profile') {
-            const saved = await this.saveOnboardingProfile();
-            if (!saved) return;
-        }
-
-        if (this.currentOnboardingStepIndex < this.onboardingStepOrder.length - 1) {
-            this.currentOnboardingStepIndex += 1;
-            this.renderOnboardingStep();
-        }
-    }
-
-    previousOnboardingStep() {
-        if (this.currentOnboardingStepIndex === 0) return;
-        this.currentOnboardingStepIndex -= 1;
-        this.renderOnboardingStep();
-    }
-
-    async completeOnboarding({ refreshHome = true } = {}) {
-        await db.setSetting('onboardingCompleted', true);
-        this.hideOnboarding();
-
-        if (refreshHome) {
-            await this.renderHome();
-        }
-    }
-
-    async skipOnboardingProgramStep() {
-        await this.completeOnboarding({ refreshHome: true });
-    }
-
-    async startOnboardingManualCreation() {
-        const saved = await this.saveOnboardingProfile();
-        if (!saved) return;
-
-        await this.completeOnboarding({ refreshHome: true });
-        await this.showEditSessionsSheet();
-        this.showNewSessionView();
-    }
-
-    async copyOnboardingPrompt() {
-        const { objective, weeklyGoal } = this.getOnboardingProfileValues();
-        if (!objective) {
-            document.getElementById('onboarding-objective')?.focus();
-            this.showCoachToast('Ajoute ton objectif pour cadrer le programme de départ.', 'warning', '🎯');
-            return;
-        }
-
-        const prompt = this.buildChatProgramPrompt({ objective, weeklyGoal });
-        const copied = await this.copyTextToClipboard(prompt);
-
-        if (copied) {
-            await db.setSetting('trainingObjective', objective);
-            await db.setSetting('weeklyGoal', weeklyGoal);
-            this.showCoachToast('Prompt copié. Colle-le dans ChatGPT, réponds aux questions, puis importe le fichier.', 'hot', '📋');
-        } else {
-            this.showCoachToast('Copie impossible. Réessaie en restant appuyé puis colle dans ChatGPT.', 'warning', '📋');
-        }
     }
 
     buildChatProgramPrompt(profile = null) {
@@ -2974,6 +2722,7 @@ class App {
         this.progressContext = { snapshot, weekly, muscles, player, bestStreak, streakData };
 
         this.renderPlayerCard();
+        this.renderExoSearchCard?.();
         this.renderAiCoachCard();
         await this.renderQuestBoard();
         await this.renderTrophyCase();
@@ -3513,7 +3262,7 @@ class App {
                 </div>
                 <span class="pz-chip">${snapshot.prCount30} record${snapshot.prCount30 > 1 ? 's' : ''} / 30 j</span>
             </div>
-            <div class="lift-crown">
+            <button type="button" class="lift-crown" data-exo-open="${this.escapeHtml(best.exerciseId)}">
                 <span class="lift-crown-medal" aria-hidden="true">👑</span>
                 <div class="lift-crown-main">
                     <span>Ton lift le plus fort</span>
@@ -3522,14 +3271,14 @@ class App {
                 </div>
                 <div class="lift-crown-value">
                     <strong>${Math.round(best.e1rm)}</strong>
-                    <span>kg e1RM</span>
+                    <span>kg e1RM <button type="button" class="help-dot" data-help="e1rm" aria-label="C'est quoi e1RM ?">?</button></span>
                 </div>
-            </div>
+            </button>
             ${progressRows.length ? `
                 <div class="lift-section-label">En progression</div>
                 <div class="lift-list">
                     ${progressRows.map(row => `
-                        <div class="lift-row">
+                        <div class="lift-row is-clickable" role="button" tabindex="0" data-exo-open="${this.escapeHtml(row.exerciseId)}">
                             <div class="lift-row-main">
                                 <strong>${this.escapeHtml(row.exerciseId)}</strong>
                                 <small>e1RM ${formatKg(row.latest.bestE1RM)} · ${row.sessions} séances</small>
@@ -3544,7 +3293,7 @@ class App {
                 <div class="lift-section-label">À surveiller</div>
                 <div class="lift-list">
                     ${watchRows.map(row => `
-                        <div class="lift-row">
+                        <div class="lift-row is-clickable" role="button" tabindex="0" data-exo-open="${this.escapeHtml(row.exerciseId)}">
                             <div class="lift-row-main">
                                 <strong>${this.escapeHtml(row.exerciseId)}</strong>
                                 <small>Sous ton meilleur niveau · ${row.sessions} séances</small>
@@ -3671,9 +3420,32 @@ class App {
         return Number.isNaN(date.getTime()) ? null : date;
     }
 
+    // A set's own trackingMode wins: the slot may have been deleted, renamed or
+    // reused since, and a swim block must never count as tonnage.
+    isHistorySetTimed(set, slot = null) {
+        if (set?.trackingMode === 'cardio' || set?.trackingMode === 'timed') return true;
+        if (set?.trackingMode === 'strength') return false;
+        if (Number(set?.durationSeconds) > 0) return true;
+        if (slot) return this.isTimedSlot(slot);
+        const name = this.getBaseExerciseHistoryName(set?.exerciseName || set?.exerciseId || '');
+        return name ? this.isTimedSlot(name) : false;
+    }
+
+    // Assistance (machine, élastique) makes a set easier: never count it as load.
+    isHistorySetAssisted(set, slot = null) {
+        const name = slot || this.getBaseExerciseHistoryName(set?.exerciseName || set?.exerciseId || '');
+        if (!name) return false;
+        if (!this.assistedNameCache) this.assistedNameCache = new Map();
+        const key = typeof name === 'string' ? name : this.getSlotExerciseName(name);
+        if (!this.assistedNameCache.has(key)) {
+            this.assistedNameCache.set(key, Boolean(this.getBodyweightAutoConfig(key).assistedPattern));
+        }
+        return this.assistedNameCache.get(key);
+    }
+
     getSetLoadedVolume(set, slot = null) {
         if (!set) return 0;
-        if (slot && this.isTimedSlot(slot)) return 0;
+        if (this.isHistorySetTimed(set, slot) || this.isHistorySetAssisted(set, slot)) return 0;
 
         const weight = Number(set.weight || 0);
         const reps = Number(set.reps || 0);
@@ -3761,7 +3533,7 @@ class App {
 
         for (const set of sortedSets) {
             const slot = slotMap.get(String(set.slotId)) || slotMap.get(set.slotId);
-            if (slot && this.isTimedSlot(slot)) continue;
+            if (this.isHistorySetTimed(set, slot) || this.isHistorySetAssisted(set, slot)) continue;
 
             const weight = Number(set.weight || 0);
             const reps = Number(set.reps || 0);
@@ -3912,7 +3684,7 @@ class App {
             const setDate = this.getSafeDate(set.date);
             const loadedVolume = this.getSetLoadedVolume(set, slot);
             const rpe = this.getStatsRpe(set, slot);
-            const isStrengthSet = !(slot && this.isTimedSlot(slot));
+            const isStrengthSet = !this.isHistorySetTimed(set, slot);
 
             totalLoadedVolume += loadedVolume;
             if (set?.reps > 0) totalSetsAll += 1;
@@ -5567,6 +5339,12 @@ class App {
         if (isPureBodyweight && numericWeight <= 0) {
             return 'PDC';
         }
+        if (isPureBodyweight) {
+            return `PDC +${numericWeight}kg`;
+        }
+        if (slot?.progressionMode === 'bodyweight' && slot.bodyweightProfile?.allowAssistance && numericWeight > 0) {
+            return `−${numericWeight}kg assist.`;
+        }
 
         return `${numericWeight}kg`;
     }
@@ -5582,7 +5360,7 @@ class App {
         if (slot.progressionMode !== 'bodyweight') return 'Charge (kg)';
         if (slot.bodyweightProfile?.allowAssistance) return 'Assistance (kg)';
         if (slot.bodyweightProfile?.allowExternalLoad) return 'Lest (kg)';
-        return 'Poids';
+        return 'Lest (kg)';
     }
 
     formatSuggestedWeightDisplay(advice) {
@@ -6463,7 +6241,10 @@ class App {
         }
 
         // Light header: only the targets chip (sets × reps · rest · RIR) under the title.
-        const tags = ['<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>'];
+        const tags = [
+            '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>',
+            '<button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>'
+        ];
 
         container.innerHTML = tags.join('');
         this.syncExerciseTargetsChip();
@@ -6473,7 +6254,7 @@ class App {
     renderSupersetHeaderMeta() {
         const container = document.getElementById('exercise-header-meta');
         if (!container || !this.currentSlot || !this.supersetSlot) return;
-        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>';
+        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span><button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>';
         this.syncExerciseTargetsChip();
         this.updateTechniqueButton(this.currentSlot);
     }
@@ -7368,8 +7149,15 @@ class App {
             // this also repairs cardio slots previously rewritten to strength
             // when their progression defaults were normalized.
             if (userSelectedMode && storedMode) return storedMode;
-            if (inferredTrackingMode !== 'strength') return inferredTrackingMode;
+            // Only a library entry may repair a stored mode: keyword inference
+            // alone ("rowing haltère" → cardio) must never rewrite a program.
+            if (libraryEntry?.trackingMode && libraryEntry.trackingMode !== 'strength') return libraryEntry.trackingMode;
+            // Repair rows that an older, looser keyword match had turned into cardio.
+            if (storedMode === 'cardio' && inferredTrackingMode === 'strength' && /(^|\s)row(ing)?(\s|$)/.test(this.normalizeExerciseText(exerciseName))) {
+                return 'strength';
+            }
             if (storedMode) return storedMode;
+            if (inferredTrackingMode !== 'strength') return inferredTrackingMode;
 
             const usesStrengthProgression =
                 slotOrExercise.progressionMode === 'load' ||
@@ -7413,7 +7201,116 @@ class App {
             none: { label: 'Repère facultatif', unit: '', step: '1', inputMode: 'decimal' }
         };
         const normalizedMetric = Object.prototype.hasOwnProperty.call(configs, metric) ? metric : 'level';
-        return { key: normalizedMetric, ...configs[normalizedMetric] };
+        const config = { key: normalizedMetric, ...configs[normalizedMetric] };
+        if (normalizedMetric === 'cadence' && this.getCardioMachineKind(slotOrExercise) === 'rope') {
+            config.label = 'Rythme';
+            config.unit = 'sauts/min';
+        }
+        return config;
+    }
+
+    getCardioMachineKind(slotOrExercise) {
+        const name = this.normalizeExerciseText(this.getSlotExerciseName(slotOrExercise) || String(slotOrExercise || ''));
+        if (!name) return 'generic';
+        const has = pattern => pattern.test(name);
+        if (has(/\b(rameur|rower|ergo|concept ?2)\b/) || (has(/\browing\b/) && this.isCardioSlot(slotOrExercise))) return 'rower';
+        if (has(/\bski ?erg\b/)) return 'ski';
+        if (has(/\b(tapis|treadmill|assault runner)\b/)) return 'treadmill';
+        if (has(/\b(natation|swim|swimming|crawl|brasse)\b/)) return 'swim';
+        if (has(/\b(corde|jump rope|skip rope)\b/)) return 'rope';
+        if (has(/\b(stair|stairmaster|stepmill|stepper|escalier)\b/)) return 'stair';
+        if (has(/\b(elliptique|elliptical|cross ?trainer)\b/)) return 'elliptical';
+        if (has(/\b(velo|bike|cycling|bicycle|spinning|rpm|cyclisme|vtt|airbike)\b/)) return 'bike';
+        if (has(/\b(course|running|jogging|footing|run|marche|walking|hiking|trail)\b/)) return 'run';
+        return 'generic';
+    }
+
+    // Optional numbers a cardio block can carry on top of its duration and
+    // main "repère". Distance is always stored in meters.
+    getCardioExtraFields(slotOrExercise) {
+        const kind = this.getCardioMachineKind(slotOrExercise);
+        const primary = this.getCardioMetricConfig(slotOrExercise).key;
+        const distanceKm = { key: 'distanceMeters', label: 'Distance', unit: 'km', scale: 1000, step: '0.01', inputMode: 'decimal' };
+        const distanceM = { key: 'distanceMeters', label: 'Distance', unit: 'm', scale: 1, step: '10', inputMode: 'numeric' };
+        const incline = { key: 'inclinePct', label: 'Pente', unit: '%', scale: 1, step: '0.5', inputMode: 'decimal' };
+        const calories = { key: 'calories', label: 'Calories', unit: 'kcal', scale: 1, step: '1', inputMode: 'numeric' };
+        const byKind = {
+            treadmill: [distanceKm, incline, calories],
+            run: [distanceKm, calories],
+            rower: [distanceM, calories],
+            ski: [distanceM, calories],
+            bike: [distanceKm, calories],
+            elliptical: [distanceKm, calories],
+            stair: [calories],
+            swim: [distanceM],
+            rope: [calories],
+            generic: [distanceKm, calories]
+        };
+        return (byKind[kind] || byKind.generic).filter(field => !(field.key === 'distanceMeters' && primary === 'distance-m'));
+    }
+
+    getSetDistanceMeters(set) {
+        const explicit = Number(set?.distanceMeters);
+        if (explicit > 0) return explicit;
+        return set?.cardioMetric === 'distance-m' ? Number(set.cardioMetricValue || 0) : 0;
+    }
+
+    formatPaceSeconds(seconds) {
+        const safe = Math.max(0, Math.round(seconds));
+        return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+    }
+
+    // Split /500 m for rower & SkiErg, pace /km for running, /100 m for swimming,
+    // average speed for bikes. Null when distance or duration is missing.
+    getCardioDerivedLabel(set, slotOrExercise) {
+        const meters = this.getSetDistanceMeters(set);
+        const seconds = this.getSetDurationSeconds(set, slotOrExercise);
+        if (!(meters > 0) || !(seconds > 0)) return null;
+        const kind = this.getCardioMachineKind(slotOrExercise);
+        if (kind === 'rower' || kind === 'ski') return `${this.formatPaceSeconds(seconds / (meters / 500))} /500 m`;
+        if (kind === 'swim') return `${this.formatPaceSeconds(seconds / (meters / 100))} /100 m`;
+        if (kind === 'treadmill' || kind === 'run') return `${this.formatPaceSeconds(seconds / (meters / 1000))} /km`;
+        const kmh = (meters / 1000) / (seconds / 3600);
+        return `${this.formatOneDecimal(kmh)} km/h moy.`;
+    }
+
+    renderCardioExtraInputs(slot, setIndex, setData = {}, referenceSet = null, { prefix = '' } = {}) {
+        const fields = this.getCardioExtraFields(slot);
+        if (!fields.length) return '';
+        const toDisplay = (field, raw) => {
+            const value = Number(raw);
+            if (!(value > 0)) return '';
+            const scaled = value / field.scale;
+            return String(Math.round(scaled * 100) / 100);
+        };
+        return `
+            <div class="cardio-extras" data-set-index="${setIndex}">
+                ${fields.map(field => `
+                    <label class="cardio-extra">
+                        <span>${field.label} <small>${field.unit}</small></span>
+                        <input type="number" class="input-cardio-extra" inputmode="${field.inputMode}" step="${field.step}" min="0"
+                               data-extra-key="${field.key}" data-extra-scale="${field.scale}" data-set-index="${setIndex}" ${prefix ? `data-extra-prefix="${prefix}"` : ''}
+                               value="${toDisplay(field, setData?.[field.key])}"
+                               placeholder="${toDisplay(field, referenceSet?.[field.key]) || 'option.'}"
+                               aria-label="${field.label} en ${field.unit} (facultatif)">
+                    </label>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    readCardioExtraInputs(setIndex, prefix = '') {
+        const values = {};
+        document.querySelectorAll(`.input-cardio-extra[data-set-index="${setIndex}"]`).forEach(input => {
+            if ((input.dataset.extraPrefix || '') !== prefix) return;
+            const raw = parseFloat(String(input.value || '').replace(',', '.'));
+            const key = input.dataset.extraKey;
+            if (!key) return;
+            values[key] = Number.isFinite(raw) && raw > 0
+                ? Math.round(raw * Number(input.dataset.extraScale || 1) * 100) / 100
+                : null;
+        });
+        return values;
     }
 
     getSetDurationSeconds(set, slotOrExercise = null) {
@@ -7561,10 +7458,17 @@ class App {
             if (this.isCardioSlot(slotOrExercise)) {
                 const metric = this.getCardioMetricConfig(slotOrExercise, set.cardioMetric);
                 const value = Number(set.cardioMetricValue ?? set.weight ?? 0);
-                const metricText = value > 0
+                const metricText = value > 0 && metric.key !== 'distance-m'
                     ? `${metric.label.toLowerCase()} ${this.formatOneDecimal(value)}${metric.unit ? ` ${metric.unit}` : ''}`
                     : '';
-                return [durationText, metricText].filter(Boolean).join(' · ');
+                const meters = this.getSetDistanceMeters(set);
+                const distanceText = meters > 0
+                    ? (meters >= 1000 ? `${String(Math.round(meters / 10) / 100).replace('.', ',')} km` : `${Math.round(meters)} m`)
+                    : '';
+                const inclineText = Number(set.inclinePct) > 0 ? `pente ${this.formatOneDecimal(set.inclinePct)} %` : '';
+                const caloriesText = Number(set.calories) > 0 ? `${Math.round(set.calories)} kcal` : '';
+                return [durationText, distanceText, this.getCardioDerivedLabel(set, slotOrExercise), metricText, inclineText, caloriesText]
+                    .filter(Boolean).join(' · ');
             }
             const load = Number(set.weight || 0);
             return load > 0 ? `${durationText} · ${load} kg` : durationText;
@@ -7612,7 +7516,7 @@ class App {
             if (hasAnyWord(['treadmill', 'assault runner', 'tapis'])) return 'speed';
             if (hasAnyWord(['stair', 'stairmaster', 'stepmill', 'step mill', 'stepper', 'escalier'])) return 'level';
             if (hasAnyWord(['rameur', 'rowing', 'rower', 'ski erg', 'skierg', 'air bike', 'airbike', 'assault bike', 'assaultbike', 'ergometer'])) return 'power';
-            if (hasAnyWord(['natation', 'swimming', 'swim'])) return 'distance-m';
+            if (hasAnyWord(['natation', 'swimming', 'swim', 'crawl', 'brasse'])) return 'distance-m';
             if (hasAnyWord(['jump rope', 'skip rope', 'corde à sauter'])) return 'cadence';
             if (hasAnyWord(['battle rope', 'rope waves'])) return 'cadence';
             if (hasAnyWord(['cross trainer', 'crosstrainer', 'elliptique', 'elliptical', 'stationary bike', 'stationarybike', 'exercise bike', 'exercisebike', 'cycling', 'bicycle', 'bike', 'velo', 'vélo'])) return 'resistance';
@@ -7638,7 +7542,8 @@ class App {
             'external rotation', 'bayesian'
         ];
         const timedTemplate = hasAnyWord([
-            'gainage', 'plank', 'side plank', 'wall sit', 'wall squat hold', 'wall squat', 'chaise contre un mur', 'chaise au mur',
+            'gainage', 'plank', 'side plank', 'planche', 'planche laterale', 'planche latérale', 'superman hold', 'isometrie', 'isométrie', 'isometrique',
+            'wall sit', 'wall squat hold', 'wall squat', 'chaise contre un mur', 'chaise au mur', 'chaise',
             'dead hang', 'passive hang', 'bar hang', 'active hang', 'isometric hold', 'static hold',
             'hollow hold', 'hollow body hold', 'squat hold', 'split squat hold', 'horse stance', 'l sit', 'l-sit', 'v sit hold', 'chair pose',
             'glute bridge hold', 'pont fessier tenu', 'isometric squat',
@@ -7649,10 +7554,11 @@ class App {
             'plank jack', 'plank reach', 'side plank hip adduction', 'side plank hip abduction',
             'side plank with rear fly', 'push-up to side plank', 'push up to side plank', 'pushup to side plank',
             'plank to push up', 'plank to pushup', 'plank up down', 'gainage rotation', 'gainage tap',
-            'gainage adduction', 'gainage oiseau', 'pompe gainage', 'fente', 'lunge'
+            'gainage adduction', 'gainage oiseau', 'pompe gainage', 'fente', 'lunge',
+            'chaise romaine', 'captain chair', 'releve de jambes', 'relevé de jambes', 'planche a abdos', 'planche à abdos'
         ])
             ? {
-                category: hasAnyWord(['gainage', 'plank', 'side plank', 'wall sit', 'chaise contre un mur']) ? 'abdominaux' : 'fullbody',
+                category: hasAnyWord(['gainage', 'plank', 'side plank', 'planche']) ? 'abdominaux' : 'fullbody',
                 equipment: isLoadedTimedExercise
                     ? (isSledInterval ? 'traîneau' : (weightedHold ? 'lesté' : 'haltères'))
                     : 'poids du corps',
@@ -7676,13 +7582,22 @@ class App {
                 aliases: []
             }
             : null;
-        const cardioTemplate = allowCardioInference && hasAnyWord([
-            'tapis', 'treadmill', 'assault runner', 'course', 'running', 'jogging', 'hiking', 'marche', 'walking', 'marche inclinée', 'marche inclinee',
-            'rameur', 'rowing', 'rower', 'velo', 'vélo', 'bike', 'bicycle', 'cycling', 'cycle ergometer', 'stationary bike', 'stationarybike', 'exercise bike', 'exercisebike',
+        // "Rowing" is a strength row (barre, haltère, poulie…) unless it clearly
+        // names the rowing machine.
+        const isRowingMachine = hasAnyWord(['rowing']) && (
+            hasAnyWord(['ergo', 'ergometre', 'ergometer', 'erg', 'concept2', 'concept 2', 'indoor', 'indoor rowing', 'rowing machine cardio'])
+            || normalizedName.trim() === this.normalizeExerciseText('rowing')
+        ) && !hasAnyWord([
+            'barre', 'haltere', 'halteres', 'poulie', 'cable', 'inverse', 'inversé', 't bar', 'tbar', 't-bar', 'assis', 'unilateral', 'unilatéral',
+            'yates', 'pendlay', 'kroc', 'landmine', 'meadows', 'seal', 'menton', 'dumbbell', 'barbell', 'seated', 'bent', 'one arm', 'single arm', 'elastique', 'élastique', 'band'
+        ]);
+        const cardioTemplate = allowCardioInference && (isRowingMachine || hasAnyWord([
+            'tapis', 'treadmill', 'assault runner', 'course', 'course a pied', 'running', 'jogging', 'footing', 'hiking', 'marche', 'walking', 'marche inclinée', 'marche inclinee',
+            'rameur', 'rower', 'spinning', 'rpm', 'cyclisme', 'vtt', 'crawl', 'brasse', 'velo', 'vélo', 'bike', 'bicycle', 'cycling', 'cycle ergometer', 'stationary bike', 'stationarybike', 'exercise bike', 'exercisebike',
             'elliptique', 'elliptical', 'cross trainer', 'crosstrainer', 'stair', 'stairmaster', 'stepmill', 'step mill', 'stepper', 'escalier', 'ski erg', 'skierg',
             'air bike', 'airbike', 'assault bike', 'assaultbike', 'jump rope', 'skip rope', 'battle rope', 'rope waves',
             'cardio', 'natation', 'swimming', 'swim', 'ergometer'
-        ])
+        ]))
             && !hasAnyWord(['walking lunge', 'walking high knees lunge', 'fente marchee', 'fentes marchees'])
             ? {
                 category: 'cardio',
@@ -7694,7 +7609,7 @@ class App {
                 repsMax: 30,
                 rest: 0,
                 rir: 3,
-                instructions: 'Note la durée et le repère simple affiché par la machine : vitesse, résistance, puissance ou niveau.',
+                instructions: 'Note la durée et le repère affiché par la machine (vitesse, résistance, puissance ou niveau). Distance et calories sont facultatives.',
                 pool: [exerciseName],
                 aliases: []
             }
@@ -7948,7 +7863,8 @@ class App {
     }
 
     getBodyweightAutoConfig(slotOrExercise) {
-        const normalizedName = this.normalizeExerciseText(this.getSlotExerciseName(slotOrExercise));
+        // "Pull-up", "Chin-up", "Muscle-up": hyphens must read as spaces.
+        const normalizedName = this.normalizeExerciseText(this.getSlotExerciseName(slotOrExercise)).replace(/-/g, ' ');
         if (!normalizedName) {
             return {
                 isBodyweightPattern: false,
@@ -7968,13 +7884,17 @@ class App {
             'dip', 'dips', 'muscle up', 'burpee', 'pistol squat'
         ];
         const weightedKeywords = ['leste', 'lesté', 'lestee', 'weighted', 'gilet', 'disque', 'chaine', 'chaîne', 'ceinture'];
-        const assistanceKeywords = ['assiste', 'assisté', 'assistee', 'assisted', 'band', 'elastique', 'élastique'];
-        const loadedNonBodyweightKeywords = ['crunch cable', 'cable crunch', 'abdos machine', 'machine crunch', 'poulie', 'pulldown', 'tirage', 'smith'];
+        const assistanceKeywords = ['assiste', 'assistee', 'assisted', 'assistance'];
+        const bandKeywords = ['band', 'elastique', 'elastiques'];
+        const loadedNonBodyweightKeywords = ['crunch cable', 'cable crunch', 'abdos machine', 'machine crunch', 'poulie', 'pulldown', 'tirage', 'smith', 'machine'];
 
         const isBodyweightPattern = bodyweightKeywords.some(keyword => normalizedName.includes(keyword)) || family !== 'generic';
-        const weightedPattern = weightedKeywords.some(keyword => normalizedName.includes(keyword));
-        const assistedPattern = assistanceKeywords.some(keyword => normalizedName.includes(keyword));
-        const loadedPattern = loadedNonBodyweightKeywords.some(keyword => normalizedName.includes(keyword));
+        const weightedPattern = weightedKeywords.some(keyword => normalizedName.includes(this.normalizeExerciseText(keyword)));
+        // A band only means "assistance" on a bodyweight movement (tractions
+        // élastique); a band curl or band pull-apart is a regular exercise.
+        const assistedPattern = assistanceKeywords.some(keyword => normalizedName.includes(keyword))
+            || (isBodyweightPattern && bandKeywords.some(keyword => new RegExp(`(^|\\s)${keyword}(\\s|$)`).test(normalizedName)));
+        const loadedPattern = !assistedPattern && loadedNonBodyweightKeywords.some(keyword => normalizedName.includes(keyword));
         const explicitBodyweightProfile = typeof slotOrExercise === 'object' &&
             (slotOrExercise.loadingProfile === 'bodyweight' || slotOrExercise.bodyweightMode === true || slotOrExercise.progressionMode === 'bodyweight');
 
@@ -10762,10 +10682,10 @@ class App {
                 ? slotBData.sets[i - 1].weight
                 : (lastSetsB[i]?.weight || lastSetsB[0]?.weight || suggestedWeightB);
             const displayWeightA = isBodyweightA
-                ? 0
+                ? (Number(setAData.weight) > 0 ? setAData.weight : 0)
                 : this.getInputValueOrFallback(setAData.weight, isNextIncompleteA && suggestedWeightA ? suggestedWeightA : baselineWeightA);
             const displayWeightB = isBodyweightB
-                ? 0
+                ? (Number(setBData.weight) > 0 ? setBData.weight : 0)
                 : this.getInputValueOrFallback(setBData.weight, isNextIncompleteB && suggestedWeightB ? suggestedWeightB : baselineWeightB);
             
             // Detect coaching-suggested state for green "coach" label
@@ -10870,8 +10790,8 @@ class App {
                             <div class="superset-input-group ${isSuggestedA ? 'suggested' : ''} ${isCoachingSuggestedA ? 'coaching-suggested' : ''}">
                                 <label>${this.getLoadFieldLabel(this.currentSlot)} ${isCoachingSuggestedA ? '<span class="suggested-label">coach</span>' : (isSuggestedA ? '<span class="suggested-label">base</span>' : '')}</label>
                                 ${isBodyweightA ? `
-                                    <div class="superset-static-value">PDC</div>
-                                    <input type="hidden" class="input-weight-a superset-input-hidden" value="0" data-set-index="${i}">
+                                    <input type="number" inputmode="decimal" step="0.5" min="0" class="input-weight-a superset-input input-weight-bodyweight"
+                                           value="${Number(displayWeightA) > 0 ? displayWeightA : ''}" placeholder="PDC" data-set-index="${i}" aria-label="Lest en kg, vide pour le poids du corps">
                                 ` : `
                                     <input type="number" inputmode="decimal" class="input-weight-a superset-input" 
                                            value="${displayWeightA}" placeholder="${suggestedWeightA || baselineWeightA || 'kg'}" data-set-index="${i}">
@@ -10914,8 +10834,8 @@ class App {
                             <div class="superset-input-group ${isSuggestedB ? 'suggested' : ''} ${isCoachingSuggestedB ? 'coaching-suggested' : ''}">
                                 <label>${this.getLoadFieldLabel(this.supersetSlot)} ${isCoachingSuggestedB ? '<span class="suggested-label">coach</span>' : (isSuggestedB ? '<span class="suggested-label">base</span>' : '')}</label>
                                 ${isBodyweightB ? `
-                                    <div class="superset-static-value">PDC</div>
-                                    <input type="hidden" class="input-weight-b superset-input-hidden" value="0" data-set-index="${i}">
+                                    <input type="number" inputmode="decimal" step="0.5" min="0" class="input-weight-b superset-input input-weight-bodyweight"
+                                           value="${Number(displayWeightB) > 0 ? displayWeightB : ''}" placeholder="PDC" data-set-index="${i}" aria-label="Lest en kg, vide pour le poids du corps">
                                 ` : `
                                     <input type="number" inputmode="decimal" class="input-weight-b superset-input" 
                                            value="${displayWeightB}" placeholder="${suggestedWeightB || baselineWeightB || 'kg'}" data-set-index="${i}">
@@ -13055,8 +12975,12 @@ class App {
                         <div class="input-group ${isSuggested ? 'suggested' : ''} ${isCoachingSuggested ? 'coaching-suggested' : ''}">
                             <label>${this.getLoadFieldLabel(this.currentSlot)} ${isCoachingSuggested ? '<span class="suggested-label">coach</span>' : (isSuggested ? '<span class="suggested-label">base</span>' : '')}</label>
                             ${isPureBodyweight ? `
-                                <div class="superset-static-value">PDC</div>
-                                <input type="hidden" class="input-weight input-weight-hidden" value="0" data-set-index="${i}">
+                                <input type="number" inputmode="decimal" class="input-weight input-weight-bodyweight"
+                                       value="${Number(setData.weight) > 0 ? setData.weight : ''}"
+                                       placeholder="PDC"
+                                       step="0.5" min="0"
+                                       aria-label="Lest ajouté en kg, vide pour le poids du corps"
+                                       data-set-index="${i}">
                             ` : `
                                 <input type="number" inputmode="decimal" class="input-weight" 
                                        value="${displayWeight}" 
@@ -13074,6 +12998,7 @@ class App {
                                    data-set-index="${i}">
                         </div>
                     </div>
+                    ${this.isCardioSlot(this.currentSlot) ? this.renderCardioExtraInputs(this.currentSlot, i, setData, lastSets[i] || lastSets[0] || null) : ''}
                     ${inlineCoachHint ? `
                         <div class="series-coach-inline">
                             <span class="series-coach-inline-badge">Coach</span>
@@ -13146,7 +13071,8 @@ class App {
             chips.push(`<span class="series-done-chip is-${versus.tone}">${this.escapeHtml(shortText)}</span>`);
         }
         if (setData.rpe != null && this.hasExplicitRpe(setData)) {
-            chips.push(`<span class="series-done-chip">RPE ${this.escapeHtml(String(setData.rpe))}</span>`);
+            const face = this.getRpeFace(setData.rpe);
+            chips.push(`<span class="series-done-chip is-face" title="${this.escapeHtml(face.label)}">${face.emoji} ${this.escapeHtml(face.label)}</span>`);
         }
         return `
             <div class="series-header series-done-row">
@@ -13154,7 +13080,7 @@ class App {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                 </span>
                 <div class="series-done-main">
-                    <span class="series-number">Série ${setIndex + 1}</span>
+                    <span class="series-number">${this.isCardioSlot(this.currentSlot) ? 'Bloc' : 'Série'} ${setIndex + 1}</span>
                     <strong class="series-result">${this.escapeHtml(this.formatSetResult(setData, this.currentSlot))}</strong>
                     ${chips.length ? `<div class="series-done-chips">${chips.join('')}</div>` : ''}
                 </div>
@@ -13290,7 +13216,7 @@ class App {
                     return `
                         <div class="uni-side side-${meta.key} is-done">
                             <span class="uni-side-badge" aria-label="Côté ${meta.name}">${meta.letter}</span>
-                            <span class="uni-side-result">${this.escapeHtml(this.formatSetResult(meta.data, slotRef))}<small>reps</small></span>
+                            <span class="uni-side-result">${this.escapeHtml(this.formatSetResult(meta.data, slotRef))}${this.isTimedSlot(slotRef) ? '' : '<small>reps</small>'}</span>
                             <span class="uni-side-done" aria-hidden="true">✓</span>
                         </div>
                     `;
@@ -13304,17 +13230,17 @@ class App {
                         <div class="unilateral-input-group">
                             <label>${loadLabel} ${suggestedText ? `<span class="suggested-label">${this.escapeHtml(suggestedText)}</span>` : ''}</label>
                             ${isPureBodyweightUni ? `
-                                <div class="superset-static-value">PDC</div>
-                                <input type="hidden" class="input-weight-${meta.key}" value="0" data-set-index="${i}">
+                                <input type="number" inputmode="decimal" step="0.5" min="0" class="input-weight-${meta.key} unilateral-input input-weight-bodyweight"
+                                       value="${Number(meta.data.weight) > 0 ? meta.data.weight : ''}" placeholder="PDC" data-set-index="${i}" aria-label="Lest côté ${meta.name}, vide pour le poids du corps">
                             ` : `
                                 <input type="number" inputmode="decimal" step="0.5" class="input-weight-${meta.key} unilateral-input"
                                        value="${meta.display}" placeholder="${suggestedText ? this.escapeHtml(String(meta.suggested)) : 'kg'}" data-set-index="${i}" aria-label="${loadLabel} côté ${meta.name}">
                             `}
                         </div>
                         <div class="unilateral-input-group">
-                            <label>Reps <span class="suggested-label">${this.escapeHtml(target)}</span></label>
+                            <label>${this.getRepFieldLabel(slotRef)} <span class="suggested-label">${this.escapeHtml(target)}</span></label>
                             <input type="number" inputmode="numeric" class="input-reps-${meta.key} unilateral-input"
-                                   value="${meta.data.reps || ''}" placeholder="${this.escapeHtml(target)}" data-set-index="${i}" aria-label="Reps côté ${meta.name}">
+                                   value="${meta.data.reps || ''}" placeholder="${this.escapeHtml(String(target).replace(/\s*(s|min)$/, ''))}" data-set-index="${i}" aria-label="${this.getRepFieldLabel(slotRef)} côté ${meta.name}">
                         </div>
                     </div>
                 `;
@@ -13449,11 +13375,16 @@ class App {
         const restAfterSeconds = previousCompletedSet
             ? Math.max(0, Math.round((now - Number(previousCompletedSet.timestamp)) / 1000))
             : null;
+        const sideTrackingMode = this.getTrackingMode(this.currentSlot);
+        const timingFields = reps => (sideTrackingMode === 'timed'
+            ? { trackingMode: 'timed', durationSeconds: Math.round(reps) }
+            : { trackingMode: sideTrackingMode });
         let newlyCompletedSides = 0;
         if (left.shouldComplete && !existingLeft.completed) {
             slotData.setsLeft[setIndex] = {
                 weight: left.weight,
                 reps: left.reps,
+                ...timingFields(left.reps),
                 targetReps: leftTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
                 completed: true,
                 exerciseName,
@@ -13468,6 +13399,7 @@ class App {
             slotData.setsRight[setIndex] = {
                 weight: right.weight,
                 reps: right.reps,
+                ...timingFields(right.reps),
                 targetReps: rightTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
                 completed: true,
                 exerciseName,
@@ -13679,7 +13611,8 @@ class App {
                 durationSeconds: Math.round(this.isCardioSlot(this.currentSlot) ? reps * 60 : reps),
                 ...(this.isCardioSlot(this.currentSlot) ? {
                     cardioMetric: this.getCardioMetricConfig(this.currentSlot).key,
-                    cardioMetricValue: weight
+                    cardioMetricValue: weight,
+                    ...this.readCardioExtraInputs(setIndex)
                 } : {})
             } : {}),
             targetReps: advisedTargets[setIndex] || defaultTargets[setIndex] || this.currentSlot.repsMax,
@@ -13697,7 +13630,11 @@ class App {
         this.lastCompletedSetIndex = setIndex;
         this.lastCompletedSetSide = null;
         this.lastCompletedSetSlotId = this.currentSlot.id;
-        this.pendingJustCompleted = { index: setIndex, xp: 10 };
+        // A 30-min cardio block is worth more than one set of curls.
+        const setXp = this.isCardioSlot(this.currentSlot)
+            ? Math.min(40, 10 + Math.floor(reps / 5) * 3)
+            : 10;
+        this.pendingJustCompleted = { index: setIndex, xp: setXp };
         this.lastCompletedSetWeight = weight;
         this.lastCompletedSetReps = reps;
         this.nextSetSuggestedWeight = null;
@@ -13706,7 +13643,7 @@ class App {
 
         // Add XP
         let xp = (await db.getSetting('xp')) ?? 0;
-        xp += 10;
+        xp += setXp;
         await db.setSetting('xp', xp);
         
         // Hot/Cold detection after first set
@@ -13789,10 +13726,51 @@ class App {
     }
 
     async detectLivePersonalRecord(setData, exerciseId) {
+        if (this.getTrackingMode(setData) === 'timed' && exerciseId) {
+            // Holds (gainage, chaise…): the longest clean hold is the record.
+            const seconds = Number(setData?.durationSeconds || 0);
+            if (!(seconds > 0)) return false;
+            const holdKey = `${this.currentWorkout?.id || 'w'}::hold::${exerciseId}`;
+            this.livePrCache = this.livePrCache || new Map();
+            if (!this.livePrCache.has(holdKey)) {
+                const history = await this.getSetHistoryForExercise(exerciseId);
+                const holds = history.filter(set => !this.isSetExcludedFromProgression(set))
+                    .map(set => this.getSetDurationSeconds(set, exerciseId));
+                this.livePrCache.set(holdKey, { best: Math.max(0, ...holds), count: history.length });
+            }
+            const record = this.livePrCache.get(holdKey);
+            const isRecord = record.count > 0 && record.best > 0 && seconds > record.best;
+            record.best = Math.max(record.best, seconds);
+            return isRecord;
+        }
         if (this.isTimedSlot(setData)) return false;
         const weight = Number(setData?.weight || 0);
         const reps = Number(setData?.reps || 0);
-        if (weight <= 0 || reps <= 0 || !exerciseId) return false;
+        if (reps <= 0 || !exerciseId) return false;
+        // Bodyweight and assisted sets: a rep record at no more assistance than
+        // before. More assistance is never a record.
+        const assisted = this.isHistorySetAssisted(setData, null);
+        if (weight <= 0 || assisted) {
+            const repsKey = `${this.currentWorkout?.id || 'w'}::reps::${exerciseId}`;
+            this.livePrCache = this.livePrCache || new Map();
+            if (!this.livePrCache.has(repsKey)) {
+                const history = await this.getSetHistoryForExercise(exerciseId);
+                const comparable = history.filter(set => !this.isHistorySetTimed(set)
+                    && !this.isSetExcludedFromProgression(set)
+                    && (assisted ? Number(set.weight || 0) <= weight : Number(set.weight || 0) <= 0));
+                this.livePrCache.set(repsKey, {
+                    best: Math.max(0, ...comparable.map(set => Number(set.reps || 0))),
+                    count: history.length
+                });
+            }
+            const record = this.livePrCache.get(repsKey);
+            if (record.count > 0 && record.best > 0 && reps > record.best) {
+                record.best = reps;
+                return true;
+            }
+            record.best = Math.max(record.best, reps);
+            return false;
+        }
         const cacheKey = `${this.currentWorkout?.id || 'w'}::${exerciseId}`;
         this.livePrCache = this.livePrCache || new Map();
         if (!this.livePrCache.has(cacheKey)) {
@@ -13905,6 +13883,7 @@ class App {
             if (this.isCardioSlot(this.currentSlot)) {
                 slotData.sets[setIndex].cardioMetric = this.getCardioMetricConfig(this.currentSlot).key;
                 slotData.sets[setIndex].cardioMetricValue = weight;
+                Object.assign(slotData.sets[setIndex], this.readCardioExtraInputs(setIndex));
             }
         }
         
@@ -13972,6 +13951,9 @@ class App {
                 ...(slotData.setsLeft[setIndex] || {}),
                 weight: weightLeft,
                 reps: repsLeft,
+                ...(this.getTrackingMode(this.currentSlot) === 'timed'
+                    ? { trackingMode: 'timed', durationSeconds: Math.round(repsLeft) }
+                    : {}),
                 completed: true,
                 exerciseName,
                 timestamp: Number(slotData.setsLeft[setIndex]?.timestamp) || Date.now()
@@ -13983,6 +13965,9 @@ class App {
                 ...(slotData.setsRight[setIndex] || {}),
                 weight: weightRight,
                 reps: repsRight,
+                ...(this.getTrackingMode(this.currentSlot) === 'timed'
+                    ? { trackingMode: 'timed', durationSeconds: Math.round(repsRight) }
+                    : {}),
                 completed: true,
                 exerciseName,
                 timestamp: Number(slotData.setsRight[setIndex]?.timestamp) || Date.now()
@@ -15115,18 +15100,23 @@ class App {
     }
     
     // ===== RPE Management =====
-    updateRpeDisplay(rpe) {
-        const rpeDescriptions = {
-            6: { text: 'Facile' },
-            7: { text: 'OK' },
-            8: { text: 'Propre' },
-            9: { text: 'Dur' },
-            10: { text: 'Échec' }
+    // The rest screen shows faces instead of RPE numbers; the value stored stays RPE 6-10.
+    getRpeFace(rpe) {
+        const faces = {
+            6: { emoji: '😌', label: 'Facile', reserve: 'il t\'en restait 4 ou plus' },
+            7: { emoji: '🙂', label: 'Ça va', reserve: 'il t\'en restait 3' },
+            8: { emoji: '😤', label: 'Dur', reserve: 'il t\'en restait 2' },
+            9: { emoji: '🥵', label: 'Très dur', reserve: 'il t\'en restait 1' },
+            10: { emoji: '💀', label: 'À fond', reserve: 'plus rien dans le réservoir' }
         };
-        
-        const desc = rpeDescriptions[rpe] || rpeDescriptions[8];
+        const rounded = Math.max(6, Math.min(10, Math.round(Number(rpe) || 8)));
+        return faces[rounded];
+    }
+
+    updateRpeDisplay(rpe) {
+        const face = this.getRpeFace(rpe);
         document.getElementById('rpe-feedback').innerHTML = `
-            <span class="rpe-description">RPE ${rpe} · ${desc.text}</span>
+            <span class="rpe-description"><strong>${face.emoji} ${face.label}</strong> · ${face.reserve}</span>
         `;
         
         // Update active quick choice
@@ -15151,7 +15141,7 @@ class App {
             chip.setAttribute('aria-pressed', 'false');
         });
         document.getElementById('rpe-feedback').innerHTML = `
-            <span class="rpe-description">Optionnel</span>
+            <span class="rpe-description">Optionnel · touche un smiley</span>
         `;
     }
     
@@ -16252,7 +16242,7 @@ class App {
             nameEl.textContent = slots.map(slot => slot.activeExercise || slot.name).filter(Boolean).join(' + ');
         }
 
-        // Same XP values as the per-set feedback: 10 / set, 5 / side, 20 / superset set, +15 / live record.
+        // Same XP values as the per-set feedback: 10 / set (more for long cardio blocks), 5 / side, 20 / superset set, +15 / live record.
         let xp = 0;
         slots.forEach((slot, index) => {
             const data = this.currentWorkout?.slots?.[slot.id] || {};
@@ -16260,6 +16250,7 @@ class App {
             const sets = (data.sets || []).filter(set => set?.completed);
             if (sides.length) xp += sides.length * 5;
             else if (this.isSupersetMode) xp += index === 0 ? sets.length * 20 : 0;
+            else if (this.isCardioSlot(slot)) xp += sets.reduce((sum, set) => sum + Math.min(40, 10 + Math.floor(Number(set.reps || 0) / 5) * 3), 0);
             else xp += sets.length * 10;
             xp += [...sides, ...sets].filter(set => set?.livePr).length * 15;
             // Cardio console bonus: +1 XP per minute, capped at 30 per block.
@@ -16505,6 +16496,9 @@ class App {
                         cardioMetric: setData.cardioMetric || slot.cardioMetric || null,
                         cardioMetricValue: setData.cardioMetricValue ?? null,
                         ...(setData.cardio ? { cardio: setData.cardio } : {}),
+                        ...(setData.distanceMeters > 0 ? { distanceMeters: setData.distanceMeters } : {}),
+                        ...(setData.inclinePct > 0 ? { inclinePct: setData.inclinePct } : {}),
+                        ...(setData.calories > 0 ? { calories: setData.calories } : {}),
                         rpe: setData.rpe ?? 8,
                         rpeSource: setData.rpeSource || (setData.rpe != null ? 'legacy' : 'default'),
                         targetSetCount: entryTargetSetCount,
@@ -19383,6 +19377,7 @@ class App {
         };
 
         this.bindTechniqueSheetEvents();
+        this.bindExoProfileEvents?.();
         const infoGrid = document.querySelector('#screen-exercise .info-grid');
         if (infoGrid) {
             new MutationObserver(() => this.syncExerciseTargetsChip())
@@ -19829,6 +19824,12 @@ class App {
         document.querySelectorAll('.rpe-chip').forEach(chip => {
             chip.onclick = () => {
                 const rpe = parseInt(chip.dataset.rpe);
+                // Tapping the selected face again clears it: no feeling recorded.
+                if (rpeSlider.dataset.touched === 'true' && parseInt(rpeSlider.value) === rpe) {
+                    this.resetRpeSlider();
+                    return;
+                }
+                this.hapticTap(10);
                 rpeSlider.value = rpe;
                 rpeSlider.dataset.touched = 'true';
                 const rpeSection = document.getElementById('rpe-section');
@@ -21542,11 +21543,12 @@ class App {
     }
 
     inferBodyweightFamily(slotOrExercise) {
-        const normalizedName = this.normalizeExerciseText(this.getSlotExerciseName(slotOrExercise));
+        const normalizedName = this.normalizeExerciseText(this.getSlotExerciseName(slotOrExercise)).replace(/-/g, ' ');
         if (!normalizedName) return 'generic';
 
         if (
             normalizedName.includes('traction') ||
+            normalizedName.includes('muscle up') ||
             normalizedName.includes('pull up') ||
             normalizedName.includes('pullup') ||
             normalizedName.includes('chin up') ||
@@ -21555,7 +21557,7 @@ class App {
             return 'pullup';
         }
 
-        if (normalizedName.includes('dip') || normalizedName.includes('dips')) {
+        if (/(^|\s)dips?(\s|$)/.test(normalizedName) && !normalizedName.includes('machine')) {
             return 'dip';
         }
 
@@ -21599,10 +21601,10 @@ class App {
             ));
             if (strengthPreset) {
                 const definition = this.findExerciseLibraryEntry(this.getSlotExerciseName(slot))
-                    || this.inferCustomExerciseTemplate(this.getSlotExerciseName(slot), {
+                    || (previousTrackingMode ? null : this.inferCustomExerciseTemplate(this.getSlotExerciseName(slot), {
                         preferLibraryMatch: false,
                         allowCardioInference: true
-                    });
+                    }));
                 if (definition?.trackingMode === 'cardio') {
                     slot.sets = definition.sets ?? 1;
                     slot.repsMin = definition.repsMin ?? 10;
@@ -21611,6 +21613,20 @@ class App {
                     slot.cardioMetric ||= definition.cardioMetric || null;
                 }
             }
+        }
+        if (
+            previousTrackingMode === 'cardio'
+            && slot.trackingMode === 'strength'
+            && Number(slot.sets) <= 1
+            && Number(slot.rest) === 0
+        ) {
+            // Undo the cardio preset an older keyword match forced on a strength row.
+            slot.sets = 3;
+            slot.repsMin = 8;
+            slot.repsMax = 12;
+            slot.rest = 90;
+            slot.cardioMetric = null;
+            slot.durationUnit = null;
         }
         if (slot.trackingMode === 'timed') {
             // The first timer format stored targets as decimal minutes. Convert
@@ -22059,6 +22075,9 @@ class App {
                     cardioMetric: set.cardioMetric || metadata.cardioMetric || null,
                     cardioMetricValue: set.cardioMetricValue ?? null,
                     ...(set.cardio ? { cardio: set.cardio } : {}),
+                    distanceMeters: set.distanceMeters ?? null,
+                    inclinePct: set.inclinePct ?? null,
+                    calories: set.calories ?? null,
                     rpe: set.rpe ?? null,
                     rpeSource: set.rpeSource || null,
                     variant,
@@ -24295,6 +24314,8 @@ class App {
     }
 
 }
+
+if (typeof ExoProfileMixin !== 'undefined') Object.assign(App.prototype, ExoProfileMixin);
 
 // Initialize app
 const app = new App();

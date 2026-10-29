@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="streak-score.css?v=6.0.0">
     <link rel="stylesheet" href="theme.css?v=6.0.0">
     <link rel="stylesheet" href="ai-coach.css?v=6.0.0">
+    <link rel="stylesheet" href="onboarding.css?v=6.0.0">
     <link rel="stylesheet" href="v6.css?v=6.0.0">
 </head>
 <body>
@@ -194,6 +195,10 @@
                         <div class="pz-card activity-card" id="activity-card"></div>
 
                         <div class="pz-card cardio-card" id="cardio-card"></div>
+
+                        <div class="pz-card exo-search-card" id="exo-search-card">
+                            <!-- Recherche d'exo + fiches perso (exo-profile.js) -->
+                        </div>
 
                         <div class="pz-card lifts-card" id="lifts-card"></div>
 
@@ -872,54 +877,34 @@
 
                     <div class="rpe-section" id="rpe-section" data-touched="false">
                         <div class="rpe-header">
-                            <div class="rpe-question">Ressenti de la série</div>
+                            <div class="rpe-question">Comment c'était ?</div>
+                            <button type="button" class="help-dot" data-help="ressenti" aria-label="À quoi sert le ressenti ?">?</button>
                         </div>
                         <input type="range" id="rpe-slider" class="rpe-slider" min="6" max="10" step="1" value="8" hidden>
-                        <div class="rpe-choices" id="rpe-choices">
-                            <button type="button" class="rpe-chip" data-rpe="6">
-                                <span class="rpe-chip-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 16 16">
-                                        <circle cx="8" cy="8" r="4.5"></circle>
-                                        <circle cx="11.5" cy="4.5" r="1" fill="currentColor" stroke="none"></circle>
-                                    </svg>
-                                </span>
+                        <div class="rpe-choices rpe-faces" id="rpe-choices">
+                            <button type="button" class="rpe-chip" data-rpe="6" aria-pressed="false">
+                                <span class="rpe-chip-icon rpe-face" aria-hidden="true">😌</span>
                                 <span class="rpe-chip-label">Facile</span>
                             </button>
-                            <button type="button" class="rpe-chip" data-rpe="7">
-                                <span class="rpe-chip-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 16 16">
-                                        <path d="M4 8.2l2.2 2.2L12 4.8"></path>
-                                    </svg>
-                                </span>
-                                <span class="rpe-chip-label">OK</span>
+                            <button type="button" class="rpe-chip" data-rpe="7" aria-pressed="false">
+                                <span class="rpe-chip-icon rpe-face" aria-hidden="true">🙂</span>
+                                <span class="rpe-chip-label">Ça va</span>
                             </button>
-                            <button type="button" class="rpe-chip" data-rpe="8">
-                                <span class="rpe-chip-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 16 16">
-                                        <path d="M8 2.5l1.4 3.1L12.5 7 9.4 8.4 8 11.5 6.6 8.4 3.5 7l3.1-1.4L8 2.5z"></path>
-                                    </svg>
-                                </span>
-                                <span class="rpe-chip-label">Propre</span>
-                            </button>
-                            <button type="button" class="rpe-chip" data-rpe="9">
-                                <span class="rpe-chip-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 16 16">
-                                        <path d="M3.5 10.5l2.4-3 2 2 4-5"></path>
-                                    </svg>
-                                </span>
+                            <button type="button" class="rpe-chip" data-rpe="8" aria-pressed="false">
+                                <span class="rpe-chip-icon rpe-face" aria-hidden="true">😤</span>
                                 <span class="rpe-chip-label">Dur</span>
                             </button>
-                            <button type="button" class="rpe-chip" data-rpe="10">
-                                <span class="rpe-chip-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 16 16">
-                                        <path d="M5 5l6 6M11 5l-6 6"></path>
-                                    </svg>
-                                </span>
-                                <span class="rpe-chip-label">Échec</span>
+                            <button type="button" class="rpe-chip" data-rpe="9" aria-pressed="false">
+                                <span class="rpe-chip-icon rpe-face" aria-hidden="true">🥵</span>
+                                <span class="rpe-chip-label">Très dur</span>
+                            </button>
+                            <button type="button" class="rpe-chip" data-rpe="10" aria-pressed="false">
+                                <span class="rpe-chip-icon rpe-face" aria-hidden="true">💀</span>
+                                <span class="rpe-chip-label">À fond</span>
                             </button>
                         </div>
                         <div class="rpe-feedback" id="rpe-feedback">
-                            <span class="rpe-description">Optionnel</span>
+                            <span class="rpe-description">Optionnel · touche un smiley</span>
                         </div>
                     </div>
                     
@@ -968,19 +953,6 @@
                     </button>
                 </div>
             </div>
-        </div>
-
-        <!-- Modal Onboarding -->
-        <!-- Onboarding (onboarding.js) -->
-        <div class="onboard" id="modal-onboarding" role="dialog" aria-modal="true" aria-label="Bienvenue">
-            <div class="onboard-top">
-                <button type="button" class="onboard-back" id="onboard-back" aria-label="Retour">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-                </button>
-                <div class="onboard-progress" aria-hidden="true"><span id="onboard-progress-fill"></span></div>
-            </div>
-            <div class="onboard-stage" id="onboard-stage"></div>
-            <div class="onboard-footer" id="onboard-footer"></div>
         </div>
 
         <!-- Bottom Sheet Changement de séance -->
@@ -1086,6 +1058,27 @@
                 <button class="btn btn-ghost pool-ignore" id="btn-pool-ignore" type="button">
                     Annuler
                 </button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Fiche perso d'un exercice -->
+        <div class="bottom-sheet" id="sheet-exo-profile">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content sheet-content-large exo-profile-sheet">
+                <div class="sheet-handle"></div>
+                <div class="sheet-titlebar exercise-insights-titlebar">
+                    <div class="sheet-titlebar-spacer"></div>
+                    <div class="exercise-insights-heading">
+                        <span class="exercise-insights-eyebrow">Fiche perso</span>
+                        <h3>Tes stats sur l'exo</h3>
+                    </div>
+                    <button type="button" class="btn-icon-small exercise-insights-close" id="btn-close-exo-profile" aria-label="Fermer la fiche">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M6 6l12 12M18 6L6 18"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="exo-profile-body" id="exo-profile-body"></div>
             </div>
         </div>
 
@@ -1203,7 +1196,7 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-deload">
                 <div class="deload-icon">🔋</div>
-                <h3>Semaine de récupération suggérée</h3>
+                <h3>Semaine de récupération suggérée <button type="button" class="help-dot" data-help="deload" aria-label="C'est quoi un deload ?">?</button></h3>
                 <div class="deload-reason" id="deload-reason">
                     <!-- Raison générée dynamiquement -->
                 </div>
@@ -1411,7 +1404,7 @@
                 </div>
 
                 <div class="settings-divider"></div>
-                <h4 class="settings-group-title">🔁 Cycles & Deload</h4>
+                <h4 class="settings-group-title">🔁 Cycles & Deload <button type="button" class="help-dot" data-help="deload" aria-label="C'est quoi un deload ?">?</button></h4>
 
                 <div class="settings-section">
                     <h4 class="settings-section-title">
@@ -1513,13 +1506,13 @@
                             <div class="cycle-checkin-kicker" id="cycle-checkin-kicker">Cycle</div>
                             <h4 id="cycle-checkin-title">Semaine 1</h4>
                         </div>
-                        <span class="cycle-checkin-phase" id="cycle-checkin-phase">Accumulation</span>
+                        <span class="help-inline"><span class="cycle-checkin-phase" id="cycle-checkin-phase">Accumulation</span><button type="button" class="help-dot" data-help="cycle" aria-label="Comment marche le cycle ?">?</button></span>
                     </div>
                     <p class="cycle-checkin-objective" id="cycle-checkin-objective">Objectif de la semaine</p>
                     <div class="cycle-checkin-progress" id="cycle-checkin-progress"></div>
                     <div class="cycle-checkin-deload" id="cycle-checkin-deload">
                         <div class="cycle-checkin-deload-copy">
-                            <strong id="cycle-deload-title">Passer cette séance en deload ?</strong>
+                            <div class="help-inline"><strong id="cycle-deload-title">Passer cette séance en deload ?</strong><button type="button" class="help-dot" data-help="deload" aria-label="C'est quoi un deload ?">?</button></div>
                             <p id="cycle-deload-copy">Active-le si tu veux une séance plus légère aujourd’hui.</p>
                         </div>
                         <div class="cycle-deload-selector" id="cycle-deload-selector">
@@ -1614,15 +1607,16 @@
     <script defer src="db.js?v=6.0.0"></script>
     <script defer src="data.js?v=6.0.0"></script>
     <script defer src="exercise-db.js?v=6.0.0"></script>
+    <script defer src="exo-profile.js?v=6.0.0"></script>
     <script defer src="app.js?v=6.0.0"></script>
     <script defer src="shell.js?v=6.0.0"></script>
     <script defer src="journey.js?v=6.0.0"></script>
     <script defer src="cardio.js?v=6.0.0"></script>
-    <script defer src="onboarding.js?v=6.0.0"></script>
     <script defer src="swap.js?v=6.0.0"></script>
     <script defer src="engage.js?v=6.0.0"></script>
     <script defer src="ai-coach.js?v=6.0.0"></script>
     <script defer src="ai-coach-ui.js?v=6.0.0"></script>
+    <script defer src="onboarding.js?v=6.0.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
