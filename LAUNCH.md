@@ -45,6 +45,16 @@ Le plan est recalculé après chaque séance et au lancement. En natif, il est p
 
 Étape suivante (push serveur, optionnel) : FCM/APNs pour les campagnes (défi du mois, nouveautés) et les rappels si l'utilisateur change d'appareil.
 
+## 4 bis. Coach IA « comme un pote »
+
+Aujourd'hui (`ai-coach.js` + `ai-coach-ui.js`) : l'app prépare un résumé de tes données (assiduité, tendances e1RM, volume par muscle, déséquilibres, notes) et l'envoie en un tap à ChatGPT, Claude, Gemini ou Le Chat ; la réponse collée est relue et appliquée au programme.
+
+Version intégrée (app native) — une conversation dans l'app, sans copier-coller :
+1. **Petit backend** (Cloudflare Worker / Supabase Edge Function) qui garde la clé d'API et applique un quota par utilisateur (gratuit : 3 messages / semaine ; Muscu+ : illimité raisonnable).
+2. L'app envoie le **même résumé** que `AiCoach.buildDigest()` + l'historique court de la conversation ; le serveur ajoute le *system prompt* du coach (ton bienveillant, tutoiement, emojis légers, sécurité : jamais de conseil médical, renvoi vers un pro en cas de douleur).
+3. Les réponses qui modifient le programme renvoient le format `worktout-program-v1` déjà géré par `AiCoach.parseResponse()` → écran « changements proposés » existant, puis application avec sauvegarde.
+4. Moments proactifs (déclenchés côté app, 1 fois max par jour) : bilan après chaque séance, message de relance quand la série est en danger, félicitations sur un record.
+
 ## 4. Ce qui a été durci pour la 6.0
 
 - Coach : 11 bugs corrigés (axe de progression validé en fin de séance, lest et assistance réels, charges jamais à 0 kg, deload, unilatéral, fatigue, séances chronométrées).
