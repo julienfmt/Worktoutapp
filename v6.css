@@ -5113,21 +5113,8 @@ button.set-row,
     color: var(--text-muted);
 }
 
-.set-stepper.is-bare input {
-    width: 56px;
-    height: 40px;
-    border-radius: 12px;
-    background: var(--bg-tertiary);
-    font-size: 19px;
-}
-
 .set-stepper input:has(+ button) {
     width: 72px;
-}
-
-.set-stepper.is-bare .set-unit {
-    width: auto;
-    margin: 0 0 0 6px;
 }
 
 .set-row .toggle-switch {

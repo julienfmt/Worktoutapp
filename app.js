@@ -20376,8 +20376,7 @@ class App {
             'setting-failure-count': { key: 'failureCount', fallback: 3, coach: true },
             'setting-lock-weeks': { key: 'lockWeeks', fallback: 4, coach: true },
             'setting-accumulation-weeks': { key: 'accumulationWeeks', fallback: 4, coach: true },
-            'setting-deload-volume': { key: 'deloadVolumeReduction', fallback: 50, coach: true },
-            'setting-cheat-streak': { key: 'streakCount', fallback: 0, confirm: true, refresh: true }
+            'setting-deload-volume': { key: 'deloadVolumeReduction', fallback: 50, coach: true }
         };
     }
 
@@ -20524,20 +20523,6 @@ class App {
         const value = this.clampSettingsNumber(input, parsed);
         input.value = this.formatSettingsNumber(value);
         if (String(value) === input.dataset.saved) return;
-
-        if (field.confirm) {
-            const previous = parseInt(input.dataset.saved ?? '0', 10) || 0;
-            const confirmed = await this.showAppConfirm(
-                value === 0
-                    ? `Ta série de ${previous} semaine${previous > 1 ? 's' : ''} repart de zéro.`
-                    : `Ta série passe de ${previous} à ${value} semaine${value > 1 ? 's' : ''}.`,
-                { title: 'Changer ta série ?', variant: 'warning', confirmText: 'Oui, changer', cancelText: 'Annuler' }
-            );
-            if (!confirmed) {
-                input.value = input.dataset.saved || '0';
-                return;
-            }
-        }
 
         await db.setSetting(field.key, value);
         input.dataset.saved = String(value);
