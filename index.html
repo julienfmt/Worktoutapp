@@ -202,6 +202,8 @@
 
                         <div class="pz-card lifts-card" id="lifts-card"></div>
 
+                        <div class="pz-card tools-card" id="tools-card"></div>
+
                         <div class="pz-card backup-card">
                             <div class="pz-card-head">
                                 <div>
@@ -356,6 +358,9 @@
                     <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
                 <div class="exercise-header-actions">
+                    <button type="button" class="exercise-header-tool exercise-plates-btn" id="btn-exercise-plates" aria-label="Calculateur de disques" title="Calculateur de disques" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h20"/><rect x="5" y="6" width="3" height="12" rx="1"/><rect x="16" y="6" width="3" height="12" rx="1"/></svg>
+                    </button>
                     <button type="button" class="exercise-header-tool exercise-swap-btn" id="btn-exercise-swap" aria-label="Changer d'exercice" title="Changer d'exercice" hidden>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>
                     </button>
@@ -1244,7 +1249,9 @@
             <div class="sheet-backdrop"></div>
             <div class="sheet-content sheet-content-large">
                 <div class="sheet-handle"></div>
-                <h3>⚙️ Paramètres de progression</h3>
+                <h3>⚙️ Réglages</h3>
+
+                <div class="settings-app-block" id="settings-app-block"></div>
                 
                 <div class="settings-section">
                     <h4 class="settings-section-title">
@@ -1279,6 +1286,8 @@
                     </div>
                 </div>
 
+                <details class="settings-advanced">
+                    <summary><span><strong>Réglages avancés du coach</strong><small>Plateaux, baisse de charge, incréments</small></span><span class="settings-advanced-chevron" aria-hidden="true">›</span></summary>
                 <div class="settings-section">
                     <h4 class="settings-section-title">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1344,6 +1353,7 @@
                         </div>
                     </div>
                 </div>
+                </details>
 
                 <div class="settings-divider"></div>
                 <h4 class="settings-group-title">📲 Confort pendant la séance</h4>
@@ -1403,6 +1413,8 @@
                     <p class="settings-description" id="cleanup-status" style="margin-top: 8px; color: #64748b; font-size: 13px;"></p>
                 </div>
 
+                <details class="settings-advanced">
+                    <summary><span><strong>Cycles, deload & triche</strong><small>Périodisation et ajustements de série</small></span><span class="settings-advanced-chevron" aria-hidden="true">›</span></summary>
                 <div class="settings-divider"></div>
                 <h4 class="settings-group-title">🔁 Cycles & Deload <button type="button" class="help-dot" data-help="deload" aria-label="C'est quoi un deload ?">?</button></h4>
 
@@ -1485,6 +1497,7 @@
                         </div>
                     </div>
                 </div>
+                </details>
 
                 <button class="btn btn-primary btn-large" id="btn-save-settings">Enregistrer les paramètres</button>
             </div>
@@ -1614,6 +1627,9 @@
     <script defer src="cardio.js?v=6.0.0"></script>
     <script defer src="swap.js?v=6.0.0"></script>
     <script defer src="engage.js?v=6.0.0"></script>
+    <script defer src="premium.js?v=6.0.0"></script>
+    <script defer src="native.js?v=6.0.0"></script>
+    <script defer src="tools.js?v=6.0.0"></script>
     <script defer src="ai-coach.js?v=6.0.0"></script>
     <script defer src="ai-coach-ui.js?v=6.0.0"></script>
     <script defer src="onboarding.js?v=6.0.0"></script>
