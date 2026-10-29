@@ -4137,10 +4137,6 @@ body {
     height: 40px;
 }
 
-.exercise-insights-sheet {
-    padding-bottom: calc(var(--safe-bottom) + 24px);
-}
-
 .exercise-insights-titlebar {
     margin-bottom: 8px;
 }
@@ -4167,15 +4163,6 @@ body {
 .exercise-insights-close {
     width: 40px;
     height: 40px;
-}
-
-.exercise-insights-subtitle {
-    max-width: 440px;
-    margin: 0 auto 16px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    line-height: 1.45;
-    text-align: center;
 }
 
 /* ===== Edit Session List ===== */
@@ -10314,197 +10301,6 @@ body {
     }
 }
 
-/* ===== Optional intelligence surfaces ===== */
-.optional-insight-card {
-    margin-bottom: 16px;
-    padding: 14px 16px;
-    border: 1px solid rgba(99, 102, 241, 0.14);
-    border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(255, 255, 255, 0.95));
-    box-shadow: var(--card-shadow);
-}
-
-.optional-insight-card[hidden] {
-    display: none !important;
-}
-
-.exercise-insights-sheet .optional-insight-card {
-    margin-bottom: 12px;
-    padding: 13px;
-    box-shadow: none;
-}
-
-.exercise-insights-sheet .optional-insight-card:last-of-type {
-    margin-bottom: 0;
-}
-
-.exercise-insights-sheet .optional-insight-header {
-    gap: 10px;
-}
-
-.exercise-insights-sheet .optional-insight-header small {
-    max-width: 34ch;
-}
-
-.optional-insight-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-}
-
-.optional-insight-header > div {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-}
-
-.optional-insight-eyebrow {
-    color: var(--primary);
-    font-size: 9px;
-    font-weight: 850;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-}
-
-.optional-insight-header strong {
-    color: var(--text-primary);
-    font-size: 15px;
-    line-height: 1.25;
-}
-
-.optional-insight-header small,
-.optional-insight-footnote {
-    color: var(--text-muted);
-    font-size: 11px;
-    line-height: 1.4;
-}
-
-.optional-insight-body {
-    margin-top: 13px;
-}
-
-.optional-insight-body[hidden] {
-    display: none !important;
-}
-
-.warmup-list {
-    display: grid;
-    gap: 7px;
-}
-
-.warmup-step {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 9px 10px;
-    border: 1px solid rgba(99, 102, 241, 0.1);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.72);
-    cursor: pointer;
-}
-
-.warmup-step input {
-    margin-top: 2px;
-    accent-color: var(--primary);
-}
-
-.warmup-step-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-.warmup-step-copy strong {
-    color: var(--text-primary);
-    font-size: 12px;
-}
-
-.warmup-step-copy span,
-.warmup-step-copy small {
-    color: var(--text-secondary);
-    font-size: 11px;
-    line-height: 1.3;
-}
-
-.warmup-step-copy small {
-    color: var(--text-muted);
-}
-
-.warmup-step.is-completed {
-    border-color: rgba(16, 185, 129, 0.24);
-    background: rgba(16, 185, 129, 0.07);
-}
-
-.recovery-map-list {
-    display: grid;
-    gap: 9px;
-}
-
-.recovery-map-row {
-    padding: 9px 10px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.72);
-}
-
-.recovery-map-row.is-current {
-    border-color: rgba(99, 102, 241, 0.22);
-    box-shadow: inset 3px 0 0 rgba(99, 102, 241, 0.52);
-}
-
-.recovery-map-main {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-}
-
-.recovery-map-main strong {
-    color: var(--text-primary);
-    font-size: 12px;
-}
-
-.recovery-map-main span,
-.recovery-map-row small {
-    color: var(--text-muted);
-    font-size: 10px;
-    line-height: 1.3;
-    text-align: right;
-}
-
-.recovery-map-row.loaded .recovery-map-main span { color: #b45309; }
-.recovery-map-row.recovering .recovery-map-main span { color: var(--primary-dark); }
-.recovery-map-row.ready .recovery-map-main span { color: #047857; }
-
-.recovery-map-meter {
-    height: 6px;
-    margin: 7px 0 5px;
-    overflow: hidden;
-    border-radius: 99px;
-    background: rgba(148, 163, 184, 0.16);
-}
-
-.recovery-map-meter span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #f59e0b, #22c55e);
-}
-
-.recovery-map-row small {
-    display: block;
-    text-align: left;
-}
-
-.recovery-map-empty {
-    color: var(--text-muted);
-    font-size: 12px;
-    line-height: 1.45;
-}
-
 .set-quality-details {
     position: relative;
     margin-left: 4px;
@@ -10611,22 +10407,6 @@ body {
 
 .summary-analysis-note-icon {
     flex-shrink: 0;
-}
-
-@media (max-width: 520px) {
-    .optional-insight-header {
-        gap: 9px;
-    }
-
-    .recovery-map-main {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 2px;
-    }
-
-    .recovery-map-main span {
-        text-align: left;
-    }
 }
 
 /* ===== Exercise identity and optional coaching metadata ===== */

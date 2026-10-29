@@ -355,18 +355,6 @@
     background: linear-gradient(135deg, rgba(100, 116, 139, 0.1), rgba(27, 23, 51, 0.9));
 }
 
-:where(html[data-theme="dark"]) .optional-insight-card {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(27, 23, 51, 0.95));
-}
-
-:where(html[data-theme="dark"]) .warmup-step {
-    background: rgba(27, 23, 51, 0.72);
-}
-
-:where(html[data-theme="dark"]) .recovery-map-row {
-    background: rgba(27, 23, 51, 0.72);
-}
-
 :where(html[data-theme="dark"]) .set-quality-menu {
     background: rgba(27, 23, 51, 0.98);
 }
@@ -1773,19 +1761,6 @@
     box-shadow: 0 3px 0 #2a2448;
 }
 
-:where(html[data-theme="dark"]) .session-warmup-cta {
-    background: #2e1d10;
-    color: #fdba74;
-}
-
-:where(html[data-theme="dark"]) .session-warmup-cta small {
-    color: #fdba74;
-}
-
-:where(html[data-theme="dark"]) .session-warmup-cta-close {
-    color: #fdba74;
-}
-
 :where(html[data-theme="dark"]) .onboard-progress {
     background: #221d3d;
 }
@@ -1946,22 +1921,6 @@
     box-shadow: 0 3px 0 #2a2448;
 }
 
-:where(html[data-theme="dark"]) .tools-chip {
-    border: 2px solid #2a2448;
-}
-
-:where(html[data-theme="dark"]) .tools-bar-sleeve {
-    background: linear-gradient(180deg, #2a2448, #94a3b8);
-}
-
-:where(html[data-theme="dark"]) .tools-plate.is-light {
-    color: #e7e5ff;
-}
-
-:where(html[data-theme="dark"]) .tools-bar-collar {
-    background: #2e2850;
-}
-
 :where(html[data-theme="dark"]) .tools-measure {
     border: 2px solid #2e2850;
 }
@@ -2009,4 +1968,53 @@
 
 :where(html[data-theme="dark"]) .duo-strip-bar {
     background: #2a2448;
+}
+
+:where(html[data-theme="dark"]) .sheet-close {
+    background: var(--bg-tertiary, #221d3d);
+    color: var(--text-secondary, #a9a6cc);
+}
+
+:where(html[data-theme="dark"]) #screen-session .slot-challenge-note,
+:where(html[data-theme="dark"]) .slot-challenge-note {
+    background: radial-gradient(120% 120% at 100% 0%, rgba(251, 191, 36, 0.28) 0%, transparent 60%),
+        linear-gradient(135deg, #2b230f, #3a2e10);
+    color: #fde68a;
+}
+
+:where(html[data-theme="dark"]) .slot-challenge-xp {
+    color: #fde68a;
+    background: linear-gradient(135deg, #221d3d, #f59e0b);
+}
+
+:where(html[data-theme="dark"]) .buddy-bg-studio {
+    background: radial-gradient(70% 60% at 30% 22%, rgba(27, 23, 51, 0.85) 0%, transparent 60%),
+        radial-gradient(120% 90% at 50% 120%, color-mix(in srgb, var(--b2) 45%, var(--b1)) 0%, var(--b1) 70%);
+}
+
+:where(html[data-theme="dark"]) .buddy-bg-starburst {
+    background: radial-gradient(circle at 50% 45%, rgba(27, 23, 51, 0.75) 0%, transparent 38%),
+        repeating-conic-gradient(from 0deg at 50% 45%, var(--b1) 0deg 12deg, color-mix(in srgb, var(--b2) 38%, var(--b1)) 12deg 24deg);
+}
+
+:where(html[data-theme="dark"]) .buddy-reveal-body::before {
+    background: linear-gradient(180deg, #221d3d, #f59e0b);
+}
+
+:where(html[data-theme="dark"]) .buddy-reveal-lid::before {
+    background: linear-gradient(180deg, #3a2e10, #fbbf24);
+}
+
+:where(html[data-theme="dark"]) .buddy-reveal-art {
+    border: 5px solid #1b1733;
+}
+
+:where(html[data-theme="dark"]) .buddy-reveal-card em {
+    color: #f1f0ff;
+    background: #221d3d;
+}
+
+:where(html[data-theme="dark"]) .duo-set-pill {
+    background: var(--bg-tertiary, #221d3d);
+    border: 1.5px solid #2a2448;
 }

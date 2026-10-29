@@ -75,7 +75,6 @@
     const baseRenderSeries = App.prototype.renderSeries;
     const baseOpenExercise = App.prototype.openExercise;
     const baseShowScreen = App.prototype.showScreen;
-    const baseRenderSlots = App.prototype.renderSlots;
     const baseConfirmFinishSession = App.prototype.confirmFinishSession;
 
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -174,6 +173,39 @@
                 default:
                     return perMinFromMet(PROFILES[profileKey]?.met || 6);
             }
+        },
+
+        // Whole-session estimate shown on the recap: cardio blocks keep
+        // their own figure (machine reading or the formulas above), the rest
+        // of the session is weight training, scored with the Compendium of
+        // Physical Activities (3.5 MET for a relaxed session with long rests,
+        // up to 6 MET for a dense, vigorous one).
+        async estimateSessionCalories({ sets = [], durationMinutes = 0 } = {}) {
+            const stored = Number(await db.getSetting('bodyWeight'));
+            const kg = Number.isFinite(stored) && stored > 30 ? stored : 75;
+            let cardioKcal = 0;
+            let cardioSeconds = 0;
+            let strengthSets = 0;
+            for (const set of sets) {
+                const isCardio = set?.trackingMode === 'cardio' || set?.trackingMode === 'timed';
+                if (!isCardio) {
+                    strengthSets += 1;
+                    continue;
+                }
+                const seconds = Number(set.durationSeconds) || 0;
+                cardioSeconds += seconds;
+                const logged = Number(set.cardio?.calories ?? set.calories);
+                cardioKcal += logged > 0 ? logged : ((6 * 3.5 * kg) / 200) * (seconds / 60);
+            }
+            const strengthMinutes = Math.max(0, (Number(durationMinutes) || 0) - cardioSeconds / 60);
+            const setsPerMinute = strengthMinutes > 0 ? strengthSets / strengthMinutes : 0;
+            const met = strengthSets > 0 ? clamp(3 + 6 * setsPerMinute, 3.5, 6) : 0;
+            const strengthKcal = ((met * 3.5 * kg) / 200) * strengthMinutes;
+            return {
+                total: Math.round(cardioKcal + strengthKcal),
+                cardio: Math.round(cardioKcal),
+                strength: Math.round(strengthKcal)
+            };
         },
 
         async loadCardioHistory(slot) {
@@ -1186,74 +1218,6 @@
                 }
             }
             return baseConfirmFinishSession.apply(this, args);
-        },
-
-        // ---------- Warm-up shortcut at the top of a session ----------
-        async renderSlots() {
-            await baseRenderSlots.apply(this, arguments);
-            await this.renderWarmupShortcut();
-        },
-
-        async renderWarmupShortcut() {
-            const list = document.getElementById('slots-list');
-            const session = this.currentSession;
-            if (!list || !session || !this.currentWorkout) return;
-            const token = (this.warmupShortcutToken || 0) + 1;
-            this.warmupShortcutToken = token;
-            const slots = await db.getSlotsBySession(session.id);
-            const hasWarmup = slots.some(slot => slot.role === 'warmup');
-            const started = Object.values(this.currentWorkout.slots || {}).some(data => (data?.sets || []).some(set => set?.completed));
-            const dismissed = (await db.getSetting('warmupShortcutDismissed')) || [];
-            // A newer render started while we were reading: let it decide.
-            if (token !== this.warmupShortcutToken) return;
-            list.querySelectorAll('.session-warmup-cta').forEach(item => item.remove());
-            if (hasWarmup || started || dismissed.includes(session.id) || slots.every(slot => this.isCardioSlot(slot))) return;
-            const wrapper = document.createElement('div');
-            wrapper.className = 'session-warmup-cta';
-            wrapper.innerHTML = `
-                <button type="button" class="session-warmup-cta-main">
-                    <span class="session-warmup-cta-icon" aria-hidden="true">🔥</span>
-                    <span>
-                        <strong>Ajouter un échauffement</strong>
-                        <small>5 min de vélo léger avant de charger</small>
-                    </span>
-                </button>
-                <button type="button" class="session-warmup-cta-close" aria-label="Ne plus proposer pour cette séance">×</button>
-            `;
-            wrapper.querySelector('.session-warmup-cta-close').addEventListener('click', async () => {
-                wrapper.remove();
-                await db.setSetting('warmupShortcutDismissed', [...dismissed, session.id]);
-            });
-            wrapper.querySelector('.session-warmup-cta-main').addEventListener('click', async event => {
-                if (this.addingWarmup) return;
-                this.addingWarmup = true;
-                event.currentTarget.disabled = true;
-                try {
-                    await this.addWarmupSlot(session.id);
-                } finally {
-                    this.addingWarmup = false;
-                }
-            });
-            list.prepend(wrapper);
-        },
-
-        async addWarmupSlot(sessionId) {
-            const slots = await db.getSlotsBySession(sessionId);
-            const definition = this.findExerciseLibraryEntry('Vélo assis') || this.inferCustomExerciseTemplate('Vélo assis', { allowCardioInference: true });
-            const minOrder = Math.min(0, ...slots.map(slot => Number(slot.order) || 0));
-            const slot = this.buildSlotFromExerciseDefinition(definition, sessionId, 0);
-            slot.id = `${sessionId}-warmup-${Date.now().toString(36)}`;
-            slot.order = minOrder - 1;
-            slot.slotId = 'W';
-            slot.role = 'warmup';
-            slot.sets = 1;
-            slot.repsMin = 5;
-            slot.repsMax = 8;
-            slot.rest = 0;
-            await db.put('slots', slot);
-            this.hapticTap?.(10);
-            this.showCoachToast('Échauffement ajouté en tête de séance (modifiable dans « Mes séances »).', 'hot', '🔥');
-            await this.renderSlots();
         },
 
         // ---------- Sound cues (WebAudio, unlocked on the first tap) ----------

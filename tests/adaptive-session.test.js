@@ -318,27 +318,6 @@ async function run() {
     assert.deepEqual(enrichedHistory.qualityLabels, ['Propre 1', 'Hors progression 1']);
     assert.equal(enrichedHistory.averageRestSeconds, 90);
 
-    stores.setHistory = [
-        {
-            id: 'recent-exposure',
-            exerciseName: 'Développé couché barre',
-            weight: 80,
-            reps: 10,
-            date: new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString()
-        },
-        {
-            id: 'old-exposure',
-            exerciseName: 'Développé couché barre',
-            weight: 80,
-            reps: 10,
-            date: new Date(Date.now() - (45 * 24 * 60 * 60 * 1000)).toISOString()
-        }
-    ];
-    const recoverySnapshot = await app.buildMuscleRecoverySnapshot({ lookbackDays: 14 });
-    const chestRecovery = recoverySnapshot.rows.find(row => row.muscleId === 'pectoraux');
-    assert.equal(recoverySnapshot.lookbackDays, 14);
-    assert.equal(chestRecovery.rawSets, 1, 'recovery fatigue must use recent exposure, not lifetime history');
-
     console.log('adaptive-session tests: OK');
 }
 

@@ -118,7 +118,9 @@
         { emoji: '🧠', text: 'Activation de ton coach' }
     ];
 
-    const QUESTION_STEPS = ['name', 'goal', 'level', 'how', 'days', 'duration', 'equipment', 'focus'];
+    // Quickest taps first, most personal last: the name closes the questions.
+    const QUESTION_STEPS = ['equipment', 'days', 'duration', 'level', 'how', 'goal', 'focus', 'name'];
+    const LAST_QUESTION = QUESTION_STEPS[QUESTION_STEPS.length - 1];
 
     const esc = (value) => String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -363,7 +365,7 @@
             if (!state || state.busy || !state.history.length) return;
             const previous = state.history.pop();
             // Never land back on the loading screen.
-            state.step = previous === 'building' ? (state.history.pop() || 'focus') : previous;
+            state.step = previous === 'building' ? (state.history.pop() || LAST_QUESTION) : previous;
             this.renderOnboardingScreen('back');
         },
 
@@ -417,14 +419,14 @@
         getOnboardingFooterHtml(step) {
             const labels = {
                 welcome: 'C\'est parti',
-                name: 'Continuer',
+                name: 'Créer mon programme',
                 goal: 'Continuer',
                 level: 'Continuer',
                 how: 'Compris !',
                 days: 'Continuer',
                 duration: 'Continuer',
                 equipment: 'Continuer',
-                focus: 'Créer mon programme',
+                focus: 'Continuer',
                 plan: 'Commencer',
                 install: 'C\'est fait'
             };
@@ -457,7 +459,7 @@
 
             if (this.onboarding.step === 'focus') {
                 const count = this.onboarding.answers.focus.size;
-                cta.querySelector('span').textContent = count ? 'Créer mon programme' : 'Équilibré, créer mon programme';
+                cta.querySelector('span').textContent = count ? 'Continuer' : 'Équilibré, continuer';
             }
         },
 
@@ -489,13 +491,13 @@
 
                 case 'name':
                     return `
-                        ${this.getOnboardingHeadHtml('👋', 'Comment on t\'appelle ?', 'Juste pour te parler comme un vrai coach.')}
+                        ${this.getOnboardingHeadHtml('👋', 'Dernière question : ton prénom ?', 'Juste pour te parler comme un vrai coach.')}
                         <input type="text" class="ob-input" id="ob-name" maxlength="24" autocomplete="given-name" autocapitalize="words" placeholder="Ton prénom" value="${esc(answers.name)}">
                     `;
 
                 case 'goal':
                     return `
-                        ${this.getOnboardingHeadHtml('🎯', `Ton objectif principal${firstName} ?`, 'On construit ton programme autour.')}
+                        ${this.getOnboardingHeadHtml('🎯', 'Ton objectif principal ?', 'On construit ton programme autour.')}
                         <div class="ob-options">
                             ${GOALS.map((goal, index) => this.getOnboardingOptionHtml('goal', goal, answers.goal === goal.id, index)).join('')}
                         </div>
@@ -862,7 +864,7 @@
             else if (action === 'back') this.goOnboardingBack();
             else if (action === 'skip-name') {
                 state.answers.name = '';
-                this.goOnboardingTo('goal', 'forward');
+                this.goOnboardingNext();
             } else if (action === 'own') this.goOnboardingTo('own', 'forward');
             else if (action === 'own-import') this.startOnboardingImport();
             else if (action === 'own-manual') this.startOnboardingManualCreation();
@@ -988,7 +990,7 @@
 
             if (result instanceof Error) {
                 this.showCoachToast('Oups, la création a échoué. Réessaie ou crée tes séances toi-même.', 'warning', '⚠️');
-                state.step = 'focus';
+                state.step = LAST_QUESTION;
                 state.history.pop();
                 this.renderOnboardingScreen('back');
                 return;
@@ -1096,10 +1098,10 @@
         exercise: {
             title: 'Comment ça marche ?',
             body: [
-                '<strong>Charge</strong> et <strong>reps</strong> sont pré-remplies par le coach. Ajuste si besoin.',
-                '<strong>RIR</strong> (« reps en réserve ») : arrête la série quand il te reste ce nombre de reps dans le réservoir. Pas besoin d\'aller à l\'échec.',
-                'Touche <strong>Série terminée</strong> : le repos se lance tout seul et le coach adapte la suite.',
-                'Le résumé sous le titre se lit ainsi : <strong>4 × 6-10 · 150s</strong> = 4 séries de 6 à 10 reps, 150 s de repos.'
+                'Le <strong>poids</strong> et les <strong>reps</strong> sont déjà remplis&nbsp;: c\'est ce que le coach te propose. Trop lourd ou trop léger&nbsp;? Tu changes, c\'est toi qui décides.',
+                '<strong>RIR 2</strong>, ça veut dire&nbsp;: arrête-toi quand tu sens que tu pourrais encore en faire 2. Pas besoin de finir à bout de forces pour progresser.',
+                'Série finie&nbsp;? Appuie sur <strong>Série terminée</strong>. Le chrono de pause démarre tout seul et le coach règle la série suivante.',
+                'Sous le nom de l\'exo, <strong>4 × 6-10 · 150s</strong> veut dire&nbsp;: 4 séries de 6 à 10 reps, avec 2 min 30 de pause entre chaque.'
             ]
         },
         targets: {

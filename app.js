@@ -714,7 +714,6 @@ class App {
         this.activeExerciseLoadToken = null;
         this.wakeLock = null;
         this.wakeLockRequestInFlight = false;
-        this.exerciseInsightRenderToken = 0;
         this.qualityMenuToggleBound = false;
         this.restTimerNotificationScheduleVersion = 0;
         this.restTimerNotificationShown = false;
@@ -2461,18 +2460,14 @@ class App {
         const predictionContainer = document.getElementById('week-prediction');
         if (predictionContainer) predictionContainer.style.display = 'none';
 
-        const today = weekDays.find(day => day.isToday);
         const dateKicker = document.getElementById('home-date-kicker');
         if (dateKicker) {
             dateKicker.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         }
         const homeTitle = document.getElementById('home-title');
         if (homeTitle) {
-            homeTitle.textContent = today?.count > 0
-                ? 'Séance du jour validée 💪'
-                : data.currentWeekValidated
-                    ? 'Objectif validé. Bonus ?'
-                    : 'Prêt pour ta séance ?';
+            const firstName = String((await db.getSetting('userName')) || '').trim();
+            homeTitle.textContent = firstName ? `Bonjour ${firstName}` : 'Bonjour';
         }
     }
 
@@ -4050,11 +4045,12 @@ class App {
         const challenge = this.getActiveSessionChallenge();
         if (!challenge || String(challenge.slotId) !== String(slotId)) return '';
 
-        const completed = challenge.status === 'completed';
+        // While active, the challenge banner below the tiles says it all.
+        if (challenge.status !== 'completed') return '';
         return `
-            <span class="challenge-badge ${completed ? 'completed' : ''}">
+            <span class="challenge-badge completed">
                 ${this.getChallengeIconSVG()}
-                ${completed ? 'Défi réussi' : 'Défi'}
+                Défi réussi
             </span>
         `;
     }
@@ -4067,7 +4063,10 @@ class App {
         return `
             <div class="slot-challenge-note">
                 <span class="slot-challenge-icon" aria-hidden="true">${this.getChallengeIconSVG()}</span>
-                <span class="slot-challenge-text">${this.escapeHtml(challenge.targetLabel)}</span>
+                <span class="slot-challenge-text">
+                    <span class="slot-challenge-kicker">Défi de la séance</span>
+                    ${this.escapeHtml(challenge.targetLabel)}
+                </span>
                 ${xpBonus > 0 ? `<span class="slot-challenge-xp">+${xpBonus} XP</span>` : ''}
             </div>
         `;
@@ -8300,8 +8299,7 @@ class App {
                 <div class="slot-header">
                     <div class="slot-title">
                         <span class="slot-id">${safeSlotId}</span>
-                        <span class="slot-name">${safeExerciseName}</span>
-                        ${muscleBadge}
+                        <span class="slot-name-row"><span class="slot-name">${safeExerciseName}</span>${muscleBadge}</span>
                         ${formatBadge}
                         ${substitutionBadge}
                     </div>
@@ -8322,8 +8320,7 @@ class App {
                 <div class="slot-header">
                     <div class="slot-title">
                         <span class="slot-id">${safeSlotId}</span>
-                        <span class="slot-name">${safeExerciseName}</span>
-                        ${muscleBadge}
+                        <span class="slot-name-row"><span class="slot-name">${safeExerciseName}</span>${muscleBadge}</span>
                         ${formatBadge}
                         ${substitutionBadge}
                         ${challengeBadge}
@@ -8373,8 +8370,7 @@ class App {
                 <div class="slot-header">
                     <div class="slot-title">
                         <span class="slot-id">${safeSlotId}</span>
-                        <span class="slot-name">${safeExerciseName}</span>
-                        ${muscleBadge}
+                        <span class="slot-name-row"><span class="slot-name">${safeExerciseName}</span>${muscleBadge}</span>
                         ${formatBadge}
                         ${substitutionBadge}
                         ${supersetBadge}
@@ -8464,9 +8460,6 @@ class App {
     
     // ===== Exercise Screen =====
     async openExercise(slotId) {
-        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
-        if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
-        this.closeExerciseInsightsSheet();
         const directStoredSlot = await db.get('slots', slotId);
         const numericStoredId = Number(slotId);
         const storedSlot = directStoredSlot || (Number.isFinite(numericStoredId)
@@ -8612,7 +8605,6 @@ class App {
         
         this.showScreen('exercise');
         void this.syncScreenWakeLock();
-        void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
         
         // Check if there's an active timer from before
         this.onAppResume();
@@ -8633,7 +8625,6 @@ class App {
                 this.renderUnilateralLogbook();
                 this.renderExerciseNotes();
                 this.renderUnilateralSeries();
-                void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
                 return;
             }
 
@@ -8657,7 +8648,6 @@ class App {
                 this.getDisplayedSetCount(this.currentSlot, this.currentCoachingAdvice, slotData);
             this.renderExerciseNotes();
             this.renderSeries();
-            void this.renderOptionalExerciseInsights(this.currentSlot, slotData);
         })();
     }
     
@@ -8914,9 +8904,6 @@ class App {
     
     // ===== SuperSet Exercise Screen =====
     async openSuperset(slotId) {
-        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
-        if (exerciseInsightsTrigger) exerciseInsightsTrigger.hidden = true;
-        this.closeExerciseInsightsSheet();
         this.avgPerformance = null;
         this.currentSlot = await this.getSlotRecord(slotId);
         this.currentSlot = this.normalizeSlotProgressionConfig(this.currentSlot);
@@ -9015,7 +9002,6 @@ class App {
         this.renderUnifiedSupersetLogbook();
         this.renderSupersetSeries();
         this.showScreen('exercise');
-        void this.renderOptionalExerciseInsights(this.currentSlot, this.currentWorkout.slots[slotId]);
         
         // Check if there's an active timer from before
         this.onAppResume();
@@ -13186,9 +13172,6 @@ class App {
 
         this.renderExerciseControlBar(this.currentSlot, slotData);
         this.renderLiveAdaptationCard(this.currentSlot, slotData);
-        if (!document.getElementById('recovery-map-body')?.hidden) {
-            void this.renderRecoveryMap();
-        }
     }
     
     renderCompletedSetRow(setData, setIndex, { canEdit = true, previousSet = null } = {}) {
@@ -13450,9 +13433,6 @@ class App {
 
         this.renderExerciseControlBar(this.currentSlot, slotData);
         this.renderLiveAdaptationCard(this.currentSlot, slotData);
-        if (!document.getElementById('recovery-map-body')?.hidden) {
-            void this.renderRecoveryMap();
-        }
     }
     
     async completeUnilateralSet(setIndex) {
@@ -16633,6 +16613,14 @@ class App {
                 durationMinutes: duration,
                 stimulusScore
             });
+            if (finishRecap.calories?.total > 0) {
+                try {
+                    const savedWorkout = await db.get('workoutHistory', workoutId);
+                    if (savedWorkout) await db.put('workoutHistory', { ...savedWorkout, estimatedCalories: finishRecap.calories.total });
+                } catch (error) {
+                    console.warn('Calories de séance non enregistrées:', error);
+                }
+            }
 
             // Bank the session XP before the recap waits for a tap: closing
             // the app on that screen must not lose it.
@@ -17003,6 +16991,8 @@ class App {
                     ${this.renderSessionFinishXp(recap?.charts?.xp)}
 
                     ${heroMetricsHtml ? `<div class="fin-stats">${heroMetricsHtml}</div>` : ''}
+
+                    ${this.renderSessionFinishCalories(recap?.calories)}
 
                     ${this.renderSessionFinishCharts(recap?.charts)}
 
@@ -19576,7 +19566,6 @@ class App {
         // Exercise screen
         document.getElementById('btn-back-session').onclick = () => {
             this.stopRestTimer();
-            this.closeExerciseInsightsSheet();
             this.hideExerciseSummary();
             this.isReviewMode = false;
             this.renderSlots();
@@ -19717,11 +19706,6 @@ class App {
             };
         }
 
-        const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
-        if (exerciseInsightsTrigger) {
-            exerciseInsightsTrigger.onclick = () => this.openExerciseInsightsSheet();
-        }
-
         // Header "⋯": every exercise tool lives in one simple action sheet.
         const exerciseMoreButton = document.getElementById('btn-exercise-more');
         const exerciseActionsSheet = document.getElementById('sheet-exercise-actions');
@@ -19733,20 +19717,6 @@ class App {
                 exerciseActionsSheet.classList.remove('active');
                 if (action?.dataset.exoHelp) this.showHelpTopic?.(action.dataset.exoHelp);
             });
-        }
-
-        const exerciseInsightsSheet = document.getElementById('sheet-exercise-insights');
-        if (exerciseInsightsSheet) {
-            exerciseInsightsSheet.onclick = (e) => {
-                if (e.target.classList.contains('sheet-backdrop') || e.target.closest('#btn-close-exercise-insights')) {
-                    this.closeExerciseInsightsSheet();
-                    return;
-                }
-            };
-            exerciseInsightsSheet.onchange = (e) => {
-                const checkbox = e.target.closest('.warmup-step-check');
-                if (checkbox) this.toggleWarmupStep(checkbox.dataset.warmupId, checkbox.checked);
-            };
         }
 
         const liveAdaptationCard = document.getElementById('live-adaptation-card');
@@ -22326,6 +22296,24 @@ class App {
         return { badges, microWins };
     }
 
+    renderSessionFinishCalories(calories) {
+        if (!(calories?.total > 0)) return '';
+        const detail = calories.cardio > 0 && calories.strength > 0
+            ? `${calories.strength} en muscu · ${calories.cardio} en cardio`
+            : calories.cardio > 0 ? 'en cardio' : 'en muscu';
+        return `
+            <div class="fin-calories" title="Estimation selon ton poids du corps (Réglages), la durée et le rythme de la séance">
+                <span class="fin-calories-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S9 11 11 11c0-4 1-9 1-9Z"/></svg>
+                </span>
+                <span class="fin-calories-copy">
+                    <strong>~${calories.total.toLocaleString('fr-FR')} <small>kcal</small></strong>
+                    <span>brûlées · ${detail}</span>
+                </span>
+            </div>
+        `;
+    }
+
     async buildSessionFinishRecap({ workoutId, totalSets, durationMinutes, stimulusScore }) {
         const sessionSlots = await db.getSlotsBySession(this.currentSession.id);
         const slotMap = new Map(sessionSlots.map(slot => [slot.id, slot]));
@@ -22491,6 +22479,10 @@ class App {
             }
         ];
 
+        const calories = typeof this.estimateSessionCalories === 'function'
+            ? await this.estimateSessionCalories({ sets: recapSets, durationMinutes })
+            : null;
+
         let summaryLine = isDeloadSession
             ? 'Deload validé proprement.'
             : completionRate >= 0.99 && skippedExercises === 0
@@ -22516,6 +22508,7 @@ class App {
         return {
             charts,
             heroMetrics,
+            calories,
             summaryLine,
             comparison,
             positiveRows,
@@ -24126,268 +24119,6 @@ class App {
         } else {
             this.renderSeries();
         }
-    }
-
-    // ===== Optional intelligent warm-up =====
-    buildOptionalWarmupPlan(slot = this.currentSlot, targetWeight = null) {
-        if (!slot || this.isTimedSlot(slot)) return [];
-        const descriptor = this.getExerciseDescriptor(slot);
-        const reference = Number(targetWeight)
-            || Number(this.currentCoachingAdvice?.suggestedWeight || 0)
-            || Number(this.lastExerciseHistory?.sets?.[0]?.weight || 0);
-        if (!(reference > 0)) {
-            return [{ id: 'free', label: 'Préparation libre', reps: 'quelques reps faciles', weight: null, note: 'Choisis toi-même si tu en as besoin.' }];
-        }
-        const isCompound = descriptor.type !== 'isolation';
-        const percentages = isCompound ? [0.4, 0.6, 0.75] : [0.5, 0.75];
-        const reps = isCompound ? [8, 5, 3] : [10, 5];
-        return percentages.map((percentage, index) => ({
-            id: `warmup-${index + 1}`,
-            label: isCompound ? `Montée ${index + 1}` : `Activation ${index + 1}`,
-            reps: reps[index],
-            weight: this.normalizeLoadPrecision(reference * percentage),
-            note: index === percentages.length - 1 ? 'Doit rester facile, sans fatigue.' : 'Reste loin de l’échec.'
-        }));
-    }
-
-    updateExerciseInsightsTrigger(slot = this.currentSlot) {
-        const trigger = document.getElementById('btn-open-exercise-insights');
-        if (!trigger) return;
-
-        const warmupCard = document.getElementById('warmup-card');
-        const recoveryCard = document.getElementById('recovery-map-card');
-        const hasAvailableInsight = Boolean(
-            slot
-            && !this.isTimedSlot(slot)
-            && ((warmupCard && !warmupCard.hidden) || (recoveryCard && !recoveryCard.hidden))
-        );
-
-        trigger.hidden = !hasAvailableInsight;
-        if (!hasAvailableInsight) this.closeExerciseInsightsSheet();
-    }
-
-    openExerciseInsightsSheet() {
-        const trigger = document.getElementById('btn-open-exercise-insights');
-        const sheet = document.getElementById('sheet-exercise-insights');
-        if (!trigger || trigger.hidden || !sheet) return;
-        sheet.classList.add('active');
-    }
-
-    closeExerciseInsightsSheet() {
-        const sheet = document.getElementById('sheet-exercise-insights');
-        if (sheet) sheet.classList.remove('active');
-    }
-
-    renderWarmupCard(slot = this.currentSlot, slotData = null) {
-        const card = document.getElementById('warmup-card');
-        const body = document.getElementById('warmup-body');
-        const list = document.getElementById('warmup-list');
-        if (!card || !body || !list) return;
-        if (!slot || this.isTimedSlot(slot)) {
-            card.hidden = true;
-            this.updateExerciseInsightsTrigger(slot);
-            return;
-        }
-        const resolvedData = slotData || this.currentWorkout?.slots?.[slot.id] || {};
-        const completedSteps = Array.isArray(resolvedData.warmupCompleted) ? resolvedData.warmupCompleted : [];
-        const coachReferenceWeight = Number(this.currentCoachingAdvice?.suggestedWeight || 0);
-        const storedReferenceWeight = Number(resolvedData.warmupPlanReferenceWeight || 0);
-        const refreshForCoach = coachReferenceWeight > 0
-            && completedSteps.length === 0
-            && (!storedReferenceWeight || Math.abs(storedReferenceWeight - coachReferenceWeight) > 0.001);
-        const plan = !refreshForCoach && Array.isArray(resolvedData.warmupPlan) && resolvedData.warmupPlan.length
-            ? resolvedData.warmupPlan
-            : this.buildOptionalWarmupPlan(slot, coachReferenceWeight || null);
-        if (refreshForCoach || !Array.isArray(resolvedData.warmupPlan) || !resolvedData.warmupPlan.length) {
-            resolvedData.warmupPlan = plan;
-            const lastWarmupWeight = plan.length ? Number(plan[plan.length - 1]?.weight || 0) : 0;
-            resolvedData.warmupPlanReferenceWeight = coachReferenceWeight || lastWarmupWeight || null;
-        }
-        card.hidden = false;
-        body.hidden = false;
-        list.innerHTML = plan.map(step => {
-            const completed = Array.isArray(resolvedData.warmupCompleted) && resolvedData.warmupCompleted.includes(step.id);
-            const weight = step.weight == null ? 'à ton choix' : `${this.normalizeLoadPrecision(step.weight)} kg`;
-            return `<label class="warmup-step ${completed ? 'is-completed' : ''}">
-                <input type="checkbox" class="warmup-step-check" data-warmup-id="${this.escapeHtml(step.id)}" ${completed ? 'checked' : ''}>
-                <span class="warmup-step-copy"><strong>${this.escapeHtml(step.label)}</strong><span>${weight} · ${this.escapeHtml(String(step.reps))} reps</span><small>${this.escapeHtml(step.note || '')}</small></span>
-            </label>`;
-        }).join('');
-        this.updateExerciseInsightsTrigger(slot);
-    }
-
-    async toggleWarmupStep(stepId, checked) {
-        if (!this.currentWorkout || !this.currentSlot?.id) return;
-        const slotData = this.currentWorkout.slots?.[this.currentSlot.id];
-        if (!slotData) return;
-        const completed = new Set(Array.isArray(slotData.warmupCompleted) ? slotData.warmupCompleted : []);
-        if (checked) completed.add(stepId);
-        else completed.delete(stepId);
-        slotData.warmupCompleted = [...completed];
-        await db.saveCurrentWorkout(this.currentWorkout);
-        this.renderWarmupCard(this.currentSlot, slotData);
-    }
-
-    // ===== Optional muscle recovery map =====
-    getRecoveryEstimateHours(muscleId, effectiveSets = 1) {
-        const landmark = VOLUME_LANDMARKS?.[muscleId] || VOLUME_LANDMARKS?.default || { recoveryDays: 2 };
-        const base = Math.max(24, Number(landmark.recoveryDays || 2) * 24);
-        return Math.round(base + (Number(effectiveSets || 0) >= 6 ? 24 : 0) + (Number(effectiveSets || 0) >= 10 ? 24 : 0));
-    }
-
-    async buildMuscleRecoverySnapshot(options = {}) {
-        const allSets = await db.getAll('setHistory');
-        const lookbackDays = Math.min(
-            30,
-            Math.max(3, Number(options.lookbackDays) || 14)
-        );
-        const now = Date.now();
-        const lookbackStart = now - (lookbackDays * 24 * 60 * 60 * 1000);
-        const byName = new Map();
-        const muscles = new Map();
-        const addExposure = (set, name, slotMeta = null, source = 'history') => {
-            if (!set || Number(set.reps || 0) <= 0) return;
-            const cacheKey = `${name}|${slotMeta?.muscleGroup || ''}|${slotMeta?.type || ''}`;
-            let contributions = byName.get(cacheKey);
-            if (!contributions) {
-                contributions = this.getExerciseMuscleContributions(name, slotMeta);
-                byName.set(cacheKey, contributions);
-            }
-            const factor = this.getSetQualityFactor(set);
-            const date = new Date(set.date || set.timestamp || Date.now()).getTime();
-            if (!Number.isFinite(date) || date < lookbackStart) return;
-            contributions.forEach(contribution => {
-                const muscleId = contribution.muscleId;
-                if (!muscleId) return;
-                const row = muscles.get(muscleId) || {
-                    muscleId,
-                    rawSets: 0,
-                    effectiveSets: 0,
-                    fatigue: 0,
-                    lastExposureAt: 0,
-                    lastRole: 'secondary',
-                    sources: new Set()
-                };
-                const roleWeight = Number(contribution.weight || (contribution.role === 'primary' ? 1 : 0.5));
-                row.rawSets += roleWeight;
-                row.effectiveSets += roleWeight * factor;
-                row.fatigue += roleWeight * factor * (contribution.role === 'primary' ? 1 : 0.45);
-                if (date >= row.lastExposureAt) {
-                    row.lastExposureAt = date;
-                    row.lastRole = contribution.role || 'secondary';
-                }
-                row.sources.add(source);
-                muscles.set(muscleId, row);
-            });
-        };
-        allSets.forEach(set => addExposure(set, set.exerciseName || this.getBaseExerciseHistoryName(set.exerciseId), null, 'historique'));
-
-        if (this.currentWorkout?.slots) {
-            for (const [slotId, slotData] of Object.entries(this.currentWorkout.slots)) {
-                const slot = slotId === this.currentSlot?.id ? this.currentSlot : null;
-                const meta = slot || slotData?.meta || null;
-                const name = meta?.activeExercise || meta?.exerciseName || meta?.name || '';
-                if (!name) continue;
-                [...(slotData?.sets || []), ...(slotData?.setsLeft || []), ...(slotData?.setsRight || [])]
-                    .filter(set => set?.completed)
-                    .forEach(set => addExposure(set, set.exerciseName || name, meta, 'séance en cours'));
-            }
-        }
-
-        const currentMuscles = new Set();
-        if (this.currentSlot) {
-            this.getExerciseMuscleContributions(this.getSlotExerciseName(this.currentSlot), this.currentSlot)
-                .forEach(item => currentMuscles.add(item.muscleId));
-        }
-        const rows = [...muscles.values()].map(row => {
-            const estimateHours = this.getRecoveryEstimateHours(row.muscleId, row.effectiveSets);
-            const ageHours = row.lastExposureAt > 0 ? Math.max(0, (now - row.lastExposureAt) / 3600000) : null;
-            const recoveryPercent = ageHours == null ? null : Math.min(100, Math.round((ageHours / estimateHours) * 100));
-            const status = ageHours == null ? 'unknown' : recoveryPercent < 70 ? 'loaded' : recoveryPercent < 100 ? 'recovering' : 'ready';
-            const statusLabel = status === 'loaded' ? 'Encore chargé' : status === 'recovering' ? 'Récupération probable' : status === 'ready' ? 'Probablement prêt' : 'Pas encore observé';
-            return {
-                ...row,
-                rawSets: Math.round(row.rawSets * 10) / 10,
-                effectiveSets: Math.round(row.effectiveSets * 10) / 10,
-                fatigue: Math.round(row.fatigue * 10) / 10,
-                ageHours: ageHours == null ? null : Math.round(ageHours),
-                estimateHours,
-                recoveryPercent,
-                status,
-                statusLabel,
-                isCurrent: currentMuscles.has(row.muscleId),
-                secondaryOverlap: row.lastRole === 'secondary'
-            };
-        }).sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || (b.lastExposureAt || 0) - (a.lastExposureAt || 0));
-
-        return {
-            rows,
-            currentMuscles: [...currentMuscles],
-            generatedAt: now,
-            lookbackDays,
-            disclaimer: `Estimation basée sur les ${lookbackDays} derniers jours, les séries enregistrées et les recouvrements musculaires, pas un diagnostic.`
-        };
-    }
-
-    async renderRecoveryMap(options = {}) {
-        // Several renders (series, unilateral, insights) ask for the map in the
-        // same tick: coalesce them so the history snapshot is built once.
-        if (this.recoveryMapRenderPromise) {
-            this.recoveryMapRenderQueued = options;
-            return this.recoveryMapRenderPromise;
-        }
-        this.recoveryMapRenderPromise = (async () => {
-            try {
-                await this.renderRecoveryMapNow(options);
-                while (this.recoveryMapRenderQueued) {
-                    const queuedOptions = this.recoveryMapRenderQueued;
-                    this.recoveryMapRenderQueued = null;
-                    await this.renderRecoveryMapNow(queuedOptions);
-                }
-            } finally {
-                this.recoveryMapRenderPromise = null;
-            }
-        })();
-        return this.recoveryMapRenderPromise;
-    }
-
-    async renderRecoveryMapNow(options = {}) {
-        const card = document.getElementById('recovery-map-card');
-        const body = document.getElementById('recovery-map-body');
-        const list = document.getElementById('recovery-map-list');
-        if (!card || !body || !list) return;
-        if (!this.currentSlot || this.isTimedSlot(this.currentSlot)) {
-            card.hidden = true;
-            this.updateExerciseInsightsTrigger(this.currentSlot);
-            return;
-        }
-        const snapshot = await this.buildMuscleRecoverySnapshot(options);
-        if (this.currentScreen !== 'exercise') return;
-        card.hidden = false;
-        body.hidden = false;
-        const rows = snapshot.rows.filter(row => row.isCurrent || row.lastExposureAt).slice(0, 8);
-        list.innerHTML = rows.length ? rows.map(row => {
-            const muscleName = this.getMuscleGroupLabel(row.muscleId);
-            const age = row.ageHours == null ? 'aucune trace' : `${row.ageHours}h depuis la dernière exposition`;
-            const overlap = row.secondaryOverlap ? ' · recouvrement secondaire' : '';
-            return `<div class="recovery-map-row ${row.status} ${row.isCurrent ? 'is-current' : ''}">
-                <div class="recovery-map-main"><strong>${this.escapeHtml(muscleName)}</strong><span>${this.escapeHtml(row.statusLabel)}${this.escapeHtml(overlap)}</span></div>
-                <div class="recovery-map-meter"><span style="width:${row.recoveryPercent == null ? 0 : row.recoveryPercent}%"></span></div>
-                <small>${this.escapeHtml(age)} · ${row.effectiveSets} séries effectives estimées</small>
-            </div>`;
-        }).join('') : '<div class="recovery-map-empty">Pas encore assez de données pour estimer les expositions.</div>';
-        const note = document.getElementById('recovery-map-note');
-        if (note) note.textContent = snapshot.disclaimer;
-        this.updateExerciseInsightsTrigger(this.currentSlot);
-    }
-
-    async renderOptionalExerciseInsights(slot = this.currentSlot, slotData = null) {
-        if (!slot || typeof document === 'undefined' || !document.getElementById) return;
-        const token = ++this.exerciseInsightRenderToken;
-        const resolvedData = slotData || this.currentWorkout?.slots?.[slot.id] || {};
-        this.renderWarmupCard(slot, resolvedData);
-        await this.renderRecoveryMap();
-        if (token !== this.exerciseInsightRenderToken) return;
     }
 
     // ===== PWA workout continuity =====

@@ -214,7 +214,9 @@
             const workout = history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
             if (!workout) return;
             const sets = await db.getByIndex('setHistory', 'workoutId', workout.id);
-            const calories = sets.reduce((sum, set) => sum + (Number(set.calories) || Number(set.cardio?.calories) || 0), 0);
+            const calories = typeof this.estimateSessionCalories === 'function'
+                ? (await this.estimateSessionCalories({ sets, durationMinutes: (Number(workout.duration) || 0) / 60000 })).total
+                : sets.reduce((sum, set) => sum + (Number(set.calories) || Number(set.cardio?.calories) || 0), 0);
             const distance = sets.reduce((sum, set) => sum + (Number(set.distanceMeters) || 0), 0);
             const end = new Date(workout.date);
             const start = new Date(end.getTime() - (Number(workout.duration) || 0));

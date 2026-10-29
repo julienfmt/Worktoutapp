@@ -4168,21 +4168,6 @@
     }
 }
 
-/* Slot cards: name on its own line, colored muscle badge leads the tag row */
-#screen-session .slot-name {
-    flex: 1 1 calc(100% - 46px);
-    min-width: 0;
-}
-
-#screen-session .slot-title .muscle-badge {
-    order: 2;
-}
-
-#screen-session .slot-title > .slot-format-tag,
-#screen-session .slot-title > span:not(.slot-id):not(.slot-name):not(.muscle-badge) {
-    order: 3;
-}
-
 /* ---------- Home tabs: Séance / Parcours ---------- */
 .header-home .home-tabs {
     margin-top: 12px;

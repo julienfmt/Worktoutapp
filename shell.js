@@ -13,6 +13,7 @@
         bindEvents() {
             baseBindEvents.call(this);
             this.initHomePager();
+            this.initSheetChrome();
             db.getSetting('themeChoice').then(choice => this.applyTheme(choice || 'auto')).catch(() => {});
             window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
                 if ((this.themeChoice || 'auto') === 'auto') this.applyTheme('auto');
@@ -25,6 +26,88 @@
             if (screenId === 'home') {
                 requestAnimationFrame(() => this.alignHomePager());
             }
+        },
+
+        // Every bottom sheet gets the same way out: a close button that stays
+        // in view while the content scrolls, a swipe down from the top, and
+        // Escape. They all go through the sheet's own backdrop handler so each
+        // sheet keeps its cleanup (settled promises, saved state...).
+        initSheetChrome() {
+            if (this.sheetChromeReady) return;
+            this.sheetChromeReady = true;
+            const OWN_CLOSE = '.sheet-close, .exercise-insights-close, [data-sf="close"], [data-tools="close"], [data-paywall="close"], [data-ai-action="close"]';
+            const closeSheet = (sheet) => sheet?.querySelector(':scope > .sheet-backdrop')?.click();
+            const topSheet = () => [...document.querySelectorAll('.bottom-sheet.active')].pop();
+
+            const decorate = () => {
+                document.querySelectorAll('.bottom-sheet.active > .sheet-content').forEach((content) => {
+                    if (content.querySelector(OWN_CLOSE)) return;
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'sheet-close';
+                    button.setAttribute('aria-label', 'Fermer');
+                    button.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+                    content.prepend(button);
+                });
+            };
+            // Sheets are opened from many modules and some re-render their
+            // content: re-check whenever a sheet opens or its content changes.
+            let queued = false;
+            new MutationObserver(() => {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(() => {
+                    queued = false;
+                    decorate();
+                });
+            }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+
+            document.addEventListener('click', (event) => {
+                const button = event.target.closest('.sheet-close');
+                if (button) closeSheet(button.closest('.bottom-sheet'));
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') closeSheet(topSheet());
+            });
+
+            // Swipe down to close, only when the content is scrolled to the top.
+            let drag = null;
+            document.addEventListener('touchstart', (event) => {
+                const content = event.target.closest?.('.bottom-sheet.active > .sheet-content');
+                if (!content || content.scrollTop > 0 || event.target.closest('input, textarea, select')) return;
+                drag = { content, startY: event.touches[0].clientY, dy: 0 };
+            }, { passive: true });
+            document.addEventListener('touchmove', (event) => {
+                if (!drag) return;
+                const dy = event.touches[0].clientY - drag.startY;
+                if (dy <= 0 || drag.content.scrollTop > 0) {
+                    if (drag.dy) drag.content.style.transform = '';
+                    drag.dy = 0;
+                    return;
+                }
+                drag.dy = dy;
+                drag.content.style.transition = 'none';
+                drag.content.style.transform = `translateY(${dy}px)`;
+            }, { passive: true });
+            const endDrag = () => {
+                if (!drag) return;
+                const { content, dy } = drag;
+                drag = null;
+                content.style.transition = 'transform 0.22s ease';
+                if (dy > 110) {
+                    content.style.transform = 'translateY(100%)';
+                    setTimeout(() => {
+                        closeSheet(content.closest('.bottom-sheet'));
+                        content.style.transform = '';
+                        content.style.transition = '';
+                    }, 180);
+                } else {
+                    content.style.transform = '';
+                    setTimeout(() => { content.style.transition = ''; }, 220);
+                }
+            };
+            document.addEventListener('touchend', endDrag);
+            document.addEventListener('touchcancel', endDrag);
         },
 
         // Theme: 'auto' follows the phone, or a forced light/dark choice.

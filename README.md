@@ -13,14 +13,23 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧮 Les analyses de séries effectives fonctionnent même sans RPE saisi : l’estimation est explicitement séparée des RPE utilisateur et s’appuie sur les reps/la zone de l’exercice.
 - 🧪 Analyse série par série : première série trop ambitieuse, fatigue progressive, repos court, baisse de charge cohérente, montée en charge, plafond machine et performance inhabituelle.
 - 🏷️ Qualité facultative des séries : propre, amplitude réduite, élan, difficulté technique, douleur inhabituelle ou série exclue de la progression sans supprimer le volume réel.
-- 🔥 Échauffement intelligent optionnel, séparé des statistiques, avec rampes adaptées à l’exercice et validation libre étape par étape.
-- 🗺️ Carte de récupération indicative : expositions récentes (fenêtre par défaut de 14 jours), séries effectives estimées et recouvrements musculaires primaires/secondaires.
 - 🆔 Identité d’exercice persistante : les renommages, alias, variantes et anciennes données restent rattachés autant que possible au bon mouvement, y compris les noms anglais/custom des anciens exports.
 - ↔️ Exercices unilatéraux suivis côté gauche/droit, avec suggestions indépendantes, équilibre estimé et validation d’un seul côté à la fois.
 - 🔁 Pools de substitutions enrichies : groupe musculaire, format, équipement et compatibilité visibles avant tout changement.
 - 🗂️ Une substitution en cours de séance archive les séries déjà réalisées avec le bon exercice pour préserver l’historique et les statistiques.
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
+
+### Nouveautés v6.4
+- 👋 **Accueil** : « Bonjour Julien » à la place du titre fixe (le prénom se change dans Réglages → Profil).
+- 🧭 **Onboarding** : des questions les plus rapides aux plus perso (lieu, rythme, durée, niveau, démo, objectif, zones, puis le prénom en dernier).
+- ✖️ **Fenêtres toujours fermables** : chaque feuille a un bouton fermer qui reste visible en scrollant, se ferme en glissant vers le bas (depuis le haut du contenu) ou avec Échap, et laisse toujours une bande de fond cliquable en haut.
+- 🔥 **Calories** : estimation de toute la séance (muscu au rythme de la séance, 3,5 à 6 MET selon la densité de séries, + les blocs cardio), affichée sur le récap de fin et envoyée à Apple Santé / Health Connect. Basée sur le poids du corps des Réglages.
+- 👥 **Amis par @pseudo ou email** : ton @pseudo est créé à partir de ton email (ou de ton prénom) et se modifie dans Réglages → Profil. L'email n'est stocké côté serveur que sous forme de hash.
+- 🦏 **Photo de profil des potes** : à l'ajout, tirage au sort d'une pose du rhino (9 poses dans `icons/buddies/`) et d'un fond aux couleurs de la marque (rose, jaune, orange, vert, bleu, mauve, turquoise, corail × studio, starburst, pois, rayures, halo), révélés par une animation façon loot box. Le tirage est gardé pour de bon et sert partout (classement, séance à deux, invitations).
+- 🤝 **Séance à deux** : sur chaque carte de série, une pastille en haut à droite montre l'avatar de ton pote et sa série correspondante (charge × reps) pour comparer.
+- 🧹 **Écran séance** : nom d'exercice tronqué si trop long avec le muscle en petit juste à côté ; le défi n'apparaît plus qu'une fois, dans un bandeau doré « Défi de la séance » ; plus de raccourci « Ajouter un échauffement ».
+- 🧹 **Écran exercice** : retrait de « Échauffement & récupération » (rampes d'échauffement et carte de récupération) et du calculateur de disques ; texte « Comment ça marche » réécrit.
 
 ### Nouveautés v6.3
 - 🏃 **Cardio sans friction** : par défaut, juste le chrono, l'objectif et « Démarrer ». Mode (continu / fractionné / libre), durée visée, vitesse, pente, résistance… sont rangés dans le tiroir **Réglages** (son état est retenu). En fin de bloc : durée + ressenti ; distance et calories derrière « Distance, calories (facultatif) ».
