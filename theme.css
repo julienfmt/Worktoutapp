@@ -548,11 +548,6 @@
     border-color: rgba(168, 85, 247, 0.25);
 }
 
-/* ---------- Toasts: themed ---------- */
-.coach-toast {
-    border-radius: 18px;
-}
-
 /* ---------- XP float ---------- */
 .xp-float {
     position: fixed;

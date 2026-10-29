@@ -220,7 +220,9 @@
 }
 
 :where(html[data-theme="dark"]) .coach-toast {
-    background: rgba(27, 23, 51, 0.98);
+    background: #1b1733;
+    border: 2px solid #2e2850;
+    box-shadow: 0 4px 0 #2a2448, 0 16px 32px rgba(79, 70, 229, 0.12);
 }
 
 :where(html[data-theme="dark"]) .stimulus-score-overlay {

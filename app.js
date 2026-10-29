@@ -6017,17 +6017,31 @@ class App {
         return `Vise ${targetLabel} reps propres.`;
     }
 
-    showCoachToast(message, status = 'hot', icon = '💡') {
-        const existing = document.querySelector('.coach-toast');
-        if (existing) existing.remove();
+    // One toast style for the whole app: a light card with a small line icon
+    // that follows the status. The emoji argument is kept for older callers
+    // but no longer shown. Over the always-dark screens (rest timer, exercise
+    // recap) the toast switches to its dark variant.
+    showCoachToast(message, status = 'hot') {
+        document.querySelectorAll('.coach-toast').forEach(item => item.remove());
+
+        const icons = {
+            hot: '<path d="M20 6 9 17l-5-5"/>',
+            cold: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+            neutral: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+            warning: '<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+            backoff: '<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17h.01"/>'
+        };
+        const tone = Object.prototype.hasOwnProperty.call(icons, status) ? status : 'neutral';
+        const onDark = Boolean(document.querySelector('#timer-overlay.active, #exercise-summary.active, .stimulus-score-overlay'));
 
         const toast = document.createElement('div');
-        toast.className = `coach-toast ${status}`;
+        toast.className = `coach-toast ${tone}${onDark ? ' on-dark' : ''}`;
         toast.setAttribute('role', 'status');
-        // Plain text only: messages can carry user-defined exercise/session names.
         const iconEl = document.createElement('span');
         iconEl.className = 'coach-toast-icon';
-        iconEl.textContent = icon;
+        iconEl.setAttribute('aria-hidden', 'true');
+        iconEl.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${icons[tone]}</svg>`;
+        // Plain text only: messages can carry user-defined exercise/session names.
         const textEl = document.createElement('span');
         textEl.className = 'coach-toast-text';
         textEl.textContent = String(message ?? '');
@@ -15346,27 +15360,12 @@ class App {
                 weight === 0);
 
         if (isBodyweightExercise) {
-            const existing = document.querySelector('.coach-toast');
-            if (existing) existing.remove();
-
-            const toast = document.createElement('div');
-            toast.className = 'coach-toast hot';
             const bodyweightHint = normalizedSlot?.bodyweightProfile?.allowAssistance
                 ? 'Réduis légèrement l’assistance ou ajoute 1 rep propre sur la prochaine série'
                 : normalizedSlot?.bodyweightProfile?.allowExternalLoad
                     ? 'Tu peux ajouter 1 rep propre maintenant, puis envisager un léger lest à la prochaine séance'
                     : 'Garde le poids du corps et ajoute 1 rep propre ou un tempo plus strict sur la prochaine série';
-            toast.innerHTML = `
-                <span class="coach-toast-icon">🔥</span>
-                <span class="coach-toast-text">${bodyweightHint}</span>
-            `;
-            document.body.appendChild(toast);
-
-            setTimeout(() => toast.classList.add('visible'), 50);
-            setTimeout(() => {
-                toast.classList.remove('visible');
-                setTimeout(() => toast.remove(), 300);
-            }, 5000);
+            this.showCoachToast(bodyweightHint, 'hot');
             return;
         }
 
@@ -15409,21 +15408,7 @@ class App {
         if (normalizedSlot?.progressionMode === 'capped_load' && normalizedSlot?.maxSelectableLoadKg != null) {
             suggestedWeight = Math.min(suggestedWeight, normalizedSlot.maxSelectableLoadKg);
             if (suggestedWeight <= weight) {
-                const existing = document.querySelector('.coach-toast');
-                if (existing) existing.remove();
-
-                const toast = document.createElement('div');
-                toast.className = 'coach-toast hot';
-                toast.innerHTML = `
-                    <span class="coach-toast-icon">🎯</span>
-                    <span class="coach-toast-text">Charge max atteinte: ajoute 1 rep propre ou garde le même poids avec un tempo plus strict</span>
-                `;
-                document.body.appendChild(toast);
-                setTimeout(() => toast.classList.add('visible'), 50);
-                setTimeout(() => {
-                    toast.classList.remove('visible');
-                    setTimeout(() => toast.remove(), 300);
-                }, 5000);
+                this.showCoachToast('Charge max atteinte : ajoute 1 rep propre ou garde le même poids avec un tempo plus strict', 'hot');
                 return;
             }
         }
@@ -15445,23 +15430,7 @@ class App {
         // Re-render series to show updated suggestion
         this.renderSeries();
         
-        // Show suggestion toast
-        const existing = document.querySelector('.coach-toast');
-        if (existing) existing.remove();
-        
-        const toast = document.createElement('div');
-        toast.className = 'coach-toast hot';
-        toast.innerHTML = `
-            <span class="coach-toast-icon">🔥</span>
-            <span class="coach-toast-text">RPE ${rpe} avec ${reps} reps = trop facile ! Tente <strong>${suggestedWeight}kg</strong> sur la prochaine série</span>
-        `;
-        document.body.appendChild(toast);
-        
-        setTimeout(() => toast.classList.add('visible'), 50);
-        setTimeout(() => {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 300);
-        }, 5000);
+        this.showCoachToast(`RPE ${rpe} avec ${reps} reps : trop facile. Tente ${suggestedWeight} kg sur la prochaine série`, 'hot');
     }
     
     async checkAutoBackoff(rpe) {
@@ -15534,23 +15503,7 @@ class App {
     }
     
     showBackoffSuggestion(suggestedWeight, rpe) {
-        // Create a subtle toast notification
-        const existing = document.querySelector('.coach-toast');
-        if (existing) existing.remove();
-        
-        const toast = document.createElement('div');
-        toast.className = 'coach-toast backoff';
-        toast.innerHTML = `
-            <span class="coach-toast-icon">💡</span>
-            <span class="coach-toast-text">RPE ${rpe} • Baisse à <strong>${suggestedWeight}kg</strong> pour maintenir tes reps</span>
-        `;
-        document.body.appendChild(toast);
-        
-        setTimeout(() => toast.classList.add('visible'), 50);
-        setTimeout(() => {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
+        this.showCoachToast(`RPE ${rpe} : baisse à ${suggestedWeight} kg pour maintenir tes reps`, 'backoff');
     }
     
     detectDayStatus(rpe) {
@@ -15572,31 +15525,10 @@ class App {
     }
     
     showDayStatusToast(status) {
-        const existing = document.querySelector('.coach-toast');
-        if (existing) existing.remove();
-        
-        const toast = document.createElement('div');
-        toast.className = `coach-toast ${status}`;
-        
-        if (status === 'cold') {
-            toast.innerHTML = `
-                <span class="coach-toast-icon">❄️</span>
-                <span class="coach-toast-text">Forme basse • Mode maintenance, on ne force pas</span>
-            `;
-        } else {
-            toast.innerHTML = `
-                <span class="coach-toast-icon">🔥</span>
-                <span class="coach-toast-text">En feu ! Tente un record sur ta dernière série</span>
-            `;
-        }
-        
-        document.body.appendChild(toast);
-        
-        setTimeout(() => toast.classList.add('visible'), 50);
-        setTimeout(() => {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
+        this.showCoachToast(
+            status === 'cold' ? 'Forme basse : mode maintenance, on ne force pas' : 'En feu ! Tente un record sur ta dernière série',
+            status === 'cold' ? 'cold' : 'hot'
+        );
     }
 
     adjustRestTimer(seconds) {
