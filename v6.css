@@ -5052,69 +5052,119 @@ button.set-row,
     color: var(--text-primary);
 }
 
-/* Stepper: − big number + */
-.set-stepper {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.set-stepper button {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    background: var(--tint-primary-strong);
-    color: var(--primary-dark);
-    font: inherit;
-    font-size: 20px;
-    font-weight: 900;
-    line-height: 1;
-    box-shadow: 0 3px 0 rgba(99, 102, 241, 0.3);
+/* Number value: tap the row, an inline wheel opens below (iOS-style). */
+.set-row:has(> .set-pick) {
     cursor: pointer;
-    touch-action: manipulation;
-    transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
-.set-stepper button:active {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 rgba(99, 102, 241, 0.3);
-}
-
-.set-stepper input {
-    width: 44px;
-    padding: 0;
+.set-pick {
+    flex: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 6px 12px;
     border: none;
+    border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
-    font-family: 'Nunito', 'Inter', sans-serif;
-    font-size: 21px;
-    font-weight: 900;
-    text-align: center;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
 }
 
-.set-stepper input::placeholder {
+.set-pick-text {
+    font-variant-numeric: tabular-nums;
+}
+
+.set-pick.is-empty .set-pick-text {
     color: var(--text-muted);
 }
 
-.set-stepper input:focus {
-    outline: none;
+.set-pick[aria-expanded="true"] {
+    background: var(--tint-primary);
     color: var(--primary-dark);
 }
 
-/* Fixed slots so every stepper lines up, with or without a unit. */
 .set-unit {
-    width: 30px;
-    margin-left: -2px;
-    font-size: 12.5px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.set-wheel {
+    --item: 40px;
+    position: relative;
+    height: calc(var(--item) * 5);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+    mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+}
+
+.set-wheel::-webkit-scrollbar {
+    display: none;
+}
+
+.set-wheel.is-open {
+    opacity: 1;
+    transform: none;
+}
+
+.set-wheel-track {
+    padding: calc(var(--item) * 2) 0;
+}
+
+/* Selection band behind the centre row. */
+.set-wheel-track::before {
+    content: '';
+    position: sticky;
+    top: calc(var(--item) * 2);
+    display: block;
+    height: var(--item);
+    margin: 0 16px calc(var(--item) * -1);
+    border-radius: 12px;
+    background: var(--tint-primary);
+    pointer-events: none;
+}
+
+.set-wheel-item {
+    position: relative;
+    height: var(--item);
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    padding-top: 7px;
+    scroll-snap-align: center;
+    font-family: 'Nunito', 'Inter', sans-serif;
+    font-size: 18px;
     font-weight: 800;
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color 0.12s ease, transform 0.12s ease;
 }
 
-.set-stepper input:has(+ button) {
-    width: 72px;
+.set-wheel-item small {
+    margin-left: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.set-wheel-item.is-selected {
+    color: var(--primary-dark);
+    font-size: 22px;
+}
+
+html[data-theme="dark"] .set-wheel-item.is-selected {
+    color: #c4b5fd;
 }
 
 .set-row .toggle-switch {

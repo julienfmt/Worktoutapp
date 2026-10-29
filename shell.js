@@ -14,6 +14,7 @@
             baseBindEvents.call(this);
             this.initHomePager();
             this.initSheetChrome();
+            this.initHaptics();
             db.getSetting('themeChoice').then(choice => this.applyTheme(choice || 'auto')).catch(() => {});
             window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
                 if ((this.themeChoice || 'auto') === 'auto') this.applyTheme('auto');
@@ -85,6 +86,7 @@
                     drag.dy = 0;
                     return;
                 }
+                if ((dy > 110) !== (drag.dy > 110)) this.haptic('light');
                 drag.dy = dy;
                 drag.content.style.transition = 'none';
                 drag.content.style.transform = `translateY(${dy}px)`;
@@ -108,6 +110,31 @@
             };
             document.addEventListener('touchend', endDrag);
             document.addEventListener('touchcancel', endDrag);
+        },
+
+        // A light tap under the finger on everything pressable, a firmer one
+        // on the main actions. Moments that matter (set done, record, rest
+        // over, wheels) call this.haptic() with their own kind.
+        initHaptics() {
+            if (this.hapticsReady) return;
+            this.hapticsReady = true;
+            db.getSetting('hapticsEnabled').then((enabled) => { this.hapticsDisabled = enabled === false; }).catch(() => {});
+            const PRESSABLE = 'button, .btn, [role="button"], [role="tab"], [role="radio"], summary, a[href], .toggle-switch, .ob-option, .ob-chip, .slot-card, .exo-action';
+            const STRONG = '.btn-primary, .btn-large, .btn-launch, .btn-launch-superset, .ob-cta, .next-quest-start';
+            document.addEventListener('pointerdown', (event) => {
+                if (event.button > 0) return;
+                const target = event.target.closest?.(PRESSABLE);
+                if (!target || target.disabled || target.closest('.set-wheel, [data-no-haptic]')) return;
+                this.haptic(target.matches(STRONG) ? 'medium' : 'light');
+            }, { passive: true });
+            // Sliders tick like a wheel.
+            document.addEventListener('input', (event) => {
+                if (event.target.matches?.('input[type="range"]')) this.haptic('selection');
+            }, { passive: true });
+            // Switches and choices clicked through their label.
+            document.addEventListener('change', (event) => {
+                if (event.target.matches?.('input[type="checkbox"], input[type="radio"]')) this.haptic('light');
+            }, { passive: true });
         },
 
         // Theme: 'auto' follows the phone, or a forced light/dark choice.
@@ -138,6 +165,7 @@
                 document.querySelector('#screen-home .tabbar')?.style.setProperty('--tab-pos', position.toFixed(3));
                 const tab = HOME_TABS[Math.max(0, Math.min(HOME_TABS.length - 1, Math.round(position)))];
                 if (tab !== this.visibleHomeTab) {
+                    if (this.visibleHomeTab) this.haptic('selection');
                     this.visibleHomeTab = tab;
                     this.syncHomeTabbar(tab);
                 }

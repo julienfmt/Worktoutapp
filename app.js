@@ -653,6 +653,9 @@ class GamificationEngine {
 const gamification = new GamificationEngine();
 
 // ===== Main Application =====
+// Height of one row in the settings wheels (matches .set-wheel-item).
+const SETTINGS_WHEEL_ITEM = 40;
+
 class App {
     constructor() {
         this.currentScreen = 'home';
@@ -13701,12 +13704,45 @@ class App {
     }
 
     // ===== Set completion feedback (gamified) =====
-    hapticTap(pattern = 12) {
+    // Haptics: the Taptic Engine / Android haptics through Capacitor in the
+    // store app, navigator.vibrate on the web (Android browsers; iOS Safari
+    // has none). Kinds follow Apple's vocabulary so each moment feels right:
+    // selection (wheels, pickers), light / medium / heavy (taps, impacts),
+    // success / warning / error (outcomes). "Vibrations" can be turned off
+    // in Réglages.
+    haptic(kind = 'light') {
+        if (this.hapticsDisabled) return;
+        const now = performance.now();
+        // Two taps in the same instant feel like one mushy buzz: keep the first.
+        if (kind !== 'selection' && now - (this.lastHapticAt || 0) < 70) return;
+        this.lastHapticAt = now;
+        const native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.Haptics : null;
         try {
-            if (navigator.vibrate && navigator.userActivation?.hasBeenActive !== false) navigator.vibrate(pattern);
+            if (native) {
+                if (kind === 'selection') {
+                    void native.selectionStart?.()?.then?.(() => native.selectionChanged?.()).catch?.(() => {});
+                } else if (kind === 'success' || kind === 'warning' || kind === 'error') {
+                    void native.notification?.({ type: kind.toUpperCase() })?.catch?.(() => {});
+                } else {
+                    void native.impact?.({ style: { light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY' }[kind] || 'LIGHT' })?.catch?.(() => {});
+                }
+                return;
+            }
+            const patterns = { selection: 4, light: 8, medium: 14, heavy: 24, success: [12, 50, 22], warning: [18, 60, 18], error: [26, 70, 26] };
+            if (navigator.vibrate && navigator.userActivation?.hasBeenActive !== false) navigator.vibrate(patterns[kind] ?? 8);
         } catch (error) {
-            // Vibration is a nice-to-have (unsupported on iOS Safari).
+            // Haptics are a nice-to-have.
         }
+    }
+
+    // Older call sites pass raw vibration patterns: map them to a kind.
+    hapticTap(pattern = 12) {
+        if (Array.isArray(pattern)) {
+            this.haptic(pattern.length >= 5 ? 'success' : pattern.reduce((sum, value) => sum + value, 0) > 90 ? 'success' : 'medium');
+            return;
+        }
+        const ms = Number(pattern) || 12;
+        this.haptic(ms <= 6 ? 'selection' : ms <= 10 ? 'light' : ms <= 18 ? 'medium' : 'heavy');
     }
 
     spawnXpFloat(anchorEl, text, options = {}) {
@@ -14671,10 +14707,7 @@ class App {
         countdown.classList.remove('timer-done', 'go-ready');
         timerRing?.classList.remove('go-ready');
         
-        // Vibrate on start (if supported)
-        if (navigator.vibrate) {
-            navigator.vibrate(50);
-        }
+        this.haptic('light');
         
         // Start update loop
         this.updateRestTimer();
@@ -14851,8 +14884,8 @@ class App {
         
         // Vibrate near the end
         if (remaining <= 5 && remaining > 0) {
-            if (navigator.vibrate && !this.lastVibrateAt) {
-                navigator.vibrate(30);
+            if (!this.lastVibrateAt) {
+                this.haptic('selection');
                 this.lastVibrateAt = Date.now();
             } else if (this.lastVibrateAt && Date.now() - this.lastVibrateAt > 1000) {
                 this.lastVibrateAt = null;
@@ -14891,10 +14924,7 @@ class App {
         }
         this.finishRestTimer({ showReadyState: true });
         
-        // Vibrate pattern on complete
-        if (navigator.vibrate) {
-            navigator.vibrate([100, 50, 100, 50, 100]);
-        }
+        this.haptic('success');
     }
 
     updateRestNotificationButton() {
@@ -20415,7 +20445,9 @@ class App {
             const shown = valid ? value : field.fallback;
             input.value = shown == null ? '' : this.formatSettingsNumber(shown);
             input.dataset.saved = shown == null ? '' : String(shown);
+            this.refreshSettingsValue(input);
         }
+        this.closeSettingsWheel();
 
         const autoDeloadInput = document.getElementById('setting-auto-deload');
         if (autoDeloadInput) autoDeloadInput.checked = ((await db.getSetting('autoDeloadEnabled')) ?? true) !== false;
@@ -20426,6 +20458,8 @@ class App {
             : storedWakeLockPreference !== false;
         const wakeLockInput = document.getElementById('setting-wake-lock');
         if (wakeLockInput) wakeLockInput.checked = wakeLockEnabled;
+        const hapticsInput = document.getElementById('setting-haptics');
+        if (hapticsInput) hapticsInput.checked = !this.hapticsDisabled;
 
         document.querySelectorAll('#sheet-settings details.set-more').forEach(details => { details.open = false; });
         const content = document.querySelector('#sheet-settings .sheet-content');
@@ -20442,19 +20476,16 @@ class App {
         content.dataset.settingsBound = 'true';
 
         content.addEventListener('click', (event) => {
-            const stepButton = event.target.closest('[data-step-dir]');
-            if (stepButton) {
+            const valueButton = event.target.closest('.set-pick') || event.target.closest('.set-row')?.querySelector(':scope > .set-pick');
+            if (valueButton) {
                 event.preventDefault();
-                const input = stepButton.parentElement.querySelector('input');
-                const field = this.getSettingsNumberFields()[input?.id];
-                if (!input || !field) return;
-                const { step } = this.readSettingsNumberBounds(input);
-                const current = parseFloat(String(input.value).replace(',', '.'));
-                const next = Number.isFinite(current)
-                    ? current + step * Number(stepButton.dataset.stepDir)
-                    : (field.start ?? field.fallback ?? 0);
-                input.value = this.formatSettingsNumber(this.clampSettingsNumber(input, next));
-                input.dispatchEvent(new Event('change', { bubbles: true }));
+                this.toggleSettingsWheel(valueButton);
+                return;
+            }
+            const wheelItem = event.target.closest('.set-wheel-item');
+            if (wheelItem) {
+                const wheel = wheelItem.closest('.set-wheel');
+                wheel.scrollTo({ top: Number(wheelItem.dataset.index) * SETTINGS_WHEEL_ITEM, behavior: 'smooth' });
                 return;
             }
             if (event.target.closest('#btn-manual-cleanup')) {
@@ -20470,14 +20501,97 @@ class App {
         content.addEventListener('change', (event) => {
             void this.onSettingsInputChange(event.target);
         });
+    }
 
-        // Enter on a number field commits it, like leaving the field.
-        content.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && event.target.matches?.('.set-stepper input')) {
-                event.preventDefault();
-                event.target.blur();
-            }
+    // Number settings read like iOS: the value sits on the right of the row,
+    // a tap opens a wheel right below it. Each notch ticks, the value is
+    // saved once the wheel settles.
+    refreshSettingsValue(input) {
+        const button = input?.closest('.set-pick');
+        if (!button) return;
+        const text = button.querySelector('.set-pick-text');
+        if (text) text.textContent = input.value || '—';
+        button.classList.toggle('is-empty', !input.value);
+    }
+
+    getSettingsWheelValues(input) {
+        const field = this.getSettingsNumberFields()[input.id];
+        const { min, max, step } = this.readSettingsNumberBounds(input);
+        const values = [];
+        for (let value = min; value <= max + 1e-9; value += step) values.push(Math.round(value * 100) / 100);
+        // Optional values (height) can be cleared from the top of the wheel.
+        if (field?.fallback == null) values.unshift(null);
+        return values;
+    }
+
+    closeSettingsWheel() {
+        document.querySelectorAll('#sheet-settings .set-wheel').forEach((wheel) => {
+            wheel.classList.remove('is-open');
+            setTimeout(() => wheel.remove(), 220);
         });
+        document.querySelectorAll('#sheet-settings .set-pick[aria-expanded="true"]').forEach((button) => {
+            button.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    toggleSettingsWheel(button) {
+        const wasOpen = button.getAttribute('aria-expanded') === 'true';
+        this.closeSettingsWheel();
+        if (wasOpen) return;
+        const input = button.querySelector('input');
+        const field = this.getSettingsNumberFields()[input?.id];
+        const row = button.closest('.set-row');
+        if (!input || !field || !row) return;
+
+        const values = this.getSettingsWheelValues(input);
+        const unit = button.querySelector('.set-unit')?.textContent || '';
+        const current = parseFloat(String(input.value).replace(',', '.'));
+        const start = Number.isFinite(current) ? current : (field.start ?? field.fallback);
+        let index = Math.max(0, values.findIndex(value => value === start));
+
+        const wheel = document.createElement('div');
+        wheel.className = 'set-wheel';
+        wheel.setAttribute('role', 'listbox');
+        wheel.setAttribute('aria-label', input.getAttribute('aria-label') || '');
+        wheel.innerHTML = `<div class="set-wheel-track">${values.map((value, i) => `
+            <div class="set-wheel-item" role="option" data-index="${i}">${value == null ? '—' : `${this.formatSettingsNumber(value)}${unit ? ` <small>${this.escapeHtml(unit)}</small>` : ''}`}</div>
+        `).join('')}</div>`;
+        row.after(wheel);
+        button.setAttribute('aria-expanded', 'true');
+
+        const items = wheel.querySelectorAll('.set-wheel-item');
+        const mark = (i) => items.forEach((item, n) => {
+            item.classList.toggle('is-selected', n === i);
+            item.setAttribute('aria-selected', String(n === i));
+        });
+        mark(index);
+        wheel.scrollTop = index * SETTINGS_WHEEL_ITEM;
+        requestAnimationFrame(() => {
+            wheel.scrollTop = index * SETTINGS_WHEEL_ITEM;
+            wheel.classList.add('is-open');
+        });
+
+        // Only a real touch saves: layout and snapping can scroll the wheel too.
+        let armed = false;
+        const arm = () => { armed = true; };
+        ['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach(type => wheel.addEventListener(type, arm, { passive: true }));
+        wheel.addEventListener('click', arm);
+
+        let settleTimer = null;
+        wheel.addEventListener('scroll', () => {
+            if (!armed) return;
+            const next = Math.max(0, Math.min(values.length - 1, Math.round(wheel.scrollTop / SETTINGS_WHEEL_ITEM)));
+            if (next !== index) {
+                index = next;
+                mark(index);
+                this.haptic('selection');
+                const value = values[index];
+                input.value = value == null ? '' : this.formatSettingsNumber(value);
+                this.refreshSettingsValue(input);
+            }
+            clearTimeout(settleTimer);
+            settleTimer = setTimeout(() => input.dispatchEvent(new Event('change', { bubbles: true })), 260);
+        }, { passive: true });
     }
 
     async onSettingsInputChange(input) {
@@ -20486,6 +20600,14 @@ class App {
         if (input.id === 'setting-auto-deload') {
             await db.setSetting('autoDeloadEnabled', input.checked);
             await this.ensureCycleStartDate();
+            this.flashSettingSaved(input);
+            return;
+        }
+
+        if (input.id === 'setting-haptics') {
+            await db.setSetting('hapticsEnabled', input.checked);
+            this.hapticsDisabled = !input.checked;
+            this.haptic('medium');
             this.flashSettingSaved(input);
             return;
         }
@@ -20508,6 +20630,7 @@ class App {
         const raw = String(input.value).trim().replace(',', '.');
         if (raw === '' && field.fallback == null) {
             // Optional value (height): clearing it forgets it.
+            this.refreshSettingsValue(input);
             if (input.dataset.saved !== '') {
                 await db.setSetting(field.key, null);
                 input.dataset.saved = '';
@@ -20522,6 +20645,7 @@ class App {
         }
         const value = this.clampSettingsNumber(input, parsed);
         input.value = this.formatSettingsNumber(value);
+        this.refreshSettingsValue(input);
         if (String(value) === input.dataset.saved) return;
 
         await db.setSetting(field.key, value);

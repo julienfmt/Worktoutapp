@@ -1222,21 +1222,11 @@
                     <div class="set-rows" id="settings-profile-block"></div>
                     <div class="set-row">
                         <span class="set-label">Poids</span>
-                        <div class="set-stepper">
-                            <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                            <input type="text" id="setting-body-weight" min="35" max="180" step="1" inputmode="numeric" aria-label="Poids en kg">
-                            <span class="set-unit">kg</span>
-                            <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                        </div>
+                        <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-body-weight" min="35" max="180" step="1" aria-label="Poids en kg"><span class="set-pick-text"></span><span class="set-unit">kg</span></button>
                     </div>
                     <div class="set-row">
                         <span class="set-label">Taille</span>
-                        <div class="set-stepper">
-                            <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                            <input type="text" id="setting-body-height" min="120" max="230" step="1" inputmode="numeric" placeholder="—" aria-label="Taille en cm">
-                            <span class="set-unit">cm</span>
-                            <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                        </div>
+                        <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-body-height" min="120" max="230" step="1" aria-label="Taille en cm"><span class="set-pick-text"></span><span class="set-unit">cm</span></button>
                     </div>
                 </form>
 
@@ -1244,11 +1234,7 @@
                 <div class="set-list">
                     <div class="set-row">
                         <span class="set-label">Séances par semaine</span>
-                        <div class="set-stepper">
-                            <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                            <input type="text" id="setting-weekly-goal" min="1" max="7" step="1" inputmode="numeric" aria-label="Séances par semaine">
-                            <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                        </div>
+                        <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-weekly-goal" min="1" max="7" step="1" aria-label="Séances par semaine"><span class="set-pick-text"></span></button>
                     </div>
                     <details class="set-more">
                         <summary class="set-row">
@@ -1257,56 +1243,27 @@
                         </summary>
                         <div class="set-row">
                             <span class="set-label">Charge en plus<small>Quand tu progresses</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-weight-increment" min="0.5" max="5" step="0.5" inputmode="decimal" aria-label="Charge ajoutée en kg">
-                                <span class="set-unit">kg</span>
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-weight-increment" min="0.5" max="5" step="0.5" aria-label="Charge ajoutée en kg"><span class="set-pick-text"></span><span class="set-unit">kg</span></button>
                         </div>
                         <div class="set-row">
                             <span class="set-label">Charge en moins<small>Si fatigue</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-deload-percent" min="5" max="20" step="5" inputmode="numeric" aria-label="Baisse de charge en %">
-                                <span class="set-unit">%</span>
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-deload-percent" min="5" max="20" step="5" aria-label="Baisse de charge en %"><span class="set-pick-text"></span><span class="set-unit">%</span></button>
                         </div>
                         <div class="set-row">
                             <span class="set-label">Changer d’exo après<small>Séances sans progrès</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-failure-count" min="2" max="5" step="1" inputmode="numeric" aria-label="Séances sans progrès">
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-failure-count" min="2" max="5" step="1" aria-label="Séances sans progrès"><span class="set-pick-text"></span></button>
                         </div>
                         <div class="set-row">
                             <span class="set-label">Garder un exo<small>Au minimum</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-lock-weeks" min="2" max="8" step="1" inputmode="numeric" aria-label="Semaines minimum">
-                                <span class="set-unit">sem.</span>
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-lock-weeks" min="2" max="8" step="1" aria-label="Semaines minimum"><span class="set-pick-text"></span><span class="set-unit">sem.</span></button>
                         </div>
                         <div class="set-row">
                             <span class="set-label">Semaine légère<small>Après tant de semaines</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-accumulation-weeks" min="4" max="6" step="1" inputmode="numeric" aria-label="Semaines de travail avant la semaine légère">
-                                <span class="set-unit">sem.</span>
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-accumulation-weeks" min="4" max="6" step="1" aria-label="Semaines de travail avant la semaine légère"><span class="set-pick-text"></span><span class="set-unit">sem.</span></button>
                         </div>
                         <div class="set-row">
                             <span class="set-label">Séries en moins<small>En semaine légère</small></span>
-                            <div class="set-stepper">
-                                <button type="button" data-step-dir="-1" aria-label="Moins">−</button>
-                                <input type="text" id="setting-deload-volume" min="30" max="70" step="10" inputmode="numeric" aria-label="Séries en moins en %">
-                                <span class="set-unit">%</span>
-                                <button type="button" data-step-dir="1" aria-label="Plus">+</button>
-                            </div>
+                            <button type="button" class="set-pick" aria-expanded="false"><input type="hidden" id="setting-deload-volume" min="30" max="70" step="10" aria-label="Séries en moins en %"><span class="set-pick-text"></span><span class="set-unit">%</span></button>
                         </div>
                         <label class="set-row">
                             <span class="set-label">Semaine légère auto</span>
@@ -1325,6 +1282,13 @@
                         <span class="set-label">Écran toujours allumé</span>
                         <span class="toggle-switch">
                             <input type="checkbox" id="setting-wake-lock">
+                            <span class="toggle-slider"></span>
+                        </span>
+                    </label>
+                    <label class="set-row">
+                        <span class="set-label">Vibrations</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="setting-haptics">
                             <span class="toggle-slider"></span>
                         </span>
                     </label>

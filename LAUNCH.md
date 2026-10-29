@@ -45,6 +45,12 @@ Le plan est recalculé après chaque séance et au lancement. En natif, il est p
 
 Étape suivante (push serveur, optionnel) : FCM/APNs pour les campagnes (défi du mois, nouveautés) et les rappels si l'utilisateur change d'appareil.
 
+## 4 ter. Retours haptiques
+
+`app.haptic(kind)` (dans `app.js`) utilise `@capacitor/haptics` quand l'app tourne en natif (Taptic Engine sur iPhone, haptique Android), sinon `navigator.vibrate` (Android web ; Safari iOS n'en a pas). Types : `selection` (molettes des Réglages, curseurs, changement d'onglet), `light` / `medium` / `heavy` (appuis, boutons principaux), `success` / `warning` / `error` (fin de repos, record, série validée). Un appui léger est joué sur tout élément cliquable (`shell.js` → `initHaptics`). Désactivable dans Réglages → Vibrations (`hapticsEnabled`).
+
+À faire au moment d'emballer : `npm i @capacitor/haptics && npx cap sync`. Aucun autre réglage natif.
+
 ## 4 bis. Coach IA « comme un pote »
 
 Aujourd'hui (`ai-coach.js` + `ai-coach-ui.js`) : l'app prépare un résumé de tes données (assiduité, tendances e1RM, volume par muscle, déséquilibres, notes) et l'envoie en un tap à ChatGPT, Claude, Gemini ou Le Chat ; la réponse collée est relue et appliquée au programme.
