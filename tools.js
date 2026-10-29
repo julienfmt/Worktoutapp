@@ -14,13 +14,19 @@
         { kg: 0.5, color: '#cbd5e1', height: 38, dark: true }
     ];
     const BARS = [20, 15, 10];
+    const icon = body => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+    const TOOLS = [
+        { id: 'plates', tab: 'Disques', title: 'Disques à charger', desc: 'Quels disques mettre de chaque côté de la barre', icon: icon('<path d="M2 12h20"/><rect x="5" y="6" width="3" height="12" rx="1"/><rect x="16" y="6" width="3" height="12" rx="1"/>') },
+        { id: 'orm', tab: 'Max', title: 'Charge max estimée', desc: 'Ton max sur 1 rep et les charges par %', icon: icon('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>') },
+        { id: 'body', tab: 'Mensurations', title: 'Mensurations', desc: 'Poids, tour de taille, bras…', icon: icon('<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0z"/><path d="M14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2"/>') }
+    ];
     const MEASURES = [
-        { key: 'weight', label: 'Poids', unit: 'kg', step: 0.1, emoji: '⚖️' },
-        { key: 'waist', label: 'Tour de taille', unit: 'cm', step: 0.5, emoji: '📏' },
-        { key: 'chest', label: 'Poitrine', unit: 'cm', step: 0.5, emoji: '🫁' },
-        { key: 'arm', label: 'Bras', unit: 'cm', step: 0.5, emoji: '💪' },
-        { key: 'thigh', label: 'Cuisse', unit: 'cm', step: 0.5, emoji: '🦵' },
-        { key: 'hips', label: 'Hanches', unit: 'cm', step: 0.5, emoji: '🍑' }
+        { key: 'weight', label: 'Poids', unit: 'kg', step: 0.1 },
+        { key: 'waist', label: 'Tour de taille', unit: 'cm', step: 0.5 },
+        { key: 'chest', label: 'Poitrine', unit: 'cm', step: 0.5 },
+        { key: 'arm', label: 'Bras', unit: 'cm', step: 0.5 },
+        { key: 'thigh', label: 'Cuisse', unit: 'cm', step: 0.5 },
+        { key: 'hips', label: 'Hanches', unit: 'cm', step: 0.5 }
     ];
 
     const baseOpenExercise = App.prototype.openExercise;
@@ -85,12 +91,16 @@
             const content = document.querySelector('#sheet-tools .tools-content');
             if (!content || !this.toolsState) return;
             const { tab } = this.toolsState;
-            const tabs = [['plates', '🏋️ Disques'], ['orm', '🧮 1RM'], ['body', '📏 Corps']];
+            const tabs = TOOLS.map(tool => [tool.id, tool.tab]);
+            const current = TOOLS.find(tool => tool.id === tab) || TOOLS[0];
             content.innerHTML = `
                 <div class="sheet-handle"></div>
                 <div class="tools-head">
-                    <h3>Outils</h3>
-                    <button type="button" class="tools-close" data-tools="close" aria-label="Fermer">✕</button>
+                    <div>
+                        <h3>${current.title}</h3>
+                        <small>${current.desc}</small>
+                    </div>
+                    <button type="button" class="tools-close" data-tools="close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
                 </div>
                 <div class="tools-tabs" role="tablist">
                     ${tabs.map(([id, label]) => `<button type="button" class="tools-tab ${tab === id ? 'active' : ''}" data-tools-tab="${id}" role="tab" aria-selected="${tab === id}">${label}</button>`).join('')}
@@ -162,9 +172,9 @@
                     </div>
                 </div>
                 <div class="tools-orm-hero">
-                    <span>Ton 1RM estimé</span>
+                    <span>Ton max estimé sur 1 rep</span>
                     <strong>${e1rm > 0 ? `${this.formatOneDecimal(e1rm)} kg` : '--'}</strong>
-                    <small>Estimation : à n’utiliser que pour régler tes charges, pas à tester.</small>
+                    <small>Pour régler tes charges, pas à tester.</small>
                 </div>
                 <div class="tools-orm-table">
                     ${rows.map(pct => `
@@ -202,7 +212,7 @@
                 <form class="tools-body-form" data-tools-form="body">
                     ${MEASURES.map(measure => `
                         <label class="tools-measure">
-                            <span>${measure.emoji} ${this.escapeHtml(measure.label)}</span>
+                            <span>${this.escapeHtml(measure.label)}</span>
                             <span class="tools-measure-input">
                                 <input type="number" inputmode="decimal" step="${measure.step}" name="${measure.key}" placeholder="${latest[measure.key] ?? ''}">
                                 <small>${measure.unit}</small>
@@ -316,14 +326,18 @@
             card.innerHTML = `
                 <div class="pz-card-head">
                     <div>
-                        <span class="pz-kicker">Outils & suivi</span>
-                        <h4>Ta boîte à outils</h4>
+                        <span class="pz-kicker">Outils</span>
+                        <h4>Calculs & mensurations</h4>
                     </div>
                 </div>
-                <div class="tools-card-grid">
-                    <button type="button" class="tools-card-btn" data-open-tools="plates"><span aria-hidden="true">🏋️</span>Disques</button>
-                    <button type="button" class="tools-card-btn" data-open-tools="orm"><span aria-hidden="true">🧮</span>1RM & %</button>
-                    <button type="button" class="tools-card-btn" data-open-tools="body"><span aria-hidden="true">📏</span>Mensurations</button>
+                <div class="tools-list">
+                    ${TOOLS.map(tool => `
+                        <button type="button" class="tools-row" data-open-tools="${tool.id}">
+                            <span class="tools-row-icon" aria-hidden="true">${tool.icon}</span>
+                            <span class="tools-row-text"><strong>${tool.title}</strong><small>${tool.desc}</small></span>
+                            <svg class="tools-row-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                        </button>
+                    `).join('')}
                 </div>
             `;
         },

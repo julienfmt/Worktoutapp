@@ -23,7 +23,6 @@
     const baseRenderStats = App.prototype.renderStats;
     const baseBuildTrophies = App.prototype.buildTrophies;
     const baseGetTrophyDefinitions = App.prototype.getTrophyDefinitions;
-    const baseOpenExercise = App.prototype.openExercise;
     const baseShowStimulusScoreAnimation = App.prototype.showStimulusScoreAnimation;
 
     Object.assign(App.prototype, {
@@ -164,50 +163,6 @@
                 if (!(trophy.metric in values)) return trophy;
                 const current = values[trophy.metric];
                 return { ...trophy, current, unlocked: current >= trophy.target, progress: Math.min(1, current / trophy.target) };
-            });
-        },
-
-        // ---------- First-time tips ----------
-        async openExercise(slotId) {
-            await baseOpenExercise.call(this, slotId);
-            await this.renderFirstTimeTip();
-        },
-
-        async renderFirstTimeTip() {
-            document.getElementById('coach-first-tip')?.remove();
-            const slot = this.currentSlot;
-            if (!slot || this.isReviewMode || this.isTimedSlot(slot)) return;
-            const seen = (await db.getSetting('tipsSeen')) || [];
-            if (seen.includes('first-exercise')) return;
-            const totalSets = (this.homeDataSnapshot?.setHistory || []).length;
-            const slotData = this.currentWorkout?.slots?.[slot.id];
-            const doneHere = (slotData?.sets || []).some(set => set?.completed);
-            // Only for players who have not logged much yet.
-            if (totalSets > 30 || doneHere) return;
-            const list = document.getElementById('series-list');
-            if (!list || this.currentSlot?.id !== slot.id) return;
-            const rir = Number(slot.rir);
-            const tip = document.createElement('div');
-            tip.className = 'coach-first-tip';
-            tip.id = 'coach-first-tip';
-            tip.innerHTML = `
-                <div class="coach-first-tip-head">
-                    <span class="coach-first-tip-icon" aria-hidden="true">💡</span>
-                    <strong>Comment ça marche</strong>
-                </div>
-                <ol>
-                    <li><b>Charge</b> et <b>reps</b> sont pré-remplies par le coach. Ajuste si besoin.</li>
-                    <li>${Number.isFinite(rir) ? `<b>RIR ${rir}</b> : arrête la série quand il te reste ~${rir} rep${rir > 1 ? 's' : ''} en réserve.` : 'Arrête la série quand tu sens qu’il te reste 1 ou 2 reps.'}</li>
-                    <li>Touche <b>Série terminée</b> : le repos se lance tout seul, le coach s’adapte.</li>
-                </ol>
-                <button type="button" class="btn coach-first-tip-ok">Compris !</button>
-            `;
-            list.before(tip);
-            tip.querySelector('.coach-first-tip-ok').addEventListener('click', async () => {
-                tip.classList.add('is-leaving');
-                setTimeout(() => tip.remove(), 250);
-                const current = (await db.getSetting('tipsSeen')) || [];
-                if (!current.includes('first-exercise')) await db.setSetting('tipsSeen', [...current, 'first-exercise']);
             });
         },
 

@@ -15,14 +15,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@900&display=swap" rel="stylesheet"></noscript>
-    <link rel="preload" href="app.js?v=6.1.0" as="script">
-    <link rel="stylesheet" href="styles.css?v=6.1.0">
-    <link rel="stylesheet" href="streak-score.css?v=6.1.0">
-    <link rel="stylesheet" href="theme.css?v=6.1.0">
-    <link rel="stylesheet" href="ai-coach.css?v=6.1.0">
-    <link rel="stylesheet" href="onboarding.css?v=6.1.0">
-    <link rel="stylesheet" href="v6.css?v=6.1.0">
-    <link rel="stylesheet" href="dark.css?v=6.1.0">
+    <link rel="preload" href="app.js?v=6.2.0" as="script">
+    <link rel="stylesheet" href="styles.css?v=6.2.0">
+    <link rel="stylesheet" href="streak-score.css?v=6.2.0">
+    <link rel="stylesheet" href="theme.css?v=6.2.0">
+    <link rel="stylesheet" href="ai-coach.css?v=6.2.0">
+    <link rel="stylesheet" href="onboarding.css?v=6.2.0">
+    <link rel="stylesheet" href="v6.css?v=6.2.0">
+    <link rel="stylesheet" href="dark.css?v=6.2.0">
     <script>
         // Theme before first paint (no white flash in dark mode).
         (function () {
@@ -245,7 +245,7 @@
                         </div>
 
                         <footer class="app-footer">
-                            <span class="app-version">v6.1.0</span>
+                            <span class="app-version">v6.2.0</span>
                             <span class="storage-info" id="storage-info"></span>
                         </footer>
                     </div>
@@ -370,34 +370,8 @@
                     <div class="exercise-header-meta" id="exercise-header-meta" aria-live="polite"></div>
                 </div>
                 <div class="exercise-header-actions">
-                    <button type="button" class="exercise-header-tool exercise-plates-btn" id="btn-exercise-plates" aria-label="Calculateur de disques" title="Calculateur de disques" hidden>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h20"/><rect x="5" y="6" width="3" height="12" rx="1"/><rect x="16" y="6" width="3" height="12" rx="1"/></svg>
-                    </button>
-                    <button type="button" class="exercise-header-tool exercise-swap-btn" id="btn-exercise-swap" aria-label="Changer d'exercice" title="Changer d'exercice" hidden>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>
-                    </button>
-                    <button type="button" class="exercise-header-tool exercise-technique-btn" id="btn-open-technique" aria-label="Voir la fiche technique" title="Fiche technique" aria-controls="sheet-technique" hidden>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"></path>
-                            <path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"></path>
-                            <path d="M9 8l4 2.5L9 13z" fill="currentColor"></path>
-                        </svg>
-                    </button>
-                    <button
-                        type="button"
-                        class="exercise-header-tool"
-                        id="btn-open-exercise-insights"
-                        aria-label="Ouvrir les outils optionnels de l'exercice"
-                        title="Outils optionnels"
-                        aria-controls="sheet-exercise-insights"
-                        hidden
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                            <path d="M4 6h16M4 12h16M4 18h16"></path>
-                            <circle cx="9" cy="6" r="1.8" fill="currentColor" stroke="none"></circle>
-                            <circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none"></circle>
-                            <circle cx="11" cy="18" r="1.8" fill="currentColor" stroke="none"></circle>
-                        </svg>
+                    <button type="button" class="exercise-header-more" id="btn-exercise-more" aria-label="Options de l'exercice" aria-haspopup="dialog" aria-controls="sheet-exercise-actions">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                     </button>
                 </div>
             </header>
@@ -1121,6 +1095,35 @@
             </div>
         </div>
 
+        <div class="bottom-sheet" id="sheet-exercise-actions">
+            <div class="sheet-backdrop"></div>
+            <div class="sheet-content exo-actions-sheet" role="dialog" aria-label="Options de l'exercice">
+                <div class="sheet-handle"></div>
+                <div class="exo-actions-list">
+                    <button type="button" class="exo-action" id="btn-open-technique" aria-controls="sheet-technique" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>
+                        <span><strong>Fiche technique</strong><small>Animation et étapes du mouvement</small></span>
+                    </button>
+                    <button type="button" class="exo-action" id="btn-exercise-swap" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
+                        <span><strong>Changer d'exercice</strong><small>Machine prise, pas le matériel, gêne…</small></span>
+                    </button>
+                    <button type="button" class="exo-action" id="btn-exercise-plates" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h20"/><rect x="5" y="6" width="3" height="12" rx="1"/><rect x="16" y="6" width="3" height="12" rx="1"/></svg>
+                        <span><strong>Disques à charger</strong><small>Quels disques mettre de chaque côté</small></span>
+                    </button>
+                    <button type="button" class="exo-action" id="btn-open-exercise-insights" aria-controls="sheet-exercise-insights" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                        <span><strong>Échauffement &amp; récupération</strong><small>Montées en charge et muscles encore fatigués</small></span>
+                    </button>
+                    <button type="button" class="exo-action" data-exo-help="exercise">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                        <span><strong>Comment ça marche</strong><small>Charge, reps, RIR et repos expliqués</small></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div class="bottom-sheet" id="sheet-exercise-insights">
             <div class="sheet-backdrop"></div>
             <div class="sheet-content sheet-content-large exercise-insights-sheet">
@@ -1128,8 +1131,7 @@
                 <div class="sheet-titlebar exercise-insights-titlebar">
                     <div class="sheet-titlebar-spacer"></div>
                     <div class="exercise-insights-heading">
-                        <span class="exercise-insights-eyebrow">À la demande</span>
-                        <h3>Outils de l'exercice</h3>
+                        <h3>Échauffement &amp; récupération</h3>
                     </div>
                     <button type="button" class="btn-icon-small exercise-insights-close" id="btn-close-exercise-insights" aria-label="Fermer les outils">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
@@ -1137,7 +1139,7 @@
                         </svg>
                     </button>
                 </div>
-                <p class="exercise-insights-subtitle">Des aides facultatives pour cette séance, visibles directement. Rien ne modifie ton plan sans ton accord.</p>
+                <p class="exercise-insights-subtitle">Facultatif : rien ne modifie ton plan sans ton accord.</p>
 
                 <section class="optional-insight-card warmup-card" id="warmup-card" aria-label="Échauffement optionnel" hidden>
                     <div class="optional-insight-header">
@@ -1629,24 +1631,23 @@
         </div>
     </div>
 
-    <script defer src="db.js?v=6.1.0"></script>
-    <script defer src="data.js?v=6.1.0"></script>
-    <script defer src="exercise-db.js?v=6.1.0"></script>
-    <script defer src="exo-profile.js?v=6.1.0"></script>
-    <script defer src="app.js?v=6.1.0"></script>
-    <script defer src="shell.js?v=6.1.0"></script>
-    <script defer src="journey.js?v=6.1.0"></script>
-    <script defer src="cardio.js?v=6.1.0"></script>
-    <script defer src="swap.js?v=6.1.0"></script>
-    <script defer src="engage.js?v=6.1.0"></script>
-    <script defer src="premium.js?v=6.1.0"></script>
-    <script defer src="native.js?v=6.1.0"></script>
-    <script defer src="tools.js?v=6.1.0"></script>
-    <script defer src="league.js?v=6.1.0"></script>
-    <script defer src="ai-coach.js?v=6.1.0"></script>
-    <script defer src="ai-coach-ui.js?v=6.1.0"></script>
-    <script defer src="coach-chat.js?v=6.1.0"></script>
-    <script defer src="onboarding.js?v=6.1.0"></script>
+    <script defer src="db.js?v=6.2.0"></script>
+    <script defer src="data.js?v=6.2.0"></script>
+    <script defer src="exercise-db.js?v=6.2.0"></script>
+    <script defer src="exo-profile.js?v=6.2.0"></script>
+    <script defer src="app.js?v=6.2.0"></script>
+    <script defer src="shell.js?v=6.2.0"></script>
+    <script defer src="journey.js?v=6.2.0"></script>
+    <script defer src="cardio.js?v=6.2.0"></script>
+    <script defer src="swap.js?v=6.2.0"></script>
+    <script defer src="engage.js?v=6.2.0"></script>
+    <script defer src="premium.js?v=6.2.0"></script>
+    <script defer src="native.js?v=6.2.0"></script>
+    <script defer src="tools.js?v=6.2.0"></script>
+    <script defer src="league.js?v=6.2.0"></script>
+    <script defer src="ai-coach.js?v=6.2.0"></script>
+    <script defer src="ai-coach-ui.js?v=6.2.0"></script>
+    <script defer src="onboarding.js?v=6.2.0"></script>
     <datalist id="exercise-library-options"></datalist>
     <script>
         // Service Worker registration with auto-update detection
@@ -1656,7 +1657,7 @@
             navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister())).catch(() => {});
         }
         if ('serviceWorker' in navigator && !isLocalDevHost) {
-            const APP_VERSION = '6.1.0';
+            const APP_VERSION = '6.2.0';
             let isReloadingForUpdate = false;
 
             navigator.serviceWorker.addEventListener('controllerchange', () => {

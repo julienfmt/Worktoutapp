@@ -6265,8 +6265,7 @@ class App {
 
         // Light header: only the targets chip (sets × reps · rest · RIR) under the title.
         const tags = [
-            '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>',
-            '<button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>'
+            '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>'
         ];
 
         container.innerHTML = tags.join('');
@@ -6277,7 +6276,7 @@ class App {
     renderSupersetHeaderMeta() {
         const container = document.getElementById('exercise-header-meta');
         if (!container || !this.currentSlot || !this.supersetSlot) return;
-        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span><button type="button" class="help-dot" data-help="targets" aria-label="Comment lire ces objectifs ?">?</button>';
+        container.innerHTML = '<span class="exercise-header-tag exercise-targets-chip" id="exercise-targets-chip"></span>';
         this.syncExerciseTargetsChip();
         this.updateTechniqueButton(this.currentSlot);
     }
@@ -13122,8 +13121,9 @@ class App {
                         </div>
                     ` : ''}
                     <div class="series-actions">
-                        ${this.isTimedSlot(this.currentSlot) && !isEditing ? `
+                        ${this.isTimedSlot(this.currentSlot) && !isEditing && isNextIncompleteSet ? `
                             <button class="btn btn-secondary btn-cardio-timer" data-set-index="${i}">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 7 5.5z"/></svg>
                                 ${displayReps ? 'Relancer le timer' : `Lancer ${this.formatRepTargetValue(targetReps, this.currentSlot)}`}
                             </button>
                         ` : ''}
@@ -14147,11 +14147,14 @@ class App {
         if (rpeSection) {
             rpeSection.hidden = isWorkTimer;
         }
+        const contextKicker = document.querySelector('#timer-overlay .timer-context-kicker');
+        if (contextKicker) contextKicker.textContent = isWorkTimer ? 'En cours' : 'Prochaine série';
 
         if (isWorkTimer) {
             if (label) label.textContent = 'Série';
-            if (stageBadge) stageBadge.textContent = 'Cardio';
-            if (stageCopy) stageCopy.textContent = 'Le chrono pré-remplit la durée. Valide ensuite le bloc.';
+            const isCardioWork = this.isCardioSlot(this.currentSlot);
+            if (stageBadge) stageBadge.textContent = isCardioWork ? 'Cardio' : 'Chrono';
+            if (stageCopy) stageCopy.textContent = `Le chrono pré-remplit la durée. Valide ensuite ${isCardioWork ? 'le bloc' : 'la série'}.`;
             if (primaryAction) primaryAction.textContent = 'Finir';
             if (plusAction) plusAction.textContent = '+15s';
             if (stopLabel) stopLabel.textContent = 'Arrêter plus tôt';
@@ -19786,6 +19789,19 @@ class App {
         const exerciseInsightsTrigger = document.getElementById('btn-open-exercise-insights');
         if (exerciseInsightsTrigger) {
             exerciseInsightsTrigger.onclick = () => this.openExerciseInsightsSheet();
+        }
+
+        // Header "⋯": every exercise tool lives in one simple action sheet.
+        const exerciseMoreButton = document.getElementById('btn-exercise-more');
+        const exerciseActionsSheet = document.getElementById('sheet-exercise-actions');
+        if (exerciseMoreButton && exerciseActionsSheet) {
+            exerciseMoreButton.onclick = () => exerciseActionsSheet.classList.add('active');
+            exerciseActionsSheet.addEventListener('click', (e) => {
+                const action = e.target.closest('.exo-action');
+                if (!action && !e.target.classList.contains('sheet-backdrop')) return;
+                exerciseActionsSheet.classList.remove('active');
+                if (action?.dataset.exoHelp) this.showHelpTopic?.(action.dataset.exoHelp);
+            });
         }
 
         const exerciseInsightsSheet = document.getElementById('sheet-exercise-insights');

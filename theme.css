@@ -129,13 +129,11 @@
 
 /* Small square tool buttons (swap / edit on slot cards, header tools) */
 .btn-icon,
-.exercise-header-tool,
 .btn-back {
     transition: transform 0.12s var(--ease-out), box-shadow 0.12s var(--ease-out);
 }
 
 .btn-icon:active,
-.exercise-header-tool:active,
 .btn-back:active {
     transform: scale(0.92);
 }
@@ -5112,6 +5110,10 @@
 }
 
 /* Feeling */
+#timer-overlay .rpe-section[hidden] {
+    display: none !important;
+}
+
 #timer-overlay .rpe-section {
     max-width: none;
 }
@@ -5480,12 +5482,6 @@
     min-height: 36px;
     display: inline-flex;
     align-items: center;
-}
-
-/* Header tools breathe */
-#screen-exercise .exercise-header-actions {
-    display: flex;
-    gap: 6px;
 }
 
 .unilateral-series-card.completed,
@@ -6067,65 +6063,90 @@ button, a, input, select, label, [role="button"] { touch-action: manipulation; }
 #screen-exercise .exercise-header-actions {
     flex: none;
     display: flex;
-    align-items: center;
-    gap: 2px;
-    width: auto;
-    min-width: 44px;
-    padding: 3px;
-    border-radius: 16px;
+    width: 44px;
+}
+
+#btn-exercise-more {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 15px;
     background: #fff;
     border: 1.5px solid #e4e4f7;
     box-shadow: 0 3px 0 #e4e4f7;
+    color: var(--text-primary);
+    cursor: pointer;
 }
 
-/* No tool available yet: keep the slot (title stays centred) but invisible */
-#screen-exercise .exercise-header-actions:not(:has(.exercise-header-tool:not([hidden]))) {
-    visibility: hidden;
-}
-
-#screen-exercise .exercise-header-tool {
-    position: relative;
-    flex: none;
-    width: 36px;
-    height: 36px;
-    border: none;
-    border-radius: 12px;
-    background: transparent;
-    color: var(--primary-dark);
-    box-shadow: none;
-}
-
-#screen-exercise .exercise-header-tool[hidden] {
-    display: none !important;
-}
-
-#screen-exercise .exercise-header-tool svg {
+#btn-exercise-more svg {
     width: 20px;
     height: 20px;
 }
 
-/* The technique sheet is the "featured" tool: filled gradient tile */
-#screen-exercise .exercise-technique-btn {
-    color: #fff;
-    background: var(--grad-primary);
-    box-shadow: inset 0 -2px 0 rgba(49, 46, 129, 0.35);
+#btn-exercise-more:active {
+    transform: translateY(3px);
+    box-shadow: 0 0 0 #e4e4f7;
 }
 
-#screen-exercise .exercise-header-tool:active {
-    transform: scale(0.88);
-    background: var(--tint-primary-strong);
+/* ---------- Exercise action sheet (header "⋯") ---------- */
+.exo-actions-sheet {
+    padding-bottom: calc(16px + var(--safe-bottom));
 }
 
-#screen-exercise .exercise-technique-btn:active {
-    background: var(--grad-primary);
-    box-shadow: none;
+.exo-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 4px;
 }
 
-@media (hover: hover) {
-    #screen-exercise .exercise-header-tool:not(.exercise-technique-btn):hover {
-        background: var(--tint-primary);
-        box-shadow: none;
-    }
+.exo-action {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 12px 8px;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.exo-action[hidden] {
+    display: none;
+}
+
+.exo-action:active {
+    background: var(--bg-tertiary);
+}
+
+.exo-action svg {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    color: var(--primary);
+}
+
+.exo-action span {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.exo-action strong {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.exo-action small {
+    font-size: 13px;
+    color: var(--text-muted);
 }
 
 /* ---------- FX layer ---------- */

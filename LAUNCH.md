@@ -49,13 +49,7 @@ Le plan est recalculé après chaque séance et au lancement. En natif, il est p
 
 Aujourd'hui (`ai-coach.js` + `ai-coach-ui.js`) : l'app prépare un résumé de tes données (assiduité, tendances e1RM, volume par muscle, déséquilibres, notes) et l'envoie en un tap à ChatGPT, Claude, Gemini ou Le Chat ; la réponse collée est relue et appliquée au programme.
 
-**Discussion intégrée (`coach-chat.js`, prête)** : bouton « 💬 Discuter » sur la carte Coach IA du Parcours. Le coach tutoie, connaît le résumé `AiCoach.buildDigest()` (envoyé en *system prompt* avec le contrat `worktout-program-v1`), garde les 40 derniers messages en local, et quand il propose un programme, le bouton « Voir les changements » ouvre l'écran de revue existant avant toute modification.
-
-Deux modes, choisis dans le ⚙️ du chat :
-1. **Serveur Muscu** (production) : `workers/coach-proxy.js`, un Cloudflare Worker qui garde la clé Anthropic et applique un quota par installation (gratuit : 3 messages / semaine ; Muscu+ : 200). Déploiement décrit en tête du fichier ; le statut Plus est écrit côté serveur (webhook RevenueCat → KV `plus:<installId>`), jamais cru depuis l'app. Le jour du lancement, pré-remplir l'adresse du worker pour que l'utilisateur n'ait rien à configurer.
-2. **Ma clé Claude** (bêta / utilisateurs avancés) : appel direct depuis le téléphone, la clé reste en local.
-
-Sans IA configurée, le chat renvoie vers le parcours copier-coller (ChatGPT, Claude, Gemini, Le Chat). Hors ligne, il le dit simplement ; le coach de séance reste 100 % hors ligne.
+**Discussion intégrée** : retirée de l'app pour l'instant (pas nécessaire au lancement). Le code du chat et du worker (`coach-chat.js`, `workers/coach-proxy.js`) reste disponible dans l'historique git (commit `d6823b7`) si on la réactive.
 
 À venir : moments proactifs (bilan après séance, relance quand la série est en danger, félicitations sur un record), 1 fois max par jour.
 

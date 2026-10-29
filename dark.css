@@ -223,23 +223,6 @@
     background: rgba(27, 23, 51, 0.98);
 }
 
-:where(html[data-theme="dark"]) .coach-toast-icon {
-    background: #120f24;
-}
-
-:where(html[data-theme="dark"]) .coach-toast.backoff .coach-toast-icon {
-    background: #2e1d10;
-    color: #fdba74;
-}
-
-:where(html[data-theme="dark"]) .coach-toast.cold .coach-toast-icon {
-    background: #221d3d;
-}
-
-:where(html[data-theme="dark"]) .coach-toast.hot .coach-toast-icon {
-    background: #10261a;
-}
-
 :where(html[data-theme="dark"]) .stimulus-score-overlay {
     background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 40%),
         linear-gradient(180deg, rgba(27, 23, 51, 0.98) 0%, rgba(27, 23, 51, 0.99) 100%);
@@ -1005,10 +988,14 @@
     box-shadow: 0 0 0 #2a2448;
 }
 
-:where(html[data-theme="dark"]) #screen-exercise .exercise-header-actions {
+:where(html[data-theme="dark"]) #btn-exercise-more {
     background: #1b1733;
     border: 1.5px solid #2a2448;
     box-shadow: 0 3px 0 #2a2448;
+}
+
+:where(html[data-theme="dark"]) #btn-exercise-more:active {
+    box-shadow: 0 0 0 #2a2448;
 }
 
 :where(html[data-theme="dark"]) #exercise-summary .summary-icon {
@@ -1577,10 +1564,6 @@
     background: #1b1733;
 }
 
-:where(html[data-theme="dark"]) .help-sheet-emoji {
-    background: #221d3d;
-}
-
 :where(html[data-theme="dark"]) .pane-header-btn {
     border: 2px solid #2a2448;
     box-shadow: 0 3px 0 #2a2448;
@@ -1734,43 +1717,6 @@
     box-shadow: 0 3px 0 #7c2d12;
 }
 
-:where(html[data-theme="dark"]) .cc-mini-stepper button {
-    background: rgba(27, 23, 51, 0.92);
-    color: #f1f0ff;
-}
-
-:where(html[data-theme="dark"]) .cc-field-input {
-    background: #1b1733;
-}
-
-:where(html[data-theme="dark"]) .cc-field-input input {
-    color: #f1f0ff;
-}
-
-:where(html[data-theme="dark"]) .cc-plan {
-    border: 2px solid #2e2850;
-    box-shadow: 0 4px 0 #2a2448;
-}
-
-:where(html[data-theme="dark"]) .cc-done-row {
-    background: #10261a;
-    border: 2px solid #2e2850;
-    box-shadow: 0 3px 0 #14532d;
-}
-
-:where(html[data-theme="dark"]) .cc-done-main strong {
-    color: #bbf7d0;
-}
-
-:where(html[data-theme="dark"]) .cc-done-main small {
-    color: #86efac;
-}
-
-:where(html[data-theme="dark"]) .cc-done-undo {
-    border: 2px solid #2e2850;
-    background: #1b1733;
-}
-
 :where(html[data-theme="dark"]) .se-role-option span {
     border: 2px solid #2a2448;
     box-shadow: 0 3px 0 #2a2448;
@@ -1907,13 +1853,6 @@
     background: #3a2e10;
 }
 
-:where(html[data-theme="dark"]) .coach-first-tip {
-    background: #2b230f;
-    border: 2px solid #2e2850;
-    box-shadow: 0 3px 0 #6b4f10;
-    color: #fde68a;
-}
-
 :where(html[data-theme="dark"]) .paywall-kicker {
     color: #fde68a;
     background: linear-gradient(135deg, #221d3d, #fbbf24);
@@ -1948,11 +1887,6 @@
     border: 2px solid #2e2850;
 }
 
-:where(html[data-theme="dark"]) .tools-card-btn {
-    border: 2px solid #2a2448;
-    box-shadow: 0 3px 0 #2a2448;
-}
-
 :where(html[data-theme="dark"]) .tools-tab.active {
     box-shadow: 0 2px 0 #2a2448;
 }
@@ -1979,4 +1913,8 @@
 
 :where(html[data-theme="dark"]) .tools-measure {
     border: 2px solid #2e2850;
+}
+
+:where(html[data-theme="dark"]) .league-row {
+    background: var(--bg-tertiary, #221d3d);
 }

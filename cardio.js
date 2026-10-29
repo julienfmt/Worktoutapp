@@ -9,52 +9,52 @@
 (() => {
     const PROFILES = {
         treadmill: {
-            emoji: '🏃', label: 'Tapis', color: '#f43f5e', met: null,
+            label: 'Tapis', color: '#f43f5e', met: null,
             primary: { key: 'speed', label: 'Vitesse', unit: 'km/h', step: 0.5, min: 1, max: 25, decimals: 1, fallback: 8, bump: 0.5 },
             secondary: { key: 'incline', label: 'Pente', unit: '%', step: 0.5, min: 0, max: 15, decimals: 1, fallback: 1 }
         },
         bike: {
-            emoji: '🚴', label: 'Vélo', color: '#f97316', met: null,
+            label: 'Vélo', color: '#f97316', met: null,
             primary: { key: 'resistance', label: 'Résistance', unit: 'niv.', step: 1, min: 1, max: 30, decimals: 0, fallback: 8, bump: 1 },
             secondary: { key: 'cadence', label: 'Cadence', unit: 'tr/min', step: 5, min: 30, max: 140, decimals: 0, fallback: 80 }
         },
         elliptical: {
-            emoji: '🌀', label: 'Elliptique', color: '#8b5cf6', met: null,
+            label: 'Elliptique', color: '#8b5cf6', met: null,
             primary: { key: 'resistance', label: 'Résistance', unit: 'niv.', step: 1, min: 1, max: 30, decimals: 0, fallback: 8, bump: 1 },
             secondary: { key: 'cadence', label: 'Cadence', unit: 'pas/min', step: 5, min: 30, max: 200, decimals: 0, fallback: 120 }
         },
         rower: {
-            emoji: '🚣', label: 'Rameur', color: '#0ea5e9', met: null,
+            label: 'Rameur', color: '#0ea5e9', met: null,
             primary: { key: 'power', label: 'Puissance', unit: 'W', step: 5, min: 20, max: 600, decimals: 0, fallback: 120, bump: 5 },
             secondary: { key: 'cadence', label: 'Cadence', unit: 'cps/min', step: 1, min: 14, max: 40, decimals: 0, fallback: 24 }
         },
         stairs: {
-            emoji: '🪜', label: 'Escalier', color: '#14b8a6', met: null,
+            label: 'Escalier', color: '#14b8a6', met: null,
             primary: { key: 'level', label: 'Niveau', unit: '', step: 1, min: 1, max: 20, decimals: 0, fallback: 6, bump: 1 },
             secondary: null
         },
         rope: {
-            emoji: '🪢', label: 'Corde', color: '#eab308', met: 11,
+            label: 'Corde', color: '#eab308', met: 11,
             primary: { key: 'cadence', label: 'Cadence', unit: 'tours/min', step: 5, min: 40, max: 220, decimals: 0, fallback: 110, bump: 5 },
             secondary: null
         },
         swim: {
-            emoji: '🏊', label: 'Natation', color: '#06b6d4', met: 7,
+            label: 'Natation', color: '#06b6d4', met: 7,
             primary: { key: 'distance-m', label: 'Distance', unit: 'm', step: 25, min: 0, max: 10000, decimals: 0, fallback: 0, bump: 50 },
             secondary: null
         },
         generic: {
-            emoji: '❤️', label: 'Cardio', color: '#ef4444', met: 6,
+            label: 'Cardio', color: '#ef4444', met: 6,
             primary: { key: 'level', label: 'Niveau', unit: '', step: 1, min: 1, max: 30, decimals: 0, fallback: 5, bump: 1 },
             secondary: null
         }
     };
 
     const FEELINGS = [
-        { id: 'easy', emoji: '😌', label: 'Facile', rpe: 5 },
-        { id: 'steady', emoji: '🙂', label: 'Modéré', rpe: 7 },
-        { id: 'hard', emoji: '😤', label: 'Dur', rpe: 8.5 },
-        { id: 'max', emoji: '🥵', label: 'À fond', rpe: 10 }
+        { id: 'easy', label: 'Facile', rpe: 5 },
+        { id: 'steady', label: 'Modéré', rpe: 7 },
+        { id: 'hard', label: 'Dur', rpe: 8.5 },
+        { id: 'max', label: 'À fond', rpe: 10 }
     ];
 
     const INTERVAL_PRESETS = [
@@ -63,6 +63,14 @@
         { id: '1-1', label: '1 min / 1 min', work: 60, rest: 60, rounds: 8 },
         { id: '4x4', label: '4 × 4 min', work: 240, rest: 180, rounds: 4 }
     ];
+
+    // Line icons (24px grid, 2px stroke), same family as the rest of the UI.
+    const svg = body => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+    const ICONS = {
+        check: svg('<path d="M20 6 9 17l-5-5"/>'),
+        undo: svg('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+        target: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>')
+    };
 
     const baseRenderSeries = App.prototype.renderSeries;
     const baseOpenExercise = App.prototype.openExercise;
@@ -419,12 +427,12 @@
                 <div class="cc-done-list">
                     ${completed.map((set, index) => `
                         <div class="cc-done-row">
-                            <span class="cc-done-check" aria-hidden="true">✓</span>
+                            <span class="cc-done-check" aria-hidden="true">${ICONS.check}</span>
                             <div class="cc-done-main">
                                 <strong>${targetBlocks > 1 ? `Bloc ${index + 1} · ` : ''}${this.formatDurationLabel(this.getSetDurationSeconds(set, slot))}</strong>
                                 <small>${this.escapeHtml(this.describeCardioSet(set, profile))}</small>
                             </div>
-                            <button type="button" class="cc-done-undo" data-cc-action="undo-block" data-index="${slotData.sets.indexOf(set)}" aria-label="Supprimer ce bloc">↺</button>
+                            <button type="button" class="cc-done-undo" data-cc-action="undo-block" data-index="${slotData.sets.indexOf(set)}" aria-label="Supprimer ce bloc">${ICONS.undo}</button>
                         </div>
                     `).join('')}
                 </div>
@@ -432,14 +440,11 @@
 
             if (allDone) {
                 container.innerHTML = `
-                    <div class="cardio-console is-complete" style="--cardio: ${profile.color}">
-                        <div class="cc-hero">
-                            <div class="hero-bg" aria-hidden="true"><span class="hero-blob blob-a"></span><span class="hero-grid"></span></div>
-                            <div class="cc-complete">
-                                <span class="cc-complete-emoji" aria-hidden="true">${profile.emoji}</span>
-                                <strong>${isWarmup ? 'Échauffement terminé' : 'Cardio validé'}</strong>
-                                <span>Bien joué, passe à la suite.</span>
-                            </div>
+                    <div class="cardio-console is-complete">
+                        <div class="cc-card cc-complete">
+                            <span class="cc-complete-icon" aria-hidden="true">${ICONS.check}</span>
+                            <strong>${isWarmup ? 'Échauffement terminé' : 'Cardio validé'}</strong>
+                            <span>Bien joué, passe à la suite.</span>
                         </div>
                         ${blocksHtml}
                     </div>
@@ -499,14 +504,12 @@
             ` : '';
 
             const targetStepper = !isIntervals && live.mode === 'steady' && status === 'idle' ? `
-                <div class="cc-target-row">
-                    <span>Durée visée</span>
-                    <div class="cc-mini-stepper is-inline">
-                        <div>
-                            <button type="button" data-cc-action="target" data-dir="-1" aria-label="Réduire la durée">−</button>
-                            <strong>${live.targetMinutes} min</strong>
-                            <button type="button" data-cc-action="target" data-dir="1" aria-label="Allonger la durée">+</button>
-                        </div>
+                <div class="cc-stepper">
+                    <span class="cc-stepper-label">Durée visée</span>
+                    <div class="cc-stepper-row">
+                        <button type="button" class="cc-step" data-cc-action="target" data-dir="-1" aria-label="Réduire la durée">−</button>
+                        <span class="cc-step-value is-static"><strong>${live.targetMinutes}</strong><small>min</small></span>
+                        <button type="button" class="cc-step" data-cc-action="target" data-dir="1" aria-label="Allonger la durée">+</button>
                     </div>
                 </div>
             ` : '';
@@ -547,16 +550,11 @@
             };
 
             container.innerHTML = `
-                <div class="cardio-console is-${status} mode-${live.mode} ${isWarmup ? 'is-warmup' : ''}" style="--cardio: ${profile.color}">
-                    <div class="cc-hero">
-                        <div class="hero-bg" aria-hidden="true">
-                            <span class="hero-blob blob-a"></span>
-                            <span class="hero-blob blob-b"></span>
-                            <span class="hero-grid"></span>
-                        </div>
+                <div class="cardio-console is-${status} mode-${live.mode} ${isWarmup ? 'is-warmup' : ''}">
+                    <div class="cc-card">
                         <div class="cc-top">
-                            <span class="cc-machine"><span aria-hidden="true">${profile.emoji}</span>${this.escapeHtml(blockLabel)}</span>
-                            ${isWarmup ? '<span class="cc-chip is-warmup">🔥 Échauffement</span>' : `<span class="cc-chip">${Math.round(this.estimateCardioKcalPerMinute(profile.key, live.primary, live.secondary) * 10) / 10} kcal/min</span>`}
+                            <span class="cc-machine">${this.escapeHtml(blockLabel)}</span>
+                            <span class="cc-chip">${isWarmup ? 'Échauffement' : `${this.formatCardioValue(this.estimateCardioKcalPerMinute(profile.key, live.primary, live.secondary), { decimals: 1 })} kcal/min`}</span>
                         </div>
                         ${showFinish ? '' : `
                             <div class="cc-modes" role="tablist" aria-label="Type de bloc">
@@ -567,8 +565,8 @@
                         `}
                         <div class="cc-dial" aria-live="off">
                             <svg class="cc-ring" viewBox="0 0 120 120" aria-hidden="true">
-                                <circle class="cc-ring-track" cx="60" cy="60" r="52"/>
-                                <circle class="cc-ring-fill" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                <circle class="cc-ring-track" cx="60" cy="60" r="54"/>
+                                <circle class="cc-ring-fill" cx="60" cy="60" r="54" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
                             </svg>
                             <div class="cc-dial-center">
                                 <span class="cc-phase" data-cc="phase">Prêt</span>
@@ -578,27 +576,25 @@
                         </div>
                         ${isIntervals ? `<div class="cc-rounds" data-cc="rounds">${Array.from({ length: live.intervals.rounds }, () => '<i></i>').join('')}</div>` : ''}
                         <div class="cc-live">
-                            <div class="cc-live-tile"><strong data-cc="distance">--</strong><span>${profile.key === 'swim' ? 'nagés' : 'distance'}</span></div>
-                            <div class="cc-live-tile"><strong data-cc="kcal">0</strong><span>kcal</span></div>
-                            <div class="cc-live-tile"><strong data-cc="avg">--</strong><span>moy. ${this.escapeHtml(primary.unit || primary.label.toLowerCase())}</span></div>
+                            <div class="cc-live-item"><strong data-cc="distance">--</strong><span>${profile.key === 'swim' ? 'nagés' : 'distance'}</span></div>
+                            <div class="cc-live-item"><strong data-cc="kcal">0</strong><span>kcal</span></div>
+                            <div class="cc-live-item"><strong data-cc="avg">--</strong><span>moy. ${this.escapeHtml(primary.unit || primary.label.toLowerCase())}</span></div>
                         </div>
                         ${showFinish ? this.renderCardioFinishPanel(live, profile) : `
-                            <div class="cc-controls ${secondary ? '' : 'is-single'}">
+                            <div class="cc-controls">
                                 ${stepper(primary, live.primary, 'primary')}
                                 ${stepper(secondary, live.secondary, 'secondary')}
+                                ${targetStepper}
                             </div>
                             ${intervalConfig}
-                            ${targetStepper}
                             <div class="cc-actions">${actions[status] || actions.idle}</div>
                         `}
                     </div>
                     <div class="cc-plan">
-                        <span class="cc-plan-icon" aria-hidden="true">🎯</span>
+                        <span class="cc-plan-icon" aria-hidden="true">${ICONS.target}</span>
                         <div class="cc-plan-main">
-                            <span class="pz-kicker">Objectif du coach</span>
                             <strong>${this.escapeHtml(plan.headline)}</strong>
-                            <small>${this.escapeHtml(plan.detail)}</small>
-                            <small class="cc-plan-last">${this.escapeHtml(lastLine)}</small>
+                            <small>${this.escapeHtml(plan.detail)} · ${this.escapeHtml(lastLine)}</small>
                         </div>
                     </div>
                     ${blocksHtml}
@@ -646,7 +642,7 @@
                     <div class="cc-feelings" role="radiogroup" aria-label="Ressenti">
                         ${FEELINGS.map(item => `
                             <button type="button" class="cc-feeling ${feeling === item.id ? 'active' : ''}" data-cc-action="feeling" data-feeling="${item.id}" role="radio" aria-checked="${feeling === item.id}">
-                                <span aria-hidden="true">${item.emoji}</span>${item.label}
+                                ${item.label}
                             </button>
                         `).join('')}
                     </div>

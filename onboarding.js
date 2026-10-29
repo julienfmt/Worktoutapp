@@ -1093,8 +1093,16 @@
                 'Touche à nouveau un smiley pour le retirer.'
             ]
         },
+        exercise: {
+            title: 'Comment ça marche ?',
+            body: [
+                '<strong>Charge</strong> et <strong>reps</strong> sont pré-remplies par le coach. Ajuste si besoin.',
+                '<strong>RIR</strong> (« reps en réserve ») : arrête la série quand il te reste ce nombre de reps dans le réservoir. Pas besoin d\'aller à l\'échec.',
+                'Touche <strong>Série terminée</strong> : le repos se lance tout seul et le coach adapte la suite.',
+                'Le résumé sous le titre se lit ainsi : <strong>4 × 6-10 · 150s</strong> = 4 séries de 6 à 10 reps, 150 s de repos.'
+            ]
+        },
         targets: {
-            emoji: '🎯',
             title: 'Comment lire ces objectifs ?',
             body: [
                 '<strong>4 × 6-10</strong> = 4 séries de 6 à 10 répétitions.',
@@ -1131,7 +1139,6 @@
                 });
             }
             sheet.querySelector('.help-sheet-body').innerHTML = `
-                <span class="help-sheet-emoji" aria-hidden="true">${topic.emoji}</span>
                 <h3>${topic.title}</h3>
                 ${topic.body.map(line => `<p>${line}</p>`).join('')}
             `;

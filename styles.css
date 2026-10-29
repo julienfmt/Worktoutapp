@@ -232,35 +232,6 @@ body {
     min-width: 44px;
 }
 
-.exercise-header-tool {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: 1px solid rgba(99, 102, 241, 0.13);
-    border-radius: 14px;
-    background: rgba(99, 102, 241, 0.07);
-    color: var(--primary-dark);
-    cursor: pointer;
-    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.exercise-header-tool:hover {
-    background: rgba(99, 102, 241, 0.12);
-    box-shadow: 0 8px 18px rgba(79, 70, 229, 0.12);
-}
-
-.exercise-header-tool:active {
-    transform: scale(0.94);
-}
-
-.exercise-header-tool svg {
-    width: 19px;
-    height: 19px;
-}
-
 .session-timer {
     font-size: 14px;
     color: var(--text-secondary);
@@ -6944,13 +6915,8 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    font-size: 22px;
+    font-size: 20px;
     flex-shrink: 0;
-    background: #f8fafc;
-    border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .coach-toast-text {
@@ -6990,36 +6956,12 @@ body {
     background: #22c55e;
 }
 
-.coach-toast.backoff .coach-toast-icon {
-    background: #fff7ed;
-    color: #c2410c;
-    border-color: rgba(251, 191, 36, 0.26);
-}
-
-.coach-toast.cold .coach-toast-icon {
-    background: #eff6ff;
-    color: var(--primary-dark);
-    border-color: rgba(96, 165, 250, 0.28);
-}
-
-.coach-toast.hot .coach-toast-icon {
-    background: #f0fdf4;
-    color: #16a34a;
-    border-color: rgba(34, 197, 94, 0.26);
-}
-
 @media (max-width: 640px) {
     .coach-toast {
         bottom: calc(78px + var(--safe-bottom));
         padding: 14px 15px;
         gap: 12px;
         border-radius: 22px;
-    }
-
-    .coach-toast-icon {
-        width: 44px;
-        height: 44px;
-        font-size: 20px;
     }
 
     .coach-toast-text {

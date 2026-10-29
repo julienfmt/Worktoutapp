@@ -1242,17 +1242,6 @@ body.ob-open {
 .help-sheet.is-open .help-sheet-backdrop { opacity: 1; }
 .help-sheet.is-open .help-sheet-card { transform: none; }
 
-.help-sheet-emoji {
-    display: inline-grid;
-    place-items: center;
-    width: 52px;
-    height: 52px;
-    border-radius: 18px;
-    background: #f1ecff;
-    font-size: 28px;
-    margin-bottom: 12px;
-}
-
 .help-sheet-card h3 {
     margin: 0 0 10px;
     font-size: 22px;

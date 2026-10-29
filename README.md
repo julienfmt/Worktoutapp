@@ -22,6 +22,15 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 🧠 Règles de progression paramétrables (objectif hebdo, incrément de charge, deload, seuil d’échecs, période de lock).
 - 💾 Import/export JSON des données locales pour sauvegarder/restaurer.
 
+### Nouveautés v6.2
+- 🏃 **Console cardio épurée** : carte claire sans dégradés ni émojis, chrono sur un anneau fin, stats en direct sur une ligne, réglages (vitesse, pente, durée visée) en lignes simples, ressenti en sélecteur texte.
+- ⋯ **En-tête d'exercice simplifié** : un seul bouton « ⋯ » ouvre une liste claire (fiche technique, changer d'exercice, disques à charger, échauffement & récupération, comment ça marche). Icônes SVG au trait, plus de pastille « ? » sous le titre.
+- 💡 Le tuto « Comment ça marche » ne s'affiche plus au-dessus des séries : il est dans le menu « ⋯ ».
+- 🧮 **Outils** (Stats) : liste lisible avec icônes et descriptions (« Disques à charger », « Charge max estimée », « Mensurations »), table des % sur une colonne, stepper qui ne déborde plus.
+- 🧘 **Abdos** : 10 exercices ajoutés à la bibliothèque (Crunch, Sit-up, Relevé de jambes allongé, Crunch vélo, Crunch oblique, Russian twist, V-up, Toes to bar, Mountain climber et Hollow hold chronométrés). Chrono de gainage : badge « Chrono » (plus « Cardio »), pas de smileys pendant le maintien, bouton « Lancer » seulement sur la série en cours.
+- 🔕 Notifications et bulles d'aide sans émoji encadré.
+- 💬 Chat coach IA retiré pour l'instant (le parcours copier-coller vers ChatGPT / Claude / Gemini / Le Chat reste).
+
 ### Nouveautés v6.0 – 6.1
 - 🧭 **3 onglets swipables** : Accueil / Parcours / Stats, barre d'onglets en bas, glisser à gauche ou à droite pour changer de volet (`shell.js`).
 - 🏠 Accueil recentré : streak, prochaine séance, prochaine étape du parcours et **carte musculaire de la semaine** (séries par muscle vs zone de croissance visée).
@@ -36,7 +45,6 @@ Application web offline-first pour suivre tes séances de musculation, gérer te
 - 👑 **Muscu+** (`premium.js`) : offre et écran d'abonnement définis, tout reste offert pendant la bêta. Détails dans `LAUNCH.md`.
 - ⌚ **Prêt pour le natif** (`native.js`) : Apple Santé / Health Connect, rappels façon Duolingo (jour de séance, série en danger, retour, récompenses) avec aperçu dans Réglages.
 - 🧮 **Boîte à outils** (`tools.js`) : calculateur de disques, 1RM et pourcentages, mensurations et courbe de poids.
-- 💬 **Coach IA qui discute** (`coach-chat.js`) : un chat « comme un pote » qui connaît tes séances, records et volume, et peut proposer des changements de programme relus avant application. Serveur avec quotas (`workers/coach-proxy.js`) ou ta propre clé Claude.
 - 🏅 **Ligues hebdomadaires** (`league.js`) : Bronze → Diamant, 15 joueurs, top 5 promus, 5 derniers relégués (rivaux simulés en attendant les ligues en ligne).
 - 🌙 **Mode sombre** : Auto / Clair / Sombre dans Réglages → Apparence.
 - ⚙️ Réglages simplifiés : l'essentiel en haut, les réglages avancés du coach repliés.
