@@ -3017,3 +3017,217 @@
     font-size: 20px;
     font-weight: 800;
 }
+
+.journey-chapter.is-locked .journey-track {
+    position: relative;
+    max-height: 250px;
+    overflow: hidden;
+}
+
+.journey-fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 120px;
+    background: linear-gradient(180deg, transparent, var(--bg-secondary));
+    pointer-events: none;
+}
+
+/* =====================================================================
+   Monthly challenge, first-time tip, share
+   ===================================================================== */
+.month-challenge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 22px;
+    background: var(--card-bg);
+    border: 2px solid #ececfb;
+    box-shadow: 0 4px 0 #e4e4f7;
+}
+
+.month-challenge[hidden] {
+    display: none;
+}
+
+.month-challenge.is-resolution {
+    color: #fff;
+    border-color: transparent;
+    background: var(--hero-bg);
+    box-shadow: 0 5px 0 #120c33, 0 14px 28px rgba(67, 56, 202, 0.25);
+}
+
+.month-ring {
+    position: relative;
+    flex: none;
+    width: 56px;
+    height: 56px;
+}
+
+.month-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.month-ring-track {
+    fill: none;
+    stroke: #ececfb;
+    stroke-width: 7;
+}
+
+.month-challenge.is-resolution .month-ring-track {
+    stroke: rgba(255, 255, 255, 0.14);
+}
+
+.month-ring-fill {
+    fill: none;
+    stroke: url(#timerGradient);
+    stroke-width: 7;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s var(--ease-out);
+}
+
+.month-challenge.is-done .month-ring-fill {
+    stroke: var(--success);
+}
+
+.month-ring span {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+}
+
+.month-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.month-kicker {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+.month-challenge.is-resolution .month-kicker {
+    color: #fcd34d;
+}
+
+.month-main strong {
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.month-main small {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.month-challenge.is-resolution .month-main small {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.month-reward {
+    flex: none;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #92400e;
+    background: #fef3c7;
+}
+
+.month-claim {
+    flex: none;
+    min-height: 40px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    background: var(--grad-success);
+    box-shadow: 0 4px 0 var(--success-3d);
+    font-weight: 900;
+    animation: journey-chest 1.2s ease-in-out infinite;
+}
+
+.coach-first-tip {
+    margin-bottom: 12px;
+    padding: 14px;
+    border-radius: 20px;
+    background: #fffbeb;
+    border: 2px solid #fde68a;
+    box-shadow: 0 3px 0 #fcd34d;
+    color: #78350f;
+    animation: screenEnter 0.3s var(--ease-out) both;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.coach-first-tip.is-leaving {
+    opacity: 0;
+    transform: translateY(-6px);
+}
+
+.coach-first-tip-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+
+.coach-first-tip-icon {
+    font-size: 20px;
+}
+
+.coach-first-tip ol {
+    margin: 0 0 12px;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13.5px;
+    line-height: 1.4;
+}
+
+.coach-first-tip-ok {
+    width: 100%;
+    min-height: 44px;
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    box-shadow: 0 4px 0 var(--gold-3d);
+    font-weight: 900;
+}
+
+.fin-share {
+    width: 100%;
+    min-height: 50px;
+    margin-bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.fin-share:disabled {
+    opacity: 0.6;
+}

@@ -161,7 +161,8 @@
                             </div>
                         </header>
                         <div class="journey-track">
-                            ${nodes.map(node => this.renderJourneyNode(node, chapter, { avatar })).join('')}
+                            ${(isLocked ? nodes.slice(0, 3) : nodes).map(node => this.renderJourneyNode(node, chapter, { avatar })).join('')}
+                            ${isLocked ? '<div class="journey-fade" aria-hidden="true"></div>' : ''}
                         </div>
                     </section>
                 `;

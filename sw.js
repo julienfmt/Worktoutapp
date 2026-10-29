@@ -26,6 +26,7 @@ const APP_SHELL_ASSETS = [
     './cardio.js?v=6.0.0',
     './onboarding.js?v=6.0.0',
     './swap.js?v=6.0.0',
+    './engage.js?v=6.0.0',
     './ai-coach.js?v=6.0.0',
     './ai-coach-ui.js?v=6.0.0',
     './manifest.json',
