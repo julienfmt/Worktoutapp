@@ -229,7 +229,8 @@
             });
         },
 
-        // ---------- Settings block (Muscu+, reminders, health) ----------
+        // ---------- Settings rows (Muscu+, theme, reminders, health) ----------
+        // Rendered inside the "App" group of the Réglages sheet.
         async renderAppSettingsBlock() {
             const block = document.getElementById('settings-app-block');
             if (!block) return;
@@ -238,79 +239,70 @@
             const plan = prefs.enabled ? await this.buildReminderPlan() : [];
             const isPlus = Boolean(this.entitlements?.plus);
             const offer = this.getPremiumOffer?.();
+            const theme = this.themeChoice || 'auto';
+            const locale = await this.getLocaleChoice();
             const formatWhen = iso => new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+            const reminderHint = !prefs.enabled
+                ? ''
+                : (!NotificationBridge.isNative()
+                    ? 'Ils sonneront dans l’app iOS / Android'
+                    : (plan.length ? `Prochain : ${formatWhen(plan[0].at)}` : 'Rien de prévu, tu es à jour'));
+            const toggle = (id, checked, disabled = false) => `
+                <span class="toggle-switch">
+                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                    <span class="toggle-slider"></span>
+                </span>`;
             block.innerHTML = `
-                <button type="button" class="settings-plus-card" data-app-setting="paywall">
-                    <span class="settings-plus-crown" aria-hidden="true">👑</span>
-                    <span class="settings-plus-main">
-                        <strong>${isPlus ? 'Muscu+ actif' : 'Muscu+'}</strong>
-                        <small>${isPlus ? 'Merci de soutenir l’app 💜' : (offer?.enabled ? `Essai gratuit ${offer.trialDays} jours` : 'Tout est offert pendant la bêta')}</small>
-                    </span>
-                    <span class="settings-plus-go" aria-hidden="true">›</span>
+                <button type="button" class="set-row set-link" data-app-setting="paywall">
+                    <span class="set-label"><span class="set-plus">Muscu+</span><small>${isPlus ? 'Actif' : (offer?.enabled ? `Essai gratuit ${offer.trialDays} jours` : 'Offert pendant la bêta')}</small></span>
+                    <span class="set-chevron" aria-hidden="true">›</span>
                 </button>
-
-                <div class="settings-card">
-                    <div class="settings-card-row">
-                        <span class="settings-card-icon" aria-hidden="true">🌗</span>
-                        <span class="settings-card-main"><strong>Apparence</strong><small>Suit ton téléphone ou forcé</small></span>
-                    </div>
-                    <div class="theme-switch" role="radiogroup" aria-label="Apparence">
+                <div class="set-row">
+                    <span class="set-label">Apparence</span>
+                    <span class="set-segmented" role="radiogroup" aria-label="Apparence">
                         ${[['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']].map(([value, label]) => `
-                            <button type="button" class="${(this.themeChoice || 'auto') === value ? 'active' : ''}" data-theme-choice="${value}" role="radio" aria-checked="${(this.themeChoice || 'auto') === value}">${label}</button>
+                            <button type="button" class="${theme === value ? 'active' : ''}" data-theme-choice="${value}" role="radio" aria-checked="${theme === value}">${label}</button>
+                        `).join('')}
+                    </span>
+                </div>
+                <div class="set-row">
+                    <span class="set-label">Langue</span>
+                    <span class="set-segmented" role="radiogroup" aria-label="Langue">
+                        ${[['auto', 'Auto'], ['fr', 'Français'], ['en', 'English']].map(([value, label]) => `
+                            <button type="button" class="${locale === value ? 'active' : ''}" data-locale-choice="${value}" role="radio" aria-checked="${locale === value}">${label}</button>
+                        `).join('')}
+                    </span>
+                </div>
+                <label class="set-row">
+                    <span class="set-label">Rappels${reminderHint ? `<small>${this.escapeHtml(reminderHint)}</small>` : ''}</span>
+                    ${toggle('setting-reminders-enabled', prefs.enabled)}
+                </label>
+                ${prefs.enabled ? `
+                    <label class="set-row set-row-sub">
+                        <span class="set-label">Heure</span>
+                        <input type="time" id="setting-reminders-time" class="set-time" value="${prefs.time}">
+                    </label>
+                    <div class="set-row set-row-sub set-chips">
+                        ${[['streak', '🔥 Série en danger'], ['comeback', '👀 Retour'], ['rewards', '🎁 Récompenses']].map(([key, label]) => `
+                            <label class="set-chip"><input type="checkbox" data-reminder-kind="${key}" ${prefs[key] ? 'checked' : ''}><span>${label}</span></label>
                         `).join('')}
                     </div>
-                </div>
-
-                <div class="settings-card">
-                    <div class="settings-card-row">
-                        <span class="settings-card-icon" aria-hidden="true">🔔</span>
-                        <span class="settings-card-main">
-                            <strong>Rappels</strong>
-                            <small>Jour de séance, série en danger, retour après une pause</small>
-                        </span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-reminders-enabled" ${prefs.enabled ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    ${prefs.enabled ? `
-                        <div class="settings-card-row">
-                            <span class="settings-card-main"><strong>Heure</strong><small>Les jours d’entraînement</small></span>
-                            <input type="time" id="setting-reminders-time" class="form-input settings-time" value="${prefs.time}">
-                        </div>
-                        <div class="settings-chips">
-                            ${[['streak', '🔥 Série en danger'], ['comeback', '👀 Retour'], ['rewards', '🎁 Récompenses']].map(([key, label]) => `
-                                <label class="settings-chip"><input type="checkbox" data-reminder-kind="${key}" ${prefs[key] ? 'checked' : ''}><span>${label}</span></label>
-                            `).join('')}
-                        </div>
-                        <div class="settings-preview">
-                            <span class="pz-kicker">Prochains rappels</span>
-                            ${plan.length ? plan.slice(0, 4).map(item => `
-                                <div class="settings-preview-item"><strong>${this.escapeHtml(item.title)}</strong><small>${formatWhen(item.at)} · ${this.escapeHtml(item.body)}</small></div>
-                            `).join('') : '<small>Rien de prévu pour l’instant : tu es à jour 💪</small>'}
-                            ${NotificationBridge.isNative() ? '' : '<small class="settings-note">Dans la version web, les rappels ne peuvent pas sonner quand l’app est fermée. Ils seront actifs dans l’app iOS / Android.</small>'}
-                        </div>
-                    ` : ''}
-                </div>
-
-                <div class="settings-card">
-                    <div class="settings-card-row">
-                        <span class="settings-card-icon" aria-hidden="true">⌚</span>
-                        <span class="settings-card-main">
-                            <strong>${HealthBridge.platformLabel()}</strong>
-                            <small>${HealthBridge.isAvailable() ? 'Envoie tes séances, calories et distance' : 'Disponible dans l’app iOS / Android'}</small>
-                        </span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-health-enabled" ${health.enabled ? 'checked' : ''} ${HealthBridge.isAvailable() ? '' : 'disabled'}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
+                ` : ''}
+                <label class="set-row">
+                    <span class="set-label">${HealthBridge.platformLabel()}<small>${HealthBridge.isAvailable() ? '' : 'Dans l’app iOS / Android'}</small></span>
+                    ${toggle('setting-health-enabled', health.enabled, !HealthBridge.isAvailable())}
+                </label>
             `;
             if (!block.dataset.bound) {
                 block.dataset.bound = 'true';
                 block.addEventListener('click', async event => {
                     if (event.target.closest('[data-app-setting="paywall"]')) this.showPaywall?.();
+                    const localeButton = event.target.closest('[data-locale-choice]');
+                    if (localeButton) {
+                        await this.setLocaleChoice(localeButton.dataset.localeChoice);
+                        await this.renderAppSettingsBlock();
+                        return;
+                    }
                     const theme = event.target.closest('[data-theme-choice]');
                     if (theme) {
                         await this.setThemeChoice(theme.dataset.themeChoice);
@@ -319,6 +311,26 @@
                 });
                 block.addEventListener('change', event => void this.onAppSettingChange(event));
             }
+        },
+
+        // Language: 'auto' | 'fr' | 'en'. Uses the i18n layer when it is
+        // loaded (it persists and reloads), else just stores the choice.
+        async getLocaleChoice() {
+            const valid = value => (['auto', 'fr', 'en'].includes(value) ? value : null);
+            if (window.i18n?.getChoice) return valid(window.i18n.getChoice()) || 'auto';
+            let stored = null;
+            try { stored = localStorage.getItem('locale'); } catch (error) {}
+            return valid(stored) || valid(await db.getSetting('locale').catch(() => null)) || 'auto';
+        },
+
+        async setLocaleChoice(choice) {
+            if (!['auto', 'fr', 'en'].includes(choice)) return;
+            if (window.i18n?.setLocale) {
+                await window.i18n.setLocale(choice);
+                return;
+            }
+            try { localStorage.setItem('locale', choice); } catch (error) {}
+            await db.setSetting('locale', choice);
         },
 
         async onAppSettingChange(event) {
@@ -342,6 +354,7 @@
                 const allowed = target.checked ? await HealthBridge.requestAuthorization() : true;
                 await db.setSetting('healthSync', { enabled: target.checked && allowed });
                 if (target.checked && !allowed) target.checked = false;
+                this.flashSettingSaved?.(target);
                 return;
             } else {
                 return;
